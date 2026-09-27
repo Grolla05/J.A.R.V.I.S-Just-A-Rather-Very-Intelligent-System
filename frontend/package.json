@@ -10,11 +10,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@react-three/postprocessing": "^3.1.1",
+    "@react-three/postprocessing": "^3.1.2",
     "@tailwindcss/postcss": "^4.3.3",
     "animejs": "^4.5.0",
     "framer-motion": "^12.40.0",
-    "katex": "^0.18.7",
+    "katex": "^0.18.9",
     "lucide-react": "^1.47.0",
     "path": "^0.12.7",
     "react": "^19.3.0",
