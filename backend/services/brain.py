@@ -74,7 +74,7 @@ def execute_command_stream(command, session_id='default'):
                     return
             state.pending_critical_action = None
 
-    decision = classify_intent(command, skip_skills=True)
+    decision = classify_intent(command)
     intent = decision.get("intent")
     entity = decision.get("entity")
     log.info(f"🧠 [INTENÇÃO DETECTADA STREAM]: {intent} (Confiança: {decision.get('confidence')})")
