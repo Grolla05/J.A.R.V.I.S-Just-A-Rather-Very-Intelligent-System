@@ -1,3 +1,5 @@
+# ⚠️ ACESSO SENSÍVEL: abre, fecha e força foco em processos/janelas do sistema operacional
+# via psutil + PowerShell/Win32 (subprocess, ctypes). Ver SECURITY.md.
 import difflib
 import json
 import os
@@ -9,6 +11,7 @@ import requests  # Conexão direta
 from core import log
 from core.config import settings
 from core.prompts import load_prompt
+from core.window_utils import find_window_by_pid, force_foreground
 
 # --- CONFIGURAÇÃO DA SKILL ---
 INTENT = "APP_CONTROL"
@@ -24,7 +27,7 @@ INSTALLED_APPS_CACHE = {}
 ALIASES = {
     "zap": "whatsapp",
     "navegador": "opera gx",  # Ou chrome, conforme preferência
-    "vs": "visual studio code",
+    "vs code": "visual studio code",
     "code": "visual studio code",
     "lol": "league of legends",
     "calculadora": "calculator",
@@ -127,6 +130,25 @@ def find_active_processes(target_name):
     return found_procs
 
 def focus_window(pid):
+    # Tentativa 1 (principal): Win32 direto. Trata janela minimizada (IsIconic + SW_RESTORE)
+    # e contorna a restrição de foreground-lock do Windows via AttachThreadInput.
+    try:
+        hwnd = find_window_by_pid(pid)
+        if hwnd:
+            if force_foreground(hwnd):
+                return True
+        else:
+            # Normal em apps multi-processo (Electron: VS Code, Spotify, Discord...):
+            # a maioria dos PIDs são processos auxiliares (renderer, GPU, etc.) sem janela própria.
+            # execute() itera todos os PIDs do app até achar o que tem janela — isso não é falha.
+            log.debug(f"[APP SKILL] Nenhuma janela visível para PID {pid} (provável processo auxiliar).")
+    except Exception as e:
+        log.warning(f"⚠️ [APP SKILL] Foco Win32 falhou para PID {pid}: {e}")
+
+    # Tentativa 2 (fallback): AppActivate via PowerShell. Cobre casos raros onde o processo
+    # não expõe uma janela top-level enumerável diretamente (ex: apps hospedados por
+    # ApplicationFrameHost). Nota: AppActivate pode retornar "sucesso" mesmo só piscando a
+    # taskbar sem realmente trazer a janela pra frente — por isso não é mais a tentativa principal.
     cmd = f"""
     $p = Get-Process -Id {pid} -ErrorAction SilentlyContinue
     if ($p -and $p.MainWindowTitle) {{
@@ -137,9 +159,12 @@ def focus_window(pid):
     return "NO"
     """
     try:
-        res = subprocess.run(["powershell", "-Command", cmd], capture_output=True, text=True).stdout.strip()
+        res = subprocess.run(["powershell", "-Command", cmd], capture_output=True, text=True, timeout=5).stdout.strip()
         return "OK" in res
-    except: return False
+    except Exception as e:
+        log.warning(f"⚠️ [APP SKILL] AppActivate falhou para PID {pid}: {e}")
+
+    return False
 
 # --- EXECUÇÃO PRINCIPAL ---
 def execute(entity, command_text=""):
@@ -171,7 +196,8 @@ def execute(entity, command_text=""):
             for proc in procs:
                 if focus_window(proc.info['pid']):
                     return f"Redirecionando interface do {target_raw} para a tela principal."
-            
+
+            log.warning(f"⚠️ [APP SKILL] Falha ao focar '{target_raw}': nenhum dos {len(procs)} processo(s) tinha janela focável.")
             return f"O {target_raw} está operando em segundo plano, mas a interface gráfica não responde."
 
         # --- AÇÃO: FECHAR ---
