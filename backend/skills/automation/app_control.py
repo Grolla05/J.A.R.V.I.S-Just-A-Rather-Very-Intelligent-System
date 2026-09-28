@@ -1,3 +1,5 @@
+# ⚠️ ACESSO SENSÍVEL: abre, fecha e força foco em processos/janelas do sistema operacional
+# via psutil + PowerShell/Win32 (subprocess, ctypes). Ver SECURITY.md.
 import difflib
 import json
 import os

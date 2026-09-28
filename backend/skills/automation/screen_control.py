@@ -1,3 +1,5 @@
+# ⚠️ ACESSO SENSÍVEL: manipula janelas (foco, posição, monitor), brilho e gamma da tela
+# via Win32 direto (ctypes) e PowerShell/WMI. Ver SECURITY.md.
 import ctypes
 import datetime
 import json
