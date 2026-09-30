@@ -1,3 +1,5 @@
+# ⚠️ ACESSO SENSÍVEL: manipula janelas (foco, posição, monitor), brilho e gamma da tela
+# via Win32 direto (ctypes) e PowerShell/WMI. Ver SECURITY.md.
 import ctypes
 import datetime
 import json
@@ -8,6 +10,12 @@ import requests
 from core import log
 from core.config import settings
 from core.prompts import load_prompt
+from core.window_utils import (
+    find_window_by_title,
+    force_foreground,
+    get_monitors,
+    get_window_placement,
+)
 
 # --- CORREÇÃO DE DPI (CRUCIAL PARA ALINHAMENTO CORRETO) ---
 try:
@@ -25,14 +33,6 @@ PROMPT_TEXT = load_prompt("skills/screen_control.md")
 user32 = ctypes.windll.user32
 gdi32 = ctypes.windll.gdi32
 
-class RECT(ctypes.Structure):
-    _fields_ = [
-        ("left", ctypes.c_long),
-        ("top", ctypes.c_long),
-        ("right", ctypes.c_long),
-        ("bottom", ctypes.c_long)
-    ]
-
 class RAMP(ctypes.Structure):
     _fields_ = [("Red", ctypes.c_ushort * 256), ("Green", ctypes.c_ushort * 256), ("Blue", ctypes.c_ushort * 256)]
 
@@ -40,45 +40,11 @@ class RAMP(ctypes.Structure):
 SCREEN_EXPERT_PROMPT = load_prompt("skills/screen_expert.md")
 
 # --- HARDWARE: MONITORES & JANELAS ---
-def get_monitors():
-    monitors = []
-    def _cb(hMonitor, hdcMonitor, lprcMonitor, dwData):
-        r = lprcMonitor.contents
-        monitors.append({"handle": hMonitor, "x": r.left, "y": r.top, "width": r.right - r.left, "height": r.bottom - r.top})
-        return True
-    user32.EnumDisplayMonitors(None, None, ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_ulong, ctypes.c_ulong, ctypes.POINTER(RECT), ctypes.c_double)(_cb), 0)
-    return monitors
+# get_monitors / find_window_by_title / get_window_placement / force_foreground
+# agora vivem em core/window_utils.py (compartilhado com app_control.py).
 
 def get_active_window_handle():
     return user32.GetForegroundWindow()
-
-def find_window_by_title(partial_title):
-    """Busca HWND de uma janela pelo título parcial (ex: 'Spotify')."""
-    found_hwnd = None
-    target = partial_title.lower()
-
-    def _enum_cb(hwnd, lParam):
-        nonlocal found_hwnd
-        # Pega tamanho do título
-        length = user32.GetWindowTextLengthW(hwnd)
-        if length > 0:
-            buff = ctypes.create_unicode_buffer(length + 1)
-            user32.GetWindowTextW(hwnd, buff, length + 1)
-            title = buff.value.lower()
-            
-            # Critérios: Deve ter o termo no título e ser visível
-            if target in title and user32.IsWindowVisible(hwnd):
-                found_hwnd = hwnd
-                return False # Para a busca (encontrou)
-        return True
-
-    user32.EnumWindows(ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_ulong, ctypes.c_long)(_enum_cb), 0)
-    return found_hwnd
-
-def get_window_placement(hwnd):
-    rect = RECT()
-    user32.GetWindowRect(hwnd, ctypes.byref(rect))
-    return rect
 
 def _ask_ollama_screen(user_text, monitors_context):
     try:
@@ -324,12 +290,10 @@ def move_window(target_monitor_idx, align, target_app_name=None):
         user32.ShowWindow(hwnd, 9)
 
     user32.MoveWindow(hwnd, int(final_x), int(final_y), int(final_w), int(final_h), True)
-    
-    # Garante foco
-    try: 
-        user32.SetForegroundWindow(hwnd)
-    except: pass
-    
+
+    # Garante foco (contorna foreground-lock do Windows)
+    force_foreground(hwnd)
+
     return f"{label} movida para Monitor {new_idx+1}."
 
 # --- EXECUÇÃO PRINCIPAL ---
