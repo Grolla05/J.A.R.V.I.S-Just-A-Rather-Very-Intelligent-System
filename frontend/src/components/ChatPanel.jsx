@@ -6,8 +6,6 @@ import ChatInput from "./CHAT/ChatInput";
 import useBridgeAPI from "../hooks/BridgeAPI";
 
 export default function ChatPanel({
-  jarvisState,
-  isCritical,
   messages = [],
   setMessages,
   currentSessionId,
@@ -15,7 +13,6 @@ export default function ChatPanel({
 }) {
   const [inputValue, setInputValue] = useState("");
   const [isThinking, setIsThinking] = useState(false);
-  const [jarvisAvatarState, setJarvisAvatarState] = useState("idle");
   const [attachedFiles, setAttachedFiles] = useState([]);
   
   // Controle de estado das sessões
@@ -136,17 +133,24 @@ export default function ChatPanel({
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
   }, [handleNewChat]);
 
+  // Ref com as mensagens atuais: handlers abaixo leem daqui e mantêm identidade
+  // estável (senão mudariam a cada flush do stream e anulariam o React.memo da lista)
+  const messagesRef = useRef(messages);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
   // Callback de edição de mensagem do usuário
   const handleEditMessage = useCallback(async (msgId, newText) => {
     if (!currentSessionId) return;
     try {
       setIsThinking(true);
-      setJarvisAvatarState("thinking");
 
       // 1. Atualizar a mensagem editada no SQLite
       await callApi("update_history_message", msgId, newText);
 
       // 2. Apagar todas as mensagens posteriores no SQLite
+      const messages = messagesRef.current;
       const index = messages.findIndex((m) => m.id === msgId);
       if (index !== -1) {
         const nextMsg = messages[index + 1];
@@ -176,14 +180,14 @@ export default function ChatPanel({
     } catch (err) {
       console.error("Erro ao editar mensagem:", err);
       setIsThinking(false);
-      setJarvisAvatarState("idle");
     }
-  }, [currentSessionId, messages, callApi, setMessages]);
+  }, [currentSessionId, callApi, setMessages]);
 
   // Callback de regeneração de resposta do Jarvis
   const handleRegenerateMessage = useCallback(async (jarvisMsgId) => {
     if (!currentSessionId) return;
     try {
+      const messages = messagesRef.current;
       const index = messages.findIndex((m) => m.id === jarvisMsgId);
       if (index === -1) return;
 
@@ -191,7 +195,6 @@ export default function ChatPanel({
       if (!userMsg || userMsg.sender !== "user") return;
 
       setIsThinking(true);
-      setJarvisAvatarState("thinking");
 
       // 1. Apagar todas as mensagens no SQLite a partir desta mensagem do Jarvis
       await callApi("delete_history_from", currentSessionId, jarvisMsgId);
@@ -213,16 +216,33 @@ export default function ChatPanel({
     } catch (err) {
       console.error("Erro ao regenerar mensagem:", err);
       setIsThinking(false);
-      setJarvisAvatarState("idle");
     }
-  }, [currentSessionId, messages, callApi, setMessages]);
+  }, [currentSessionId, callApi, setMessages]);
 
   // Streaming bridge logic
+  // Chunks chegam em rajada; acumulamos num ref e damos 1 setMessages por frame
+  // (antes: 1 re-render + re-parse markdown por chunk).
   useEffect(() => {
+    let pending = "";
+    let rafId = null;
+
+    const flush = () => {
+      rafId = null;
+      if (!pending) return;
+      const text = pending;
+      pending = "";
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === "streaming-msg" ? { ...msg, text: msg.text + text } : msg,
+        ),
+      );
+    };
+
     window.receiveChatStream = (chunk, isFirst, isDone) => {
       if (isDone) {
+        if (rafId !== null) cancelAnimationFrame(rafId);
+        flush();
         setIsThinking(false);
-        setJarvisAvatarState("idle");
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === "streaming-msg" ? { ...msg, id: Date.now() } : msg,
@@ -232,8 +252,10 @@ export default function ChatPanel({
         fetchRecentSessions();
         return;
       }
-      setJarvisAvatarState("responding");
       if (isFirst) {
+        if (rafId !== null) cancelAnimationFrame(rafId);
+        pending = "";
+        rafId = null;
         setIsThinking(false);
         setMessages((prev) => [
           ...prev,
@@ -248,30 +270,50 @@ export default function ChatPanel({
           },
         ]);
       } else {
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === "streaming-msg"
-              ? { ...msg, text: msg.text + chunk }
-              : msg,
-          ),
-        );
+        pending += chunk;
+        if (rafId === null) rafId = requestAnimationFrame(flush);
       }
     };
     return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
       delete window.receiveChatStream;
     };
   }, [setMessages, fetchRecentSessions]);
 
-  // File attach handlers
-  const handleFileChange = (e) => {
-    const files = Array.from(e.target.files || []);
+  // File attach handlers — lê o File real (base64) em vez de descartá-lo,
+  // pra imagem virar preview + payload enviável e áudio virar transcrição.
+  const processFiles = useCallback((fileList) => {
+    const files = Array.from(fileList || []);
     files.forEach((file) => {
+      const isImage = file.type.startsWith("image/");
+      const isAudio = file.type.startsWith("audio/");
+      if (!isImage && !isAudio) return; // tipo não suportado por esta feature — ignora
+
       const { icon, glow } = getFileStyle(file);
-      setAttachedFiles((prev) => [
-        ...prev,
-        { id: Date.now() + Math.random(), name: file.name, icon, glow },
-      ]);
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result;
+        const base64 = typeof dataUrl === "string" ? dataUrl.split(",")[1] : null;
+        setAttachedFiles((prev) => [
+          ...prev,
+          {
+            id: Date.now() + Math.random(),
+            name: file.name,
+            icon,
+            glow,
+            mime: file.type,
+            kind: isImage ? "image" : "audio",
+            base64,
+            previewUrl: isImage ? dataUrl : null,
+          },
+        ]);
+      };
+      reader.readAsDataURL(file);
     });
+  }, []);
+
+  const handleFileChange = (e) => {
+    processFiles(e.target.files);
     e.target.value = "";
   };
 
@@ -279,15 +321,39 @@ export default function ChatPanel({
     setAttachedFiles((prev) => prev.filter((f) => f.id !== id));
 
   // Send message handler
-  const handleSend = (textToSend) => {
+  const handleSend = async (textToSend) => {
     const text = textToSend || inputValue;
     if (!text.trim() && attachedFiles.length === 0) return;
+
+    const audios = attachedFiles.filter((f) => f.kind === "audio");
+    const images = attachedFiles.filter((f) => f.kind === "image");
+
+    // Áudio sempre intercepta o envio: vira transcrição na caixa de texto,
+    // nunca entra direto na pipeline de chat/LLM (mesmo com texto já digitado).
+    if (audios.length > 0) {
+      const audio = audios[0];
+      setAttachedFiles((prev) => prev.filter((f) => f.kind !== "audio"));
+      setIsThinking(true);
+      try {
+        const result = await callApi("transcribe_audio", audio.base64, audio.mime, audio.name);
+        if (result?.success) {
+          setInputValue((prev) => (prev.trim() ? `${prev.trim()} ${result.text}` : result.text));
+        } else {
+          console.error("Falha na transcrição de áudio:", result?.error);
+        }
+      } catch (err) {
+        console.error("Erro ao transcrever áudio:", err);
+      } finally {
+        setIsThinking(false);
+      }
+      return;
+    }
 
     const userMessage = {
       id: Date.now(),
       sender: "user",
       text: text,
-      attachments: attachedFiles.length > 0 ? [...attachedFiles] : undefined,
+      attachments: images.length > 0 ? [...images] : undefined,
       time: new Date().toLocaleTimeString([], {
         hour: "2-digit",
         minute: "2-digit",
@@ -298,11 +364,13 @@ export default function ChatPanel({
     setInputValue("");
     setAttachedFiles([]);
     setIsThinking(true);
-    setJarvisAvatarState("thinking");
 
     if (window.pywebview && window.pywebview.api) {
-      // Passa a mensagem de texto acompanhada da chave de sessão ativa
-      callApi("chat_message", text, currentSessionId);
+      // Passa a mensagem de texto acompanhada da chave de sessão ativa e das imagens anexadas
+      const imagePayload = images.length
+        ? images.map((f) => ({ mime: f.mime, data: f.base64, name: f.name }))
+        : null;
+      callApi("chat_message", text, currentSessionId, imagePayload);
       // Atualiza a sidebar de sessões recentes com pequeno atraso para registrar o título (primeiro prompt)
       setTimeout(fetchRecentSessions, 150);
     } else {
@@ -340,18 +408,6 @@ export default function ChatPanel({
     }
   };
 
-  // Theme configuration
-  const getTheme = () => {
-    if (isCritical) return { accent: "239,68,68" };
-    switch (jarvisState) {
-      case "listening":
-        return { accent: "168,85,247" };
-      default:
-        return { accent: "34,211,238" };
-    }
-  };
-  const { accent } = getTheme();
-
   return (
     <div className="w-full flex-1 min-h-0 flex relative overflow-hidden bg-transparent">
       {/* ── SIDEBAR ─────────────────────────────────────────────────────── */}
@@ -369,9 +425,6 @@ export default function ChatPanel({
         <MessageList
           messages={messages}
           isThinking={isThinking}
-          jarvisAvatarState={jarvisAvatarState}
-          isCritical={isCritical}
-          accent={accent}
           onEditMessage={handleEditMessage}
           onRegenerateMessage={handleRegenerateMessage}
         />
@@ -382,9 +435,9 @@ export default function ChatPanel({
           setInputValue={setInputValue}
           attachedFiles={attachedFiles}
           onFileChange={handleFileChange}
+          onFilesDropped={processFiles}
           onRemoveFile={handleRemoveFile}
           onSend={handleSend}
-          accent={accent}
         />
       </main>
     </div>

@@ -16,6 +16,12 @@ ROOT_DIR = BACKEND_DIR.parent  # A raiz do projeto (onde fica o .env)
 env_path = ROOT_DIR / ".env"
 load_dotenv(dotenv_path=env_path)
 
+def _optional_int(name):
+    """Lê inteiro opcional do .env. Ausente/inválido -> None (= não repassa ao Ollama)."""
+    raw = os.getenv(name, "").strip()
+    return int(raw) if raw.lstrip("-").isdigit() else None
+
+
 class Settings:
     # --- Informações do Projeto ---
     PROJECT_NAME: str = "J.A.R.V.I.S."
@@ -40,6 +46,31 @@ class Settings:
     # Numérico vira int (a API trata "30m" como duração, mas "-1" precisa ser int).
     _KEEP_ALIVE_RAW = os.getenv("OLLAMA_KEEP_ALIVE", "-1")
     OLLAMA_KEEP_ALIVE = int(_KEEP_ALIVE_RAW) if _KEEP_ALIVE_RAW.lstrip("-").isdigit() else _KEEP_ALIVE_RAW
+    # Opções do runner. None (padrão) = não repassa, o Ollama decide.
+    # OLLAMA_NUM_CTX: janela de contexto; menor = KV cache menor = cabe mais na VRAM (ex: 4096).
+    # OLLAMA_NUM_GPU: camadas na GPU; 99 = todas. Se o Ollama recusar (VRAM insuficiente),
+    # o llm.py desativa esta opção e segue com o padrão do Ollama (ver core/llm.py).
+    OLLAMA_NUM_CTX = _optional_int("OLLAMA_NUM_CTX")
+    OLLAMA_NUM_GPU = _optional_int("OLLAMA_NUM_GPU")
+
+    # --- Configurações de Visão (Ollama multimodal — upload de imagem no Chat) ---
+    OLLAMA_VISION_MODEL: str = os.getenv("OLLAMA_VISION_MODEL", "moondream")
+    # keep_alive curto — modelo de visão é usado esporadicamente, não deve
+    # competir por VRAM com OLLAMA_MODEL (que fica residente via keep_alive=-1).
+    OLLAMA_VISION_KEEP_ALIVE = os.getenv("OLLAMA_VISION_KEEP_ALIVE", "5m")
+    TIMEOUT_VISION: int = int(os.getenv("TIMEOUT_VISION", "60"))  # 1ª carga na VRAM é lenta
+
+    # --- Configurações de Transcrição (faster-whisper — upload de áudio no Chat) ---
+    WHISPER_MODEL_SIZE: str = os.getenv("WHISPER_MODEL_SIZE", "base")
+    WHISPER_DEVICE: str = os.getenv("WHISPER_DEVICE", "auto")           # "cpu" | "cuda" | "auto"
+    WHISPER_COMPUTE_TYPE: str = os.getenv("WHISPER_COMPUTE_TYPE", "int8")  # int8 = leve p/ CPU
+    TIMEOUT_TRANSCRIPTION: int = int(os.getenv("TIMEOUT_TRANSCRIPTION", "60"))
+
+    # --- Uploads de Chat (imagem/áudio anexados pelo usuário) ---
+    DIR_UPLOADS = BACKEND_DIR / "uploads"
+    MAX_UPLOAD_SIZE_MB: int = int(os.getenv("MAX_UPLOAD_SIZE_MB", "15"))
+    ALLOWED_IMAGE_MIME = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+    ALLOWED_AUDIO_MIME = {"audio/mpeg", "audio/wav", "audio/x-wav", "audio/mp4", "audio/webm", "audio/ogg"}
 
     # --- Configurações do Obsidian (Memória de Longo Prazo) ---
     OBSIDIAN_HOST: str = os.getenv("OBSIDIAN_HOST")
@@ -112,6 +143,7 @@ class Settings:
         self.DIR_DATABASE.mkdir(parents=True, exist_ok=True)
         self.DIR_SOUNDS.mkdir(parents=True, exist_ok=True)
         self.DIR_LOGS.mkdir(parents=True, exist_ok=True)
+        self.DIR_UPLOADS.mkdir(parents=True, exist_ok=True)
 
     def perform_sanity_check(self):
         from .logger import log

@@ -1,6 +1,7 @@
 import json
 import threading
 import time
+from pathlib import Path
 
 from .config import settings
 from .logger import log
@@ -252,28 +253,45 @@ class JarvisAPI:
             log.error(f"Erro ao alternar ativação de categoria '{category_id}': {e}")
             return False
 
-    def chat_message(self, text, session_id):
+    def chat_message(self, text, session_id, images=None):
         """
-        Recebe uma mensagem de texto do frontend (modo Chat),
-        processa via execute_command_stream() e empurra a resposta de volta à UI em pedaços (streaming).
+        Recebe uma mensagem de texto do frontend (modo Chat), opcionalmente
+        com imagens anexadas (lista de {'mime':..., 'data': base64, 'name':...}).
+        Processa via execute_command_stream() e empurra a resposta de volta à UI em pedaços (streaming).
         Roda em thread separada para não bloquear a janela do pywebview.
         """
         import threading
         def _process():
             try:
                 from core import db
+                from core.uploads import save_base64_upload
                 from services.brain import execute_command_stream
-                
+
                 log.info(f"💬 [CHAT STREAM] Mensagem recebida de Felipe na sessão '{session_id}': '{text}'")
-                
-                # Salva o log de interação do usuário
-                db.log_interaction("user", text, session_id)
-                
+
+                b64_list = []
+                attachment_type = None
+                attachment_path = None
+                if images:
+                    for idx, img in enumerate(images):
+                        saved = save_base64_upload(
+                            img.get("data", ""), img.get("mime", ""),
+                            img.get("name") or f"imagem_{idx}.png", kind="image"
+                        )
+                        if saved:
+                            b64_list.append(img["data"])
+                            if attachment_path is None:
+                                attachment_type = "image"
+                                attachment_path = str(saved.relative_to(settings.DIR_UPLOADS))
+
+                # Salva o log de interação do usuário (com referência ao anexo, se houver)
+                db.log_interaction("user", text, session_id, attachment_type, attachment_path)
+
                 full_response = ""
                 is_first = True
-                
+
                 # Executa o processador cognitivo em stream com o session_id ativo
-                for chunk in execute_command_stream(text, session_id=session_id):
+                for chunk in execute_command_stream(text, session_id=session_id, images=b64_list or None):
                     full_response += chunk
                     
                     if self._window:
@@ -299,38 +317,94 @@ class JarvisAPI:
                 
         threading.Thread(target=_process, daemon=True).start()
 
+    def transcribe_audio(self, audio_b64, mime_type, filename):
+        """
+        Recebe um áudio (base64, sem prefixo data:) do frontend, salva em
+        disco, transcreve via Whisper local e retorna o texto diretamente —
+        chamada síncrona, não passa pelo pipeline de chat/LLM. A UI preenche
+        a caixa de texto com o resultado; não envia nada sozinho.
+
+        A transcrição roda numa thread própria (join) para seguir a convenção
+        do projeto de toda I/O pesada da JarvisAPI rodar em threading.Thread,
+        mesmo retornando o resultado de forma síncrona pro callApi do frontend.
+        """
+        result = {"success": False, "error": "Falha desconhecida na transcrição."}
+
+        def _process():
+            try:
+                from core.transcription import transcribe_audio_file
+                from core.uploads import save_base64_upload
+
+                saved = save_base64_upload(audio_b64, mime_type, filename, kind="audio")
+                if not saved:
+                    result["error"] = "Arquivo de áudio inválido ou tipo não suportado."
+                    return
+
+                text = transcribe_audio_file(str(saved))
+                if text is None:
+                    result["error"] = "Falha na transcrição do áudio."
+                    return
+
+                result["success"] = True
+                result["text"] = text
+                del result["error"]
+            except Exception as e:
+                log.error(f"Erro em transcribe_audio: {e}")
+                result["error"] = str(e)
+
+        t = threading.Thread(target=_process, daemon=True)
+        t.start()
+        t.join(timeout=settings.TIMEOUT_TRANSCRIPTION)
+        return result
+
     def get_chat_history(self, session_id, limit=50):
         """
         Retorna o histórico de conversas do banco de dados para a sessão selecionada, formatado para a UI.
         """
         try:
             from core import db
+            from core.uploads import read_upload_as_data_url
             conn = db._get_connection()
             cursor = conn.cursor()
             cursor.execute('''
-                SELECT id, role, content, timestamp FROM history 
+                SELECT id, role, content, timestamp, attachment_type, attachment_path FROM history
                 WHERE session_id = ?
                 ORDER BY timestamp DESC LIMIT ?
             ''', (session_id, limit))
             rows = cursor.fetchall()
             conn.close()
-            
+
             # Reverte para ordem cronológica
             rows.reverse()
-            
+
             messages = []
-            for row_id, role, content, timestamp in rows:
+            for row_id, role, content, timestamp, attachment_type, attachment_path in rows:
                 try:
                     time_part = timestamp.split(' ')[1][:5] if ' ' in timestamp else ""
                 except Exception:
                     time_part = ""
-                
-                messages.append({
+
+                message = {
                     "id": row_id,
                     "sender": "user" if role == "user" else "jarvis",
                     "text": content,
                     "time": time_part
-                })
+                }
+
+                if attachment_type == "image" and attachment_path:
+                    data_url = read_upload_as_data_url(attachment_path)
+                    if data_url:
+                        display_name = Path(attachment_path).name.split("_", 1)[-1]
+                        message["attachments"] = [{
+                            "id": f"{row_id}-att",
+                            "name": display_name,
+                            "kind": "image",
+                            "icon": "🖼️",
+                            "glow": "purple",
+                            "previewUrl": data_url,
+                        }]
+
+                messages.append(message)
             return messages
         except Exception as e:
             log.error(f"Erro ao recuperar histórico de chat para a sessão '{session_id}': {e}")

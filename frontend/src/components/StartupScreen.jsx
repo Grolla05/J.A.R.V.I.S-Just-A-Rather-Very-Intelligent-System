@@ -43,19 +43,6 @@ export default function StartupScreen({ onComplete }) {
       className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-hidden"
       style={{ background: "rgba(8, 8, 12, 0.98)" }}
     >
-      {/* Ambient glow */}
-      <div
-        className="absolute pointer-events-none"
-        style={{
-          width: 700,
-          height: 700,
-          borderRadius: "50%",
-          background:
-            "radial-gradient(circle, rgba(0, 188, 255, 0.07) 0%, transparent 65%)",
-          filter: "blur(50px)",
-        }}
-      />
-
       {/* Glass card */}
       <motion.div
         initial={{ opacity: 0, scale: 0.93, y: 18 }}
@@ -63,22 +50,11 @@ export default function StartupScreen({ onComplete }) {
         transition={{ type: "spring", stiffness: 100, damping: 20, delay: 0.1 }}
         style={{
           background: "rgba(15, 15, 20, 0.6)",
-          backdropFilter: "blur(28px) saturate(180%)",
-          WebkitBackdropFilter: "blur(28px) saturate(180%)",
           border: "1px solid rgba(255, 255, 255, 0.08)",
           borderRadius: "28px",
-          boxShadow: `
-            0 32px 64px rgba(0, 0, 0, 0.6),
-            inset 3px 3px 6px rgba(255, 255, 255, 0.06),
-            inset -3px -3px 8px rgba(0, 0, 0, 0.7),
-            0 0 0 1px rgba(255, 255, 255, 0.02)
-          `,
         }}
         className="relative flex flex-col items-center px-16 py-14 w-[460px]"
       >
-        {/* Top shimmer */}
-        <div className="absolute top-0 left-8 right-8 h-[1.5px] bg-gradient-to-r from-transparent via-white/12 to-transparent rounded-full" />
-
         {/* Logo */}
         <div className="mb-10 text-center select-none">
           <motion.h1
@@ -86,10 +62,6 @@ export default function StartupScreen({ onComplete }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.25, type: "spring", stiffness: 120, damping: 18 }}
             className="text-5xl font-bold tracking-[0.25em] text-white"
-            style={{
-              textShadow:
-                "0 0 28px rgba(0, 188, 255, 0.45), 0 0 60px rgba(0, 188, 255, 0.15)",
-            }}
           >
             J.A.R.V.I.S.
           </motion.h1>
@@ -147,9 +119,7 @@ export default function StartupScreen({ onComplete }) {
               animate={{ width: `${progress}%` }}
               transition={{ duration: 0.12, ease: "easeOut" }}
               style={{
-                background:
-                  "linear-gradient(90deg, rgba(0,140,255,0.85) 0%, rgba(0,220,255,1) 100%)",
-                boxShadow: "0 0 10px rgba(0, 188, 255, 0.65)",
+                background: "rgba(0, 200, 255, 0.9)",
               }}
             />
           </div>

@@ -191,8 +191,6 @@ export default function SkillsSidebar({ isCritical }) {
             <div
               style={{
                 background: theme.bg,
-                backdropFilter: "blur(40px) saturate(150%)",
-                WebkitBackdropFilter: "blur(40px) saturate(150%)",
                 borderLeft: "1px solid rgba(255, 255, 255, 0.08)",
                 boxShadow: "-20px 0 50px rgba(0, 0, 0, 0.5)",
               }}

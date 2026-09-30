@@ -57,7 +57,7 @@ def execute_command(command, session_id='default'):
                             session_id=session_id)
 
 
-def execute_command_stream(command, session_id='default'):
+def execute_command_stream(command, session_id='default', images=None):
     if state.pending_critical_action:
         if time.time() > state.pending_critical_action['timeout']:
             state.pending_critical_action = None
@@ -90,7 +90,7 @@ def execute_command_stream(command, session_id='default'):
         vault_file, vault_ctx = get_vault_context(command)
         for chunk in ask_local_ai_stream(command, intent_type=intent, entity=entity,
                                           vault_context=vault_ctx, vault_filename=vault_file,
-                                          session_id=session_id):
+                                          session_id=session_id, images=images):
             yield chunk
 
 

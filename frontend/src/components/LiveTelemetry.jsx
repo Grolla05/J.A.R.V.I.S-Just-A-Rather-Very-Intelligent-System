@@ -48,7 +48,7 @@ export default function LiveTelemetry() {
             onClick={() => setShowCpuWidget(true)}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            className="px-3 py-1 rounded-full bg-black/40 border border-white/5 backdrop-blur-[10px] text-[8px] font-bold tracking-widest uppercase text-cyan-400 cursor-pointer"
+            className="px-3 py-1 rounded-full bg-black/40 border border-white/5 text-[8px] font-bold tracking-widest uppercase text-cyan-400 cursor-pointer"
           >
             + Core Diagnostic
           </motion.button>

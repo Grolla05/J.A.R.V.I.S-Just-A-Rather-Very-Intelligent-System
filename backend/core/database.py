@@ -105,6 +105,16 @@ class DatabaseManager:
                     cursor.execute("ALTER TABLE sessions ADD COLUMN is_pinned INTEGER DEFAULT 0")
                     log.info("Migração de banco executada: coluna 'is_pinned' adicionada à tabela sessions.")
 
+                # Anexos de chat (imagem/áudio) — colunas nullable, path relativo a DIR_UPLOADS
+                cursor.execute("PRAGMA table_info(history)")
+                columns = [col[1] for col in cursor.fetchall()]
+                if "attachment_type" not in columns:
+                    cursor.execute("ALTER TABLE history ADD COLUMN attachment_type TEXT")
+                    log.info("Migração de banco executada: coluna 'attachment_type' adicionada à tabela history.")
+                if "attachment_path" not in columns:
+                    cursor.execute("ALTER TABLE history ADD COLUMN attachment_path TEXT")
+                    log.info("Migração de banco executada: coluna 'attachment_path' adicionada à tabela history.")
+
                 # Cria índice na coluna session_id para consultas super rápidas (agora que a coluna 100% existe)
                 cursor.execute('CREATE INDEX IF NOT EXISTS idx_history_session ON history(session_id)')
 
@@ -185,10 +195,14 @@ class DatabaseManager:
             return None
 
     # --- MÉTODOS DE HISTÓRICO ---
-    def log_interaction(self, role: str, content: str, session_id: str = 'default'):
+    def log_interaction(self, role: str, content: str, session_id: str = 'default',
+                         attachment_type: Optional[str] = None, attachment_path: Optional[str] = None):
         try:
             with self.connection() as conn:
-                conn.execute('INSERT INTO history (role, content, session_id) VALUES (?, ?, ?)', (role, content, session_id))
+                conn.execute(
+                    'INSERT INTO history (role, content, session_id, attachment_type, attachment_path) VALUES (?, ?, ?, ?, ?)',
+                    (role, content, session_id, attachment_type, attachment_path)
+                )
         except sqlite3.Error as e:
             log.error(f"Falha ao registrar histórico para sessão '{session_id}': {e}")
 

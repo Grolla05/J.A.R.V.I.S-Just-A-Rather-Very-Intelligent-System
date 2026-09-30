@@ -218,3 +218,6 @@ backend/assets/
 CLAUDE.md
 Post_Linkedin/
 .claude/
+
+# Uploads do usuário (chat multimodal)
+backend/uploads/
