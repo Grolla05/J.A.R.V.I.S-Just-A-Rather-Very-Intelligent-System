@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { TalkIcon, ChatIcon, CodeIcon } from "./CORE/NavIcons";
+import { TalkIcon, ChatIcon } from "./CORE/NavIcons";
 
 const handleClose = () => {
   if (window.pywebview?.api) window.pywebview.api.shutdown();
@@ -26,13 +26,6 @@ const MODE_ACCENTS = {
     glow: "rgba(130, 80, 255, 0.4)",
     bgBubble: "rgba(130, 80, 255, 0.08)",
   },
-  code: {
-    color: "rgba(0, 255, 160, 1)",
-    bg: "rgba(0, 255, 160, 0.15)",
-    border: "rgba(0, 255, 160, 0.3)",
-    glow: "rgba(0, 255, 160, 0.4)",
-    bgBubble: "rgba(0, 255, 160, 0.06)",
-  },
 };
 
 const CRITICAL_ACCENT = {
@@ -51,7 +44,6 @@ export default function HeaderNavigation({
   const tabs = [
     { id: "talk", label: "Copilot", icon: <TalkIcon /> },
     { id: "chat", label: "Chat", icon: <ChatIcon /> },
-    { id: "code", label: "Code", icon: <CodeIcon /> },
   ];
 
   const getTabAccent = (tabId) => {
@@ -98,22 +90,12 @@ export default function HeaderNavigation({
       >
         <div
           style={{
-            background: "rgba(15, 15, 20, 0.45)",
-            backdropFilter: "blur(28px) saturate(180%)",
-            WebkitBackdropFilter: "blur(28px) saturate(180%)",
+            background: "rgba(15, 15, 20, 0.7)",
             border: "1px solid rgba(255, 255, 255, 0.08)",
             borderRadius: "26px",
-            boxShadow: `
-              0 24px 48px rgba(0, 0, 0, 0.5),
-              inset 3px 3px 6px rgba(255, 255, 255, 0.08),
-              inset -3px -3px 8px rgba(0, 0, 0, 0.7),
-              0 0 0 1px rgba(255, 255, 255, 0.02)
-            `,
           }}
           className="relative flex items-center gap-1.5 p-2"
         >
-          <div className="absolute top-0 left-6 right-6 h-[1.5px] bg-gradient-to-r from-transparent via-white/15 to-transparent rounded-full" />
-
           {tabs.map((tab) => {
             const isActive = activeMode === tab.id;
             const accent = getTabAccent(tab.id);
@@ -138,12 +120,6 @@ export default function HeaderNavigation({
                     style={{
                       background: `linear-gradient(135deg, ${accent.bg} 0%, ${accent.bgBubble} 100%)`,
                       border: `1px solid ${accent.border}`,
-                      boxShadow: `
-                        0 8px 16px rgba(0, 0, 0, 0.3),
-                        inset 2.5px 2.5px 5px rgba(255, 255, 255, 0.25),
-                        inset -2.5px -2.5px 6px rgba(0, 0, 0, 0.4),
-                        inset 0 0 15px ${accent.glow}
-                      `,
                     }}
                     className="absolute inset-0 rounded-[18px] -z-10"
                   />

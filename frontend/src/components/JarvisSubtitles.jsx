@@ -87,7 +87,7 @@ export default function JarvisSubtitles({ jarvisState, isCritical, text }) {
       className="w-full max-w-xl px-4 z-40"
     >
       <div
-        className={`w-full p-5 rounded-2xl border ${theme.border} ${theme.bg} ${theme.glow} backdrop-blur-[20px] transition-all duration-500 flex flex-col gap-2.5 relative overflow-hidden`}
+        className={`w-full p-5 rounded-2xl border ${theme.border} ${theme.bg} ${theme.glow} transition-all duration-500 flex flex-col gap-2.5 relative overflow-hidden`}
       >
         {/* Glow interno sutil */}
         <div className="absolute inset-0 bg-gradient-to-b from-white/[0.02] to-transparent pointer-events-none" />

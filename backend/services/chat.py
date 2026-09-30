@@ -1,4 +1,5 @@
 import core.state as state
+from core.config import settings
 from core.database import db
 from core.llm import query_ollama, query_ollama_stream
 from core.logger import log
@@ -86,7 +87,26 @@ def ask_local_ai(text, intent_type="CHAT", entity=None, vault_context="", vault_
     return "Erro de processamento neural."
 
 
-def ask_local_ai_stream(text, intent_type="CHAT", entity=None, vault_context="", vault_filename="", session_id="default"):
+def ask_local_ai_stream(text, intent_type="CHAT", entity=None, vault_context="", vault_filename="", session_id="default", images=None):
+    if images:
+        # Imagem anexada: roteia pro modelo de visão com um contexto mínimo e
+        # dedicado. Moondream/LLaVA são modelos pequenos — empilhar a
+        # personalidade completa do JARVIS + histórico + telemetria por cima
+        # degrada a resposta sobre a imagem em vez de ajudar.
+        vision_messages = [
+            {'role': 'system', 'content': load_prompt("vision_context.md")},
+            {'role': 'user', 'content': text, 'images': images},
+        ]
+        for chunk in query_ollama_stream(
+            vision_messages,
+            temperature=0.4,
+            timeout=settings.TIMEOUT_VISION,
+            model=settings.OLLAMA_VISION_MODEL,
+            keep_alive=settings.OLLAMA_VISION_KEEP_ALIVE,
+        ):
+            yield chunk
+        return
+
     db_history = get_session_history_for_ai(session_id, limit=8)
 
     sys_instruction = SYSTEM_PROMPT['content'] + "\n\n[MODO ATUAL: CHAT] Aplique REGRAS DE CHAT. Formate a resposta em Markdown. Use **negrito**, `código`, listas e blocos de código quando apropriado."

@@ -114,5 +114,8 @@ function getMockFallback(method, ...args) {
       { id: 2, sender: "jarvis", text: "Olá Senhor. Telemetria nominal (Ping: 4ms). Todos os núcleos de Stark Industries estão operando perfeitamente.", time: "17:15" }
     ];
   }
+  if (method === "transcribe_audio") {
+    return { success: true, text: "[MOCK] Transcrição simulada do áudio anexado." };
+  }
   return null;
 }
