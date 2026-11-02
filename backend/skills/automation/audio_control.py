@@ -1,12 +1,14 @@
-import time
 import json
+import time
+from ctypes import POINTER, cast
+
 import requests  # Adicionado para fazer a requisição direta
-from core.config import settings # Para pegar o IP e Modelo definidos no config
-from core import log
-from core.prompts import load_prompt
-from ctypes import cast, POINTER
 from comtypes import CLSCTX_ALL, CoInitialize, CoUninitialize
 from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+
+from core import log
+from core.config import settings  # Para pegar o IP e Modelo definidos no config
+from core.prompts import load_prompt
 
 # --- CONFIGURAÇÃO PARA O ROTEADOR ---
 INTENT = "AUDIO_CONTROL"

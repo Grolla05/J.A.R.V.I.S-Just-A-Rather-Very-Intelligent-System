@@ -4,6 +4,7 @@ import tempfile
 import unittest
 
 from tests._stubs import install
+
 install()
 
 import core.prompts as prompts

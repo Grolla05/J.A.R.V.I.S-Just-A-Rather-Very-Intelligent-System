@@ -1,5 +1,3 @@
-/* eslint-disable */
-
 export const MD_COMPONENTS = {
   p: ({ children }) => (
     <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>
@@ -31,7 +29,7 @@ export const MD_COMPONENTS = {
       <span>{children}</span>
     </li>
   ),
-  code: ({ inline, className, children }) => {
+  code: ({ inline, children }) => {
     if (inline)
       return (
         <code

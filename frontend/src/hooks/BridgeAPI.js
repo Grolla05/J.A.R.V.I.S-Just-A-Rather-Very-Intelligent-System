@@ -1,5 +1,4 @@
-/* eslint-disable */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 export default function useBridgeAPI() {
   const [isReady, setIsReady] = useState(
@@ -17,7 +16,9 @@ export default function useBridgeAPI() {
     return () => window.removeEventListener("pywebviewready", handleReady);
   }, [isReady]);
 
-  const callApi = async (method, ...args) => {
+  // Identidade estável: `callApi` só depende de `window`, então pode entrar nos
+  // arrays de dependência dos consumidores sem re-disparar efeitos a cada render.
+  const callApi = useCallback(async (method, ...args) => {
     if (window.pywebview && window.pywebview.api) {
       if (typeof window.pywebview.api[method] === "function") {
         try {
@@ -31,7 +32,7 @@ export default function useBridgeAPI() {
 
     // Local mock simulations fallback for easy web testing
     return getMockFallback(method, ...args);
-  };
+  }, []);
 
   return { isReady, callApi };
 }
@@ -112,6 +113,9 @@ function getMockFallback(method, ...args) {
       { id: 1, sender: "user", text: "Olá JARVIS, mostre meu status.", time: "17:15" },
       { id: 2, sender: "jarvis", text: "Olá Senhor. Telemetria nominal (Ping: 4ms). Todos os núcleos de Stark Industries estão operando perfeitamente.", time: "17:15" }
     ];
+  }
+  if (method === "transcribe_audio") {
+    return { success: true, text: "[MOCK] Transcrição simulada do áudio anexado." };
   }
   return null;
 }

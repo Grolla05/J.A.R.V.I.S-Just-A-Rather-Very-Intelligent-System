@@ -1,0 +1,57 @@
+name: "🧩 Proposta de Nova Skill"
+description: Proponha uma nova skill para o Skill Loader do J.A.R.V.I.S.
+labels: ["skill", "needs-security-review"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        O sistema de skills importa e executa código Python sem sandbox
+        (veja `SECURITY.md`). Por isso, toda skill nova passa por esta
+        triagem antes de qualquer código ser escrito.
+
+  - type: input
+    id: intent
+    attributes:
+      label: INTENT proposto
+      description: Nome único do intent que esta skill vai registrar.
+      placeholder: "WEATHER_CHECK"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: O que a skill faz?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: system-access
+    attributes:
+      label: Esta skill acessa recursos sensíveis do sistema?
+      multiple: true
+      options:
+        - Sistema de arquivos
+        - Teclado / Mouse
+        - Tela (captura ou controle)
+        - Processos (abrir/fechar apps)
+        - Rede / API externa
+        - Shutdown / Suspend / Sentry mode
+        - Nenhum dos acima
+    validations:
+      required: true
+
+  - type: textarea
+    id: justification
+    attributes:
+      label: Se marcou algum acesso sensível, justifique por que é necessário
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmações
+      options:
+        - label: A skill seguirá o contrato exigido (`INTENT` + `execute()`)
+          required: true
+        - label: Não introduz dependências não auditadas nem execução de código remoto
+          required: true

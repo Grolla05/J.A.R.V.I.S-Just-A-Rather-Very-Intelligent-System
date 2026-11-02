@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from tests._stubs import install
+
 install()
 
 from core import llm

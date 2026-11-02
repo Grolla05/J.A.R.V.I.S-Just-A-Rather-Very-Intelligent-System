@@ -1,8 +1,10 @@
 import asyncio
 import json
 import urllib.parse
-import requests
 from typing import Optional
+
+import requests
+
 from .config import settings
 from .logger import log
 
@@ -91,6 +93,7 @@ class ObsidianMCPClient:
     def __init__(self):
         self._tools_cache = None
         import os
+
         from mcp.client.stdio import StdioServerParameters
         
         env = os.environ.copy()
@@ -121,8 +124,8 @@ class ObsidianMCPClient:
                 return pool.submit(asyncio.run, coro).result()
 
     async def _list_tools(self) -> list:
-        from mcp.client.stdio import stdio_client
         from mcp import ClientSession
+        from mcp.client.stdio import stdio_client
         async with stdio_client(self._server_params) as (r, w):
             async with ClientSession(r, w) as session:
                 await session.initialize()
@@ -130,8 +133,8 @@ class ObsidianMCPClient:
                 return result.tools
 
     async def _call_tool(self, name: str, args: dict) -> str:
-        from mcp.client.stdio import stdio_client
         from mcp import ClientSession
+        from mcp.client.stdio import stdio_client
         async with stdio_client(self._server_params) as (r, w):
             async with ClientSession(r, w) as session:
                 await session.initialize()

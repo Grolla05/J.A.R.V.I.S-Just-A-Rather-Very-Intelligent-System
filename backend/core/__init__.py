@@ -1,12 +1,13 @@
 import logging
+
+from .bridge import JarvisAPI
 from .config import settings
-from .logger import log
 from .database import db
-from .obsidian import obsidian, mcp_client, get_vault_context
+from .logger import log
+from .obsidian import get_vault_context, mcp_client, obsidian
+from .prompts import load_prompt
 from .skill_loader import manager
 from .SystemInfo import SystemInfo
-from .bridge import JarvisAPI
-from .prompts import load_prompt
 from .utils import escape_js
 
 # --- 1. Filtro de Poluição (Noise Reduction) ---

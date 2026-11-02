@@ -1,4 +1,5 @@
 import json
+
 from core.llm import query_ollama
 from core.logger import log
 from core.obsidian import obsidian

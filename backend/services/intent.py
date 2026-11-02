@@ -1,10 +1,11 @@
 import json
+
 from core.config import settings
+from core.database import db
 from core.llm import query_ollama
 from core.logger import log
-from core.database import db
-from core.skill_loader import manager
 from core.prompts import load_prompt
+from core.skill_loader import manager
 from core.utils import TTLCache
 
 # Memoiza classificações recentes: repetir o mesmo comando em <TTL s não

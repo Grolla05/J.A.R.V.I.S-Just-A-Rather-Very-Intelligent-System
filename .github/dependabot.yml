@@ -1,0 +1,34 @@
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "backend"]
+    groups:
+      backend-minor-patch:
+        update-types: ["minor", "patch"]
+      # Majors ficam de fora do grupo de propósito — vêm em PR separada,
+      # porque merecem revisão manual (podem quebrar comportamento).
+
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "frontend"]
+    groups:
+      frontend-minor-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    labels: ["dependencies", "ci"]
+    groups:
+      github-actions:
+        update-types: ["minor", "patch", "major"]
+        # Actions costumam ser mais seguras de agrupar até em majors —
+        # são bumps de infraestrutura de CI, não de runtime da aplicação.

@@ -12,6 +12,7 @@ import difflib
 import json
 
 from core import log
+from core.config import settings
 from core.llm import query_ollama
 from core.prompts import load_prompt
 from core.spotify import (
@@ -20,7 +21,6 @@ from core.spotify import (
     start_authorization,
     start_uri,
 )
-from core.config import settings
 
 # --- CONFIGURAÇÃO DA SKILL ---
 INTENT = "SPOTIFY_CONTROL"

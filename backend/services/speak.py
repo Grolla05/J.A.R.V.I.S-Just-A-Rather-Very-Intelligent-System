@@ -1,16 +1,17 @@
 import asyncio
-import edge_tts
-import pygame
 import os
-import pyttsx3
 import re
 import sys
-import time
 import threading
+import time
 import uuid
-from core import settings, log
 
-from colorama import init, Fore, Style
+import edge_tts
+import pygame
+import pyttsx3
+from colorama import Fore, Style
+
+from core import log, settings
 
 # --- CONFIGURAÇÕES ---
 VOICE_ONLINE = "pt-BR-AntonioNeural"

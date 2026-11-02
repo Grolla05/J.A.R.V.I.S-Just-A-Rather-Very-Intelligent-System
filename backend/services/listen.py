@@ -1,7 +1,9 @@
-import speech_recognition as sr
-import time
 import re
-from core import settings, log
+import time
+
+import speech_recognition as sr
+
+from core import log, settings
 
 
 class Ear:

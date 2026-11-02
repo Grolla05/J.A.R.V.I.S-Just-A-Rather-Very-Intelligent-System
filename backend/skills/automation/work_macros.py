@@ -1,12 +1,14 @@
-import os
-import time
 import json
-import requests
+import os
 import subprocess
+import time
+
+import requests
+
 from core import log
 from core.config import settings
 from core.prompts import load_prompt
-from core.spotify import spotify, ensure_device_ready, start_uri
+from core.spotify import ensure_device_ready, spotify, start_uri
 
 # --- CONFIGURAÇÃO DA SKILL ---
 INTENT = "WORK_MACRO"

@@ -1,0 +1,11 @@
+# Owner padrão de todo o repositório
+* @Grolla05
+
+# Skills com acesso ao sistema operacional e o loader que as carrega
+# exigem revisão explícita — ver SECURITY.md
+/backend/skills/ @Grolla05
+/backend/core/skill_loader.py @Grolla05
+
+# Configuração e segredos
+/.env.example @Grolla05
+/.github/ @Grolla05

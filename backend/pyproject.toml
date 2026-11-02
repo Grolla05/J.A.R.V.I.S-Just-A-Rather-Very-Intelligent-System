@@ -1,0 +1,18 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+exclude = [".venv", "venv", "__pycache__", "build", "dist"]
+
+[tool.ruff.lint]
+# Conjunto explícito de regras: erros reais (E/F) + ordenação de imports (I).
+# Sem isso, o ruff usa os defaults da versão instalada, que mudam entre releases
+# e quebram o CI sem nenhuma alteração de código.
+select = ["E4", "E7", "E9", "F", "I"]
+ignore = [
+    "E701",  # if x: return  -- estilo, não erro
+    "E722",  # except: nu    -- legado, tratar aos poucos
+    "E402",  # import fora do topo (sys.path hacks nos entrypoints)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["F401", "F811"]

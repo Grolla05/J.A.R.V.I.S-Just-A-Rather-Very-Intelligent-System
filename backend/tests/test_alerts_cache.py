@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from tests._stubs import install
+
 install()
 
 # alerts importa services.listen (instancia mic) e services.speak no topo.

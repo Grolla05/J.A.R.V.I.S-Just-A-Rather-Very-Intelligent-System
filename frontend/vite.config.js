@@ -4,6 +4,10 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   base: './',
+  test: {
+    environment: 'jsdom',
+    globals: true,
+  },
   resolve: {
     alias: {
       // Cria o alias apontando para a pasta src de forma absoluta
@@ -11,22 +15,13 @@ export default defineConfig({
     },
   },
   build: {
-    chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
+        // Match exato por pacote: `includes('react')` também pegava react-markdown, lucide-react etc.
         manualChunks(id) {
-          if (id.includes('node_modules')) {
-            if (id.includes('react') || id.includes('react-dom')) {
-              return 'vendor-react';
-            }
-            if (id.includes('framer-motion')) {
-              return 'vendor-framer';
-            }
-            if (id.includes('katex') || id.includes('remark') || id.includes('rehype')) {
-              return 'vendor-markdown';
-            }
-            return 'vendor';
-          }
+          const path = id.replaceAll('\\', '/');
+          if (/node_modules\/(react|react-dom|scheduler)\//.test(path)) return 'vendor-react';
+          if (/node_modules\/(framer-motion|motion-dom|motion-utils)\//.test(path)) return 'vendor-framer';
         },
       },
     },

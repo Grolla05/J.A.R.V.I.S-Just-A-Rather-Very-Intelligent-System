@@ -1,9 +1,11 @@
-import pyautogui
-import json
-import requests
-import time
-import subprocess
 import ctypes
+import json
+import subprocess
+import time
+
+import pyautogui
+import requests
+
 from core import log
 from core.config import settings
 from core.prompts import load_prompt

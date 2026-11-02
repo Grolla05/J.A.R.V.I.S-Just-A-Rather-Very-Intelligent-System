@@ -1,9 +1,10 @@
-import requests
 import datetime
-import re
+
+import requests
+
 from core import log, obsidian
-from core.SystemInfo import SystemInfo
 from core.prompts import load_prompt
+from core.SystemInfo import SystemInfo
 
 # --- CONFIGURAÇÃO DA SKILL ---
 INTENT = "SYSTEM_REPORT"
@@ -118,7 +119,7 @@ def generate_boot_report():
     
     status_phrases = [greeting]
     
-    status_phrases.append(f"Interface conectada.")
+    status_phrases.append("Interface conectada.")
     
     if batt['plugged']:
          status_phrases.append(f"Fonte de alimentação externa acoplada. Carga em {batt_desc}.")
@@ -141,10 +142,10 @@ def generate_boot_report():
     if ping:
         status_phrases.append(f"Latência de conexão neural em {ping}ms.")
     else:
-        status_phrases.append(f"Atenção: Link neural offline.")
+        status_phrases.append("Atenção: Link neural offline.")
         
     return " ".join(status_phrases)
 
 def execute(entity, command):
-    log.info(f"📊 [STATUS] Executando Protocolo de Relatório.")
+    log.info("📊 [STATUS] Executando Protocolo de Relatório.")
     return generate_boot_report()

@@ -1,5 +1,6 @@
 import os
 import string
+
 from core.logger import log
 
 PROMPTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "prompts")

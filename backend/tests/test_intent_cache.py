@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from tests._stubs import install
+
 install()
 
 import services.intent as intent

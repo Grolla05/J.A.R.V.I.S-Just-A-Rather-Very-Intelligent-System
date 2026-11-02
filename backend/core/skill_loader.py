@@ -1,5 +1,6 @@
-import os
 import importlib.util
+import os
+
 from .logger import log
 
 
@@ -41,11 +42,11 @@ class SkillManager:
                                 self.prompts.append(module.PROMPT_TEXT)
                             
                             # Mostra de onde veio a skill para facilitar debug
-                            relative_path = os.path.relpath(full_path, skills_root)
+                            log.debug(f"Skill '{intent_name}' carregada de {os.path.relpath(full_path, skills_root)}")
 
                     except Exception as e:
                         log.error(f"❌ Erro ao carregar skill em {full_path}: {e}")
 
-        log.info(f"✅ Skills Carregadas com sucesso")
+        log.info("✅ Skills Carregadas com sucesso")
 manager = SkillManager()
 manager.load_skills()

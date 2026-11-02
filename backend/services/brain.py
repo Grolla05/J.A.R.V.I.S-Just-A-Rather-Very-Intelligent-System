@@ -1,15 +1,16 @@
 import time
-from core import settings, log, manager
+
+import core.state as state
+from core import log, manager, settings
+from core.alerts import process_system_alert
 from core.hardware import scan_system_hardware
 from core.obsidian import get_vault_context
-import core.state as state
-from core.alerts import process_system_alert
-from services.intent import classify_intent, is_skill_enabled
 from services.chat import ask_local_ai, ask_local_ai_stream
+from services.intent import classify_intent, is_skill_enabled
 from services.memory import extract_fact_to_memory
 
 try:
-    from services.listen import listen, ear_pause, ear_resume
+    from services.listen import ear_pause, ear_resume, listen
     from services.speak import speak
 except ImportError as e:
     log.critical(f"❌ Erro ao importar sentidos: {e}")
@@ -56,7 +57,7 @@ def execute_command(command, session_id='default'):
                             session_id=session_id)
 
 
-def execute_command_stream(command, session_id='default'):
+def execute_command_stream(command, session_id='default', images=None):
     if state.pending_critical_action:
         if time.time() > state.pending_critical_action['timeout']:
             state.pending_critical_action = None
@@ -73,7 +74,7 @@ def execute_command_stream(command, session_id='default'):
                     return
             state.pending_critical_action = None
 
-    decision = classify_intent(command, skip_skills=True)
+    decision = classify_intent(command)
     intent = decision.get("intent")
     entity = decision.get("entity")
     log.info(f"🧠 [INTENÇÃO DETECTADA STREAM]: {intent} (Confiança: {decision.get('confidence')})")
@@ -89,7 +90,7 @@ def execute_command_stream(command, session_id='default'):
         vault_file, vault_ctx = get_vault_context(command)
         for chunk in ask_local_ai_stream(command, intent_type=intent, entity=entity,
                                           vault_context=vault_ctx, vault_filename=vault_file,
-                                          session_id=session_id):
+                                          session_id=session_id, images=images):
             yield chunk
 
 

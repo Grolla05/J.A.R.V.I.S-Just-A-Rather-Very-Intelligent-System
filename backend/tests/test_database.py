@@ -6,10 +6,11 @@ import unittest
 from pathlib import Path
 
 from tests._stubs import install
+
 install()
 
-from core.config import settings
 import core.database as database
+from core.config import settings
 
 
 class TestDatabaseWalAndContextManager(unittest.TestCase):

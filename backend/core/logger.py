@@ -1,7 +1,8 @@
 import logging
 import sys
-from logging.handlers import TimedRotatingFileHandler
-from colorama import init, Fore, Style
+
+from colorama import Fore, Style, init
+
 from .config import settings
 
 init(autoreset=True)

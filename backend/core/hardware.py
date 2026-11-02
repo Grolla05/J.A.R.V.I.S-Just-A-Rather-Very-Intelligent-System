@@ -1,8 +1,8 @@
 import json
 import subprocess
-from .config import settings
-from .logger import log
+
 from .database import db
+from .logger import log
 
 
 def run_powershell(cmd):

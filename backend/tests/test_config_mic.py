@@ -2,6 +2,7 @@
 import unittest
 
 from tests._stubs import install
+
 install()
 
 from core.config import settings

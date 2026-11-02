@@ -1,11 +1,13 @@
 import ctypes
-import os
-import shutil
+import difflib
 import glob
 import json
-import requests
+import os
+import shutil
 import subprocess
-import difflib
+
+import requests
+
 from core import log
 from core.config import settings
 from core.prompts import load_prompt

@@ -1,25 +1,26 @@
-import webview
-import time
-import sys
 import os
-import threading
 import secrets
+import sys
+import threading
+import time
+
+import webview
 
 # Token de sessão criptográfico único para todas as interações de voz do ciclo de execução atual
 voice_session_id = f"voice_{secrets.token_urlsafe(32)}"
 
 # Importa as configurações, o Logger e agora a Memória (Database)
-from core import settings, log, db, obsidian, JarvisAPI, manager
+from core import JarvisAPI, db, log, manager, obsidian, settings
 
 # --- IMPORTAÇÃO DOS MÓDULOS ---
 try:
     log.debug("Carregando serviços cognitivos (Audição, Fala, Cérebro)...")
-    from services.listen import listen, ear_pause, ear_resume
-    from services.speak import speak
-    from services.brain import execute_command
     from core.alerts import process_system_alert
     from core.llm import warm_up_ollama
     from core.state import sys_monitor
+    from services.brain import execute_command
+    from services.listen import ear_pause, ear_resume, listen
+    from services.speak import speak
     log.info("Serviços cognitivos carregados com sucesso.")
 except ImportError as e:
     log.critical(f"Falha na importação dos módulos de serviço: {e}")
@@ -66,7 +67,7 @@ def jarvis_auto_loop():
     global is_running, window_instance
     
     time.sleep(4)
-    log.info(f"Interface Gráfica Conectada. Loop principal ativo.")
+    log.info("Interface Gráfica Conectada. Loop principal ativo.")
     sys_monitor.brain_callback = ui_aware_alert_callback
     sys_monitor.start_proactive_monitor(interval=3)  # Verificações a cada 3 segundos
     api.start_telemetry_stream(settings.TELEMETRY_INTERVAL)  # Push delta-gated p/ a UI

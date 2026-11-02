@@ -9,6 +9,8 @@
 
 # --- CORE / INTELIGÊNCIA ARTIFICIAL ---
 ollama                      # Cliente Python para comunicação com servidor Ollama (LLM)
+faster-whisper              # Transcrição local de áudio (Whisper via CTranslate2 — rápido em CPU/GPU)
+Pillow                      # Validação/normalização de imagem antes de enviar ao modelo de visão
 
 # --- CONFIGURAÇÃO E AMBIENTE ---
 python-dotenv               # Gerenciamento de variáveis de ambiente (.env)

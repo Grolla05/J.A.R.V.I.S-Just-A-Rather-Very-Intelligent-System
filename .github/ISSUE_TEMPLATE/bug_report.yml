@@ -1,0 +1,59 @@
+name: "🐛 Bug Report"
+description: Reporte um comportamento inesperado do J.A.R.V.I.S.
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado por reportar um bug! Quanto mais detalhes, mais rápido
+        conseguimos investigar.
+
+  - type: dropdown
+    id: module
+    attributes:
+      label: Módulo afetado
+      options:
+        - Backend (core)
+        - Backend (skills)
+        - Frontend
+        - Boot / Infraestrutura
+        - Outro
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: O que aconteceu?
+      description: Descreva o bug e o que você esperava que acontecesse.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Passos para reproduzir
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs relevantes
+      description: >
+        Cole trechos de `backend/logs/AAAA/MM/jarvis_*.log`.
+        Remova qualquer dado pessoal (nomes, caminhos com seu usuário, etc.)
+        antes de colar.
+      render: shell
+
+  - type: input
+    id: os
+    attributes:
+      label: Sistema Operacional
+      placeholder: "Windows 11 23H2"
+    validations:
+      required: true

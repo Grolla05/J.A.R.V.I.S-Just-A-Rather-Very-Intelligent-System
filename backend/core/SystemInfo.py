@@ -1,17 +1,18 @@
-import psutil
 import platform
-import time
 import threading
+import time
 from datetime import datetime, timedelta
-from .config import settings
-from .logger import log
+
+import psutil
+
 from .database import db
+from .logger import log
 
 # --- BLINDAGEM DE GPU ---
 try:
     import GPUtil
     HAS_GPU_LIB = True
-except Exception as e:
+except Exception:
     HAS_GPU_LIB = False
 # ------------------------
 
@@ -261,8 +262,8 @@ class SystemInfo:
 
     def get_ping(self, host="8.8.8.8"):
         """Verifica latência via Ping ICMP (Windows) para o Google DNS."""
-        import subprocess
         import re
+        import subprocess
         try:
             # -n 1: 1 pacote, -w 1000: timeout 1000ms
             cmd = f"ping -n 1 -w 1000 {host}"
@@ -337,7 +338,8 @@ class SystemInfo:
 
             elif resource_type == 'memory':
                 # Memória é instantânea, a lógica anterior funciona bem
-                key_func = lambda p: p.info['memory_percent']
+                def key_func(p):
+                    return p.info['memory_percent']
                 attrs = ['pid', 'name', 'memory_percent']
                 
                 processes = sorted(

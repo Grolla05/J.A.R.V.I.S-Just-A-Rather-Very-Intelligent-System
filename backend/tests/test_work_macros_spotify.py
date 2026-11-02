@@ -9,6 +9,7 @@ import os
 import unittest
 
 from tests._stubs import install
+
 install()
 
 # A skill é carregada pelo SkillManager via spec_from_file_location — o teste
