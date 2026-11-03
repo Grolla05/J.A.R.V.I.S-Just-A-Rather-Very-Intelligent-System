@@ -6,14 +6,20 @@ from core.llm import query_ollama
 from core.logger import log
 from core.prompts import load_prompt
 
-try:
-    from services.listen import ear_pause, ear_resume
-    from services.speak import speak
-except ImportError as e:
-    log.critical(f"❌ Erro ao importar sentidos em alerts.py: {e}")
-
 PROCESS_JUDGEMENT_CACHE = {}
 JUDGEMENT_TTL = 3600  # 1h — evita leak de memória em sessões longas
+
+
+def _announce(text):
+    """Entrega o alerta à interface e, se a voz estiver ligada, fala.
+    Import tardio dos sentidos: importar listen/speak abria o mic no boot."""
+    from services.listen import ear_pause, ear_resume
+    from services.speak import speak
+    ear_pause()
+    try:
+        speak(text)
+    finally:
+        ear_resume()
 
 
 def process_system_alert(message, is_proactive=False):
@@ -22,9 +28,7 @@ def process_system_alert(message, is_proactive=False):
             # Intercepta alertas de disco — sem processo culpado para matar
             if "Disco" in message and ("CRÍTICO" in message or "pouco espaço" in message):
                 clean_msg = message.replace("*", "")
-                ear_pause()
-                speak(f"Alerta de Armazenamento: {clean_msg}")
-                ear_resume()
+                _announce(f"Alerta de Armazenamento: {clean_msg}")
                 return
 
             culprit_match = re.search(r"(?:Top 5|Maiores consumos|Consumo): (.*?)\s*\(", message)
@@ -51,10 +55,7 @@ def process_system_alert(message, is_proactive=False):
                     'timeout': time.time() + 30
                 }
 
-                alert_text = f"Alerta de sistema: O processo {culprit_app} está com consumo crítico. Deseja que eu o encerre?"
-                ear_pause()
-                speak(alert_text)
-                ear_resume()
+                _announce(f"Alerta de sistema: O processo {culprit_app} está com consumo crítico. Deseja que eu o encerre?")
                 return
 
             # Alerta genérico sem culpado identificável
@@ -65,10 +66,7 @@ def process_system_alert(message, is_proactive=False):
             ], temperature=0.5)
 
             if alert_text:
-                clean_text = alert_text.replace("*", "").strip()
-                ear_pause()
-                speak(clean_text)
-                ear_resume()
+                _announce(alert_text.replace("*", "").strip())
 
         except Exception as e:
             log.error(f"Erro no alerta: {e}")

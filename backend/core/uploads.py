@@ -1,4 +1,4 @@
-"""Validação e gravação de anexos de chat (imagem/áudio) enviados pelo frontend."""
+"""Validação e gravação de anexos de chat (imagem/áudio) enviados pela TUI (/attach)."""
 import base64
 import mimetypes
 import uuid
@@ -37,16 +37,30 @@ def save_base64_upload(b64_data: str, mime_type: str, filename: str, kind: str):
     return dest_path
 
 
-def read_upload_as_data_url(relative_path: str):
-    """Relê um anexo salvo (path relativo a DIR_UPLOADS) e retorna como data URL
-    base64, para reconstruir o preview de imagem ao reabrir uma sessão antiga.
-    Retorna None se o arquivo não existir mais (ex: pasta uploads/ foi apagada)."""
-    full_path = settings.DIR_UPLOADS / relative_path
-    if not full_path.exists():
-        log.warning(f"Anexo referenciado não encontrado em disco: {full_path}")
-        return None
-    mime, _ = mimetypes.guess_type(full_path.name)
-    mime = mime or "application/octet-stream"
-    raw = full_path.read_bytes()
-    b64 = base64.b64encode(raw).decode("ascii")
-    return f"data:{mime};base64,{b64}"
+def load_local_file(path):
+    """Lê um arquivo local para anexar no chat (/attach).
+
+    Retorna {"kind": "image"|"audio", "mime", "data" (base64), "name"}.
+    Levanta ValueError com mensagem amigável se o arquivo não servir.
+    """
+    file_path = Path(str(path).strip().strip('"').strip("'")).expanduser()
+    if not file_path.is_file():
+        raise ValueError(f"Arquivo não encontrado: {file_path}")
+
+    mime, _ = mimetypes.guess_type(file_path.name)
+    if mime in settings.ALLOWED_IMAGE_MIME:
+        kind = "image"
+    elif mime in settings.ALLOWED_AUDIO_MIME or (mime or "").startswith("audio/"):
+        kind = "audio"
+        # mimetypes do Windows devolve variações (audio/x-wav, audio/wave...)
+        if mime not in settings.ALLOWED_AUDIO_MIME:
+            mime = "audio/wav" if file_path.suffix.lower() == ".wav" else mime
+    else:
+        raise ValueError(f"Tipo não suportado: {mime or file_path.suffix}. Use imagem ou áudio.")
+
+    size = file_path.stat().st_size
+    if size > settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024:
+        raise ValueError(f"Arquivo excede {settings.MAX_UPLOAD_SIZE_MB}MB.")
+
+    data = base64.b64encode(file_path.read_bytes()).decode("ascii")
+    return {"kind": kind, "mime": mime, "data": data, "name": file_path.name}

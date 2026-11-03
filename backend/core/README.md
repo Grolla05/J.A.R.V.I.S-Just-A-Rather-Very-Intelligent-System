@@ -8,11 +8,11 @@ O diretório `backend/core/` é o coração da infraestrutura do J.A.R.V.I.S. Im
 
 Interface pública do pacote. Exporta todos os singletons e utilitários usados pelo resto do sistema.
 
-- **Exports:** `settings`, `log`, `db`, `obsidian`, `mcp_client`, `get_vault_context`, `manager`, `SystemInfo`, `JarvisAPI`, `load_prompt`
+- **Exports:** `settings`, `log`, `db`, `obsidian`, `mcp_client`, `get_vault_context`, `manager`, `SystemInfo`, `load_prompt`
 - **Silenciamento:** Filtra logs verbose de `httpx`, `urllib3`, `asyncio`, `multipart`.
 
 ```python
-from core import settings, log, db, manager, JarvisAPI, load_prompt
+from core import settings, log, db, manager, load_prompt
 ```
 
 ---
@@ -127,30 +127,17 @@ Varre `backend/skills/` recursivamente e registra módulos que seguem o contrato
 
 ---
 
-### `bridge.py` — Ponte UI/Backend (PyWebView)
+### Interface (antiga `bridge.py`)
 
-Expõe a classe `JarvisAPI` ao JavaScript via PyWebView. Todos os métodos são chamáveis diretamente do frontend.
+A bridge PyWebView foi removida junto com o frontend React. A interface agora é a TUI em `backend/tui/`, que chama o backend direto:
 
-**Métodos da `JarvisAPI`:**
-
-| Método | Descrição |
+| Antes (`JarvisAPI`) | Agora |
 |---|---|
-| `get_telemetry()` | Retorna JSON com CPU, RAM, GPU, rede |
-| `shutdown()` / `minimize()` / `toggle_maximize()` | Controle de janela |
-| `set_hud_state(active)` | Liga/desliga modo crítico (HUD vermelho) |
-| `send_frontend_alert(type, msg)` | Envia alerta para o JS |
-| `get_skills()` | Lista skills com estado habilitado/desabilitado, agrupadas por categoria |
-| `toggle_skill(skill_id, enabled)` | Ativa ou desativa skill individual no SQLite |
-| `toggle_category(category_id, enabled)` | Ativa ou desativa grupo inteiro de skills |
-| `chat_message(text, session_id)` | Envia mensagem de chat (streaming via JS callbacks) |
-| `get_chat_history(session_id, limit=50)` | Retorna histórico de uma sessão |
-| `delete_history_from(session_id, message_id)` | Apaga mensagens a partir de um ponto |
-| `update_history_message(message_id, new_content)` | Edita mensagem no histórico |
-| `update_session_title(session_id, new_title)` | Renomeia sessão |
-| `toggle_session_pin(session_id, is_pinned)` | Fixa/desfixa sessão na sidebar |
-| `get_recent_sessions()` | Lista sessões recentes |
-| `on_initial_mode_selected(mode)` | Boot: inicializa modo (talk/chat/code) + saudação |
-| `set_active_mode(mode)` | Troca modo ativo sem reinicializar |
+| `chat_message()` | `services.brain.execute_command_stream(text, session_id, images, mode)` |
+| `get_chat_history()`, `delete_history_from()`, `update_session_title()`, `toggle_session_pin()`, `get_recent_sessions()` | `services/sessions.py` |
+| `get_skills()`, `toggle_skill()`, `toggle_category()` | `services/skill_settings.py` |
+| `transcribe_audio()` | `core.transcription.transcribe_audio_file()` (via `/attach`) |
+| `get_telemetry()` / `set_hud_state()` / `send_frontend_alert()` | barra de status, classe `-critical` e `state.announce` na TUI |
 
 ---
 
@@ -165,4 +152,4 @@ Processa alertas de sistema e decide ação (falar, silenciar ou pedir confirma�
 
 ## 🛠️ Tecnologias
 
-- Python 3.10+, SQLite3, Psutil / GPUtil, Colorama, Requests, MCP (stdio), Ollama, PyWebView
+- Python 3.10+, SQLite3, Psutil / GPUtil, Colorama, Requests, MCP (stdio), Ollama

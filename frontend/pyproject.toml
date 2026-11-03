@@ -1,0 +1,3 @@
+# Mesmas regras de lint do backend (a TUI é Python e importa core/services).
+[tool.ruff]
+extend = "../backend/pyproject.toml"

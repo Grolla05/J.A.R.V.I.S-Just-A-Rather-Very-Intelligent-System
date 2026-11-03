@@ -83,7 +83,7 @@ Estado de features e skills que deve persistir entre reinicializações.
 ```
 
 - Usado por `is_skill_enabled()` em `services/intent.py`
-- Modificado via `toggle_skill()` e `toggle_category()` na `JarvisAPI`
+- Modificado via `services/skill_settings.set_enabled()` (comando `/skills on|off` na TUI)
 
 ---
 

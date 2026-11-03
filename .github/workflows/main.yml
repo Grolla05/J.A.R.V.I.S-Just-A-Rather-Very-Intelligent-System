@@ -23,19 +23,8 @@ jobs:
       # Versao fixa: os defaults do ruff mudam entre releases e quebram o CI sozinhos.
       - run: pip install ruff==0.16.8
       - run: ruff check .
-      - run: python -m compileall .
+      # TUI (pasta frontend/ na raiz) herda as regras do backend/pyproject.toml
+      - run: ruff check ../frontend
+      - run: python -m compileall . ../frontend
+      # pytest segue desligado: 11 testes de test_work_macros_spotify.py falham antes desta mudança.
       # - run: pytest
-
-  frontend:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-      - run: npm i --legacy-peer-deps
-      - run: npm run lint
-      - run: npm run build

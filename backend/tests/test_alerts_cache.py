@@ -8,9 +8,9 @@ from tests._stubs import install
 
 install()
 
-# alerts importa services.listen (instancia mic) e services.speak no topo.
-# Stub só os submódulos (não o pacote namespace `services`, senão quebra
-# services.intent em outros testes) para não tocar hardware.
+# alerts importa services.listen/speak de forma tardia (dentro de _announce).
+# Mesmo assim stub os submódulos (não o pacote namespace `services`, senão
+# quebra services.intent em outros testes) para nunca tocar hardware.
 sys.modules["services.listen"] = MagicMock()
 sys.modules["services.speak"] = MagicMock()
 
@@ -26,9 +26,7 @@ class TestJudgementCacheTTL(unittest.TestCase):
 
     def _run(self, judge_return="NÃO"):
         with patch.object(alerts, "query_ollama", return_value=judge_return) as q, \
-             patch.object(alerts, "speak"), \
-             patch.object(alerts, "ear_pause"), \
-             patch.object(alerts, "ear_resume"), \
+             patch.object(alerts, "_announce"), \
              patch.object(alerts, "load_prompt", return_value="prompt"):
             alerts.process_system_alert(_MSG, is_proactive=True)
             return q

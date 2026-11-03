@@ -37,6 +37,7 @@ class JarvisLogger:
         )
         console_handler.setFormatter(console_formatter)
         self.logger.addHandler(console_handler)
+        self._console_handler = console_handler
 
         # No core/logger.py, dentro de _setup_logger:
 
@@ -61,6 +62,15 @@ class JarvisLogger:
         except Exception as e:
             # Usamos print aqui pois o logger pode não estar pronto
             log.critical(f"Erro ao configurar arquivo de log: {e}")
+
+    def use_tui(self, ui_handler=None):
+        """Desliga o console (stdout corromperia a tela da TUI) e, opcionalmente,
+        pluga um handler que entrega os logs à interface. O arquivo de log segue."""
+        if getattr(self, "_console_handler", None):
+            self.logger.removeHandler(self._console_handler)
+            self._console_handler = None
+        if ui_handler is not None:
+            self.logger.addHandler(ui_handler)
 
     def debug(self, msg):
         if settings.DEBUG: self.logger.debug(f"{Fore.CYAN}[DEBUG]{Style.RESET_ALL} {msg}")

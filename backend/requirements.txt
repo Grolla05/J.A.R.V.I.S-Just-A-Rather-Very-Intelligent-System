@@ -29,8 +29,8 @@ pyautogui                   # Controle programático de Teclado e Mouse (Atalhos
 comtypes                    # Biblioteca COM para interação com APIs do Windows
 pycaw                       # Python Core Audio Windows - Controle de volume, dispositivos de áudio
 
-# --- INTERFACE GRÁFICA ---
-pywebview                   # Criação de interface web/desktop híbrida
+# --- INTERFACE (TERMINAL) ---
+textual                     # TUI no terminal (chat/copilot) - substitui o HUD React/PyWebView
 
 # --- MONITORAMENTO DE SISTEMA ---
 psutil                      # Informações de CPU, RAM, Disco, Rede, Processos
@@ -42,8 +42,8 @@ requests                    # Cliente HTTP para APIs externas e comunicação
 # --- MODEL CONTEXT PROTOCOL ---
 mcp                         # SDK oficial MCP (cliente para Obsidian MCP server)
 
-# --- TERMINAL / SAÍDA COLORIDA ---
-colorama                    # Cores no terminal (usado no speak.py para typewriter effect)
+# --- LOGS COLORIDOS ---
+colorama                    # Cores nos logs do console (fora da TUI)
 
 # --- BIBLIOTECAS PADRÃO DO PYTHON (Não requerem instalação) ---
 # sqlite3                   # Banco de dados (embutido no Python)
