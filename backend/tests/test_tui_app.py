@@ -1,6 +1,8 @@
 """TUI — JarvisApp via Textual Pilot (sem Ollama, sem hardware)."""
 import os
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -9,7 +11,10 @@ from tests._stubs import install
 
 install()
 
+from textual.widgets import Footer
+
 import core.database as database
+import core.state as state
 import frontend.app as tui_app
 import services.sessions as sessions
 from core.config import settings
@@ -21,6 +26,35 @@ def _fake_stream(text, session_id, images, mode, on_route=None):
         on_route("APP_CONTROL")
     yield f"**{mode}**: "
     yield f"eco de {text}"
+
+
+class FakeVoice:
+    """Microfone/TTS de mentira: entrega as falas da fila, registra o que falou."""
+
+    def __init__(self, *phrases):
+        self.queue = list(phrases)
+        self.spoken = []
+        self.orb_while_speaking = []
+        self.app = None
+        self.lock = threading.Lock()
+
+    def listen(self):
+        with self.lock:
+            if self.queue:
+                return self.queue.pop(0)
+        time.sleep(0.05)
+        return None
+
+    def speak(self, text):
+        if self.app is not None:
+            self.orb_while_speaking.append(self.app.query_one("#copilot-hero").state)
+        self.spoken.append(text)
+
+    def pause(self):
+        pass
+
+    def resume(self):
+        pass
 
 
 class TestJarvisApp(unittest.IsolatedAsyncioTestCase):
@@ -36,6 +70,8 @@ class TestJarvisApp(unittest.IsolatedAsyncioTestCase):
             p.start()
 
     def tearDown(self):
+        state.voice_enabled = False  # para o loop de voz da thread daemon
+        state.pending_critical_action = None
         for p in reversed(self._patches):
             p.stop()
         settings.DB_PATH = self._orig
@@ -45,8 +81,19 @@ class TestJarvisApp(unittest.IsolatedAsyncioTestCase):
             except OSError:
                 pass
 
-    def _app(self):
-        return tui_app.JarvisApp(stream_fn=_fake_stream, start_services=False)
+    def _app(self, voice=None):
+        voice = voice or FakeVoice()
+        app = tui_app.JarvisApp(stream_fn=_fake_stream, start_services=False, voice=voice)
+        voice.app = app
+        return app
+
+    async def _wait_for(self, pilot, condition, timeout=5.0):
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            if condition():
+                return
+            await pilot.pause(0.05)
+        self.fail("condição não atingida a tempo")
 
     async def _send(self, pilot, text):
         prompt = pilot.app.query_one("#prompt")
@@ -76,15 +123,98 @@ class TestJarvisApp(unittest.IsolatedAsyncioTestCase):
             history = sessions.get_chat_history(app.session_id)
             self.assertEqual([m["content"] for m in history], ["olá", "**chat**: eco de olá"])
 
-    async def test_copilot_mode_reaches_stream(self):
+    async def test_copilot_is_voice_only(self):
         app = self._app()
         async with app.run_test() as pilot:
+            prompt, voicebar, hero = (app.query_one(s) for s in ("#prompt", "#voicebar", "#copilot-hero"))
+            self.assertTrue(prompt.display)
+            self.assertFalse(voicebar.display or hero.display)
             await pilot.press("shift+tab")
-            await self._send(pilot, "abre o spotify")
+            self.assertFalse(prompt.display)
+            self.assertTrue(voicebar.display and hero.display)
+            self.assertTrue(state.voice_enabled)
+            await pilot.press("shift+tab")
+            self.assertTrue(prompt.display)
+            self.assertFalse(voicebar.display or hero.display)
+            self.assertFalse(state.voice_enabled)
+
+    async def test_ctrl_t_enters_copilot_and_hides_from_footer(self):
+        app = self._app()
+        async with app.run_test() as pilot:
+            self.assertTrue(app.check_action("toggle_voice", ()))
+            await pilot.press("ctrl+t")
+            self.assertEqual(app.mode, "copilot")
+            self.assertFalse(app.check_action("toggle_voice", ()))
+
+    async def test_copilot_voice_turn_reaches_stream_and_speaks(self):
+        voice = FakeVoice("abre o spotify")
+        app = self._app(voice)
+        async with app.run_test() as pilot:
+            await pilot.press("shift+tab")
+            await self._wait_for(pilot, lambda: voice.spoken)
+            await self._wait_for(pilot, lambda: app.query_one("#copilot-hero").state == "ouvindo")
+            users = [m for m in app.query(tui_app.MessageView) if m.role == "user"]
             replies = [m for m in app.query(tui_app.MessageView) if m.role == "assistant"]
+            self.assertEqual(users[-1].text, "abre o spotify")
+            self.assertTrue(users[-1].meta.startswith("voz · "))
             self.assertTrue(replies[-1].text.startswith("**copilot**"))
             # Badge da skill acionada no cabeçalho da resposta
             self.assertIn("[APP_CONTROL] ✓", replies[-1].meta)
+            self.assertEqual(voice.spoken, ["**copilot**: eco de abre o spotify"])
+            self.assertEqual(voice.orb_while_speaking, ["respondendo"])
+            # Voz vai para a sessão atual (aparece no Ctrl+O)
+            history = sessions.get_chat_history(app.session_id)
+            self.assertEqual([m["content"] for m in history],
+                             ["abre o spotify", "**copilot**: eco de abre o spotify"])
+
+    async def test_orb_thinks_until_first_output(self):
+        gate = threading.Event()
+
+        def slow_stream(text, session_id, images, mode, on_route=None):
+            gate.wait(5)
+            yield "ok"
+
+        voice = FakeVoice("que horas são")
+        app = tui_app.JarvisApp(stream_fn=slow_stream, start_services=False, voice=voice)
+        voice.app = app
+        async with app.run_test() as pilot:
+            hero = app.query_one("#copilot-hero")
+            await pilot.press("shift+tab")
+            await self._wait_for(pilot, lambda: hero.state == "pensando")
+            self.assertIn("pensando", str(app.query_one("#hero-state").render()))
+            gate.set()
+            await self._wait_for(pilot, lambda: voice.spoken)
+            self.assertEqual(voice.orb_while_speaking, ["respondendo"])
+
+    async def test_status_and_keys_share_one_line(self):
+        app = self._app()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            footers = list(app.screen.query(Footer))
+            self.assertEqual(len(footers), 1)
+            self.assertEqual(footers[0].parent.id, "statusbar")
+            self.assertEqual(app.query_one("#statusbar").region.height, 1)
+            self.assertEqual(footers[0].region.y, app.query_one("#status-left").region.y)
+            self.assertIn("voz off", str(app.query_one("#status-left").render()))
+            await self._wait_for(pilot, lambda: list(footers[0].query("FooterKey")))
+            keys = [k.key for k in footers[0].query("FooterKey")]
+            self.assertEqual(keys[-1], "ctrl+q")  # Sair fica no fim
+
+    async def test_critical_marks_main_screen_and_voicebar(self):
+        app = self._app()
+        async with app.run_test() as pilot:
+            await pilot.press("shift+tab")
+            app.critical = True
+            state.pending_critical_action = {"timeout": None}
+            app._show_announcement("Encerrar chrome.exe?")
+            await pilot.pause(0.3)
+            self.assertIsInstance(app.screen, tui_app.ConfirmScreen)
+            self.assertTrue(app.main_screen.has_class("-critical"))
+            self.assertIn("sim", str(app.query_one("#voice-text").render()))
+            # O modal tem a própria linha de status, com os atalhos s/n
+            def keys():
+                return {k.key for k in app.screen.query("FooterKey")}
+            await self._wait_for(pilot, lambda: {"s", "n"} <= keys())
 
     async def test_chat_reply_has_no_skill_badge(self):
         app = self._app()
@@ -104,11 +234,11 @@ class TestJarvisApp(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(str(info.render()), "sessão 1 de 1")
             await pilot.press("shift+tab")
             self.assertEqual(str(badge.render()), "COPILOT")
-            self.assertTrue(str(info.render()).startswith("skills ativas"))
+            self.assertTrue(str(info.render()).startswith("somente voz"))
             app.critical = True
             await pilot.pause()
             self.assertIn("PROTOCOLO CRÍTICO", str(info.render()))
-            self.assertTrue(app.screen.has_class("-critical"))
+            self.assertTrue(app.main_screen.has_class("-critical"))
 
     async def test_session_picker_filters_and_opens(self):
         app = self._app()

@@ -20,21 +20,22 @@ Ou `boot.bat` na raiz (sobe o Ollama antes). Prefira o Windows Terminal.
 | Arquivo | Papel |
 |---|---|
 | `app.py` | `JarvisApp`: modos chat/copilot, atalhos, stream, sessões, anexos, voz, alertas, telemetria |
-| `widgets.py` | `MessageView`, `PromptInput`, `SessionPicker` (com filtro), `ConfirmScreen` (expira em 30 s), `format_when` |
+| `widgets.py` | `MessageView`, `PromptInput`, `JarvisOrb`, `CopilotHero`, `VoiceBar`, `SessionPicker` (com filtro), `ConfirmScreen` (expira em 30 s), `format_when` |
+| `orb.py` | Orb pixel-art 16×16 do Copilot: quadros de cada estado e conversão para meio-bloco (lógica pura) |
 | `commands.py` | Parser puro dos `/comandos` e o `/help` |
 | `jarvis.tcss` | Tema. Todas as cores ficam aqui como variáveis `$j-*` |
 | `pyproject.toml` | Herda as regras do ruff de `backend/pyproject.toml` |
 
 ## Telas
 
-- **Chat:** barra superior azul (selo CHAT, título, "sessão N de M"), conversa em Markdown, barra de anexo, input, status e atalhos.
-- **Copilot (`Shift+Tab`):** tudo em ciano, "skills ativas: N" no topo e o selo da skill na resposta (`[AUDIO_CONTROL] ✓`).
-- **Protocolo crítico:** topo vermelho e confirmação `s`/`n` que expira sozinha em 30 s (= não).
+- **Chat:** barra superior azul (selo CHAT, título, "sessão N de M"), conversa em Markdown, barra de anexo, input e uma linha única com telemetria (esquerda) e atalhos (direita).
+- **Copilot (`Shift+Tab` ou `Ctrl+T`) — só voz:** tudo em ciano, "somente voz · skills ativas: N" no topo, orb pixel-art com o estado (ouvindo / pensando / respondendo) e barra "Ouvindo… diga "Jarvis"" no lugar do input. A resposta mostra o selo da skill (`[AUDIO_CONTROL] ✓`) e é falada.
+- **Protocolo crítico:** topo vermelho, confirmação `s`/`n` que expira sozinha em 30 s (= não) e barra de voz pedindo "sim" ou "não".
 - **Trocar sessão (`Ctrl+O`):** lista com filtro por título; `●` sessão atual, `★` fixada.
 
 ## Testes
 
-Os testes ficam em `backend/tests/` (`test_tui_app.py`, `test_tui_commands.py`) e usam `App.run_test()` com stream falso, sem Ollama nem hardware:
+Os testes ficam em `backend/tests/` (`test_tui_app.py`, `test_tui_commands.py`, `test_tui_orb.py`) e usam `App.run_test()` com stream e voz falsos (`JarvisApp(stream_fn=..., voice=...)`), sem Ollama, microfone nem hardware:
 
 ```bash
 cd backend

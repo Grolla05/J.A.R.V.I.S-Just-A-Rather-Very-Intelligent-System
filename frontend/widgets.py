@@ -2,15 +2,22 @@
 import time
 from datetime import date, datetime, timedelta
 
+from rich.style import Style
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.content import Content
+from textual.reactive import reactive
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, Markdown, OptionList, Static
+from textual.widget import Widget
+from textual.widgets import Button, Footer, Input, Label, Markdown, OptionList, Static
 from textual.widgets.option_list import Option
 
+from frontend import orb
+
 ROLE_LABEL = {"user": "você ›", "assistant": "jarvis ›", "system": "sistema ›"}
+ORB_FPS = 8  # quadros/s do orb — só roda enquanto pensa ou responde
 
 
 def format_when(last_active, today=None):
@@ -81,6 +88,106 @@ class PromptInput(Input):
     def action_edit_last(self):
         if not self.value:
             self.app.action_edit_last()
+
+
+class JarvisOrb(Widget):
+    """Orb pixel-art 16×16 em meio-bloco (16 colunas × 8 linhas).
+    Cores vêm do jarvis.tcss (component classes orb--*). O timer só existe
+    enquanto o estado é animado — em 'ouvindo' a orb fica parada."""
+
+    COMPONENT_CLASSES = {f"orb--{code}" for code in orb.CODES}
+    DEFAULT_CSS = "JarvisOrb { width: 16; height: 8; }"
+
+    state = reactive("ouvindo")
+    frame = reactive(0)
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._timer = None
+
+    def watch_state(self, state):
+        self.frame = 0
+        animated = orb.frame_count(state) > 1
+        if animated and self._timer is None:
+            self._timer = self.set_interval(1 / ORB_FPS, self._next_frame)
+        elif not animated and self._timer is not None:
+            self._timer.stop()
+            self._timer = None
+
+    def _next_frame(self):
+        self.frame = (self.frame + 1) % orb.frame_count(self.state)
+
+    def _style(self, code):
+        return self.get_component_rich_style(f"orb--{code}", partial=True)
+
+    def render(self):
+        text = Text(no_wrap=True, end="")
+        rows = orb.to_halfblocks(orb.frame(self.state, self.frame))
+        for i, row in enumerate(rows):
+            for char, top, bottom in row:
+                if top is None:
+                    text.append(char)
+                    continue
+                fg = self._style(top).color
+                bg = self._style(bottom).color if bottom else None
+                text.append(char, Style(color=fg, bgcolor=bg))
+            if i < len(rows) - 1:
+                text.append("\n")
+        return text
+
+
+class CopilotHero(Horizontal):
+    """Boas-vindas do Copilot: orb + identificação + estado da voz."""
+
+    def __init__(self, model="", skills=0, **kwargs):
+        super().__init__(**kwargs)
+        self._model = model
+        self._skills = skills
+
+    def compose(self) -> ComposeResult:
+        yield JarvisOrb(id="orb")
+        with Vertical(id="hero-text"):
+            yield Label(Content.assemble(("J.A.R.V.I.S", "bold"), " · Copilot"), id="hero-title")
+            yield Label(self._info(), id="hero-info")
+            yield Label(id="hero-state")
+            yield Label('Diga "Jarvis" e peça uma ação.', id="hero-hint")
+
+    def on_mount(self):
+        self.set_state(self.query_one(JarvisOrb).state)
+
+    def _info(self):
+        return f"{self._model or '?'} · {self._skills} skills de automação"
+
+    def set_info(self, model, skills):
+        self._model, self._skills = model, skills
+        self.query_one("#hero-info", Label).update(self._info())
+
+    @property
+    def state(self):
+        return self.query_one(JarvisOrb).state
+
+    def set_state(self, state):
+        self.query_one(JarvisOrb).state = state
+        self.query_one("#hero-state", Label).update(f"● {orb.STATE_LABEL.get(state, state)}")
+
+
+VOICE_WAVE = "▂▄█▅▇▃▁▁"
+
+
+class VoiceBar(Horizontal):
+    """Substitui o campo de texto no Copilot (que é só por voz)."""
+
+    LISTENING = 'Ouvindo… diga "Jarvis" e peça uma ação'
+    AWAITING = 'Aguardando sua resposta: diga "sim" ou "não"'
+
+    def compose(self) -> ComposeResult:
+        yield Static("●", id="voice-mic")
+        yield Static(VOICE_WAVE, id="voice-wave")
+        yield Static(self.LISTENING, id="voice-text", markup=False)
+        yield Static("Esc interrompe", id="voice-hint")
+
+    def set_awaiting(self, awaiting):
+        self.query_one("#voice-text", Static).update(self.AWAITING if awaiting else self.LISTENING)
 
 
 class SessionPicker(ModalScreen):
@@ -165,6 +272,15 @@ class ConfirmScreen(ModalScreen):
             with Horizontal(id="confirm-buttons"):
                 yield Button("s · Encerrar", id="confirm-yes")
                 yield Button("n · Manter", id="confirm-no")
+        # Mesma linha única da tela principal (telemetria + atalhos), mas com
+        # os atalhos deste modal (s/n) — o Footer só enxerga a própria Screen.
+        with Horizontal(id="confirm-statusbar", classes="statusbar"):
+            yield Static(self._status(), id="confirm-status", classes="status-left")
+            yield Footer(show_command_palette=False)
+
+    def _status(self):
+        status = getattr(self.app, "status_text", None)
+        return status() if callable(status) else ""
 
     def _remaining(self):
         return max(0, int(round(self._deadline - time.time())))
@@ -173,6 +289,9 @@ class ConfirmScreen(ModalScreen):
         return f"Expira em {self._remaining()} s — sem resposta, nada é feito."
 
     def on_mount(self):
+        # Foco no "Manter" (padrão seguro) — e a mudança de foco é o que faz o
+        # Footer do modal montar os atalhos s/n.
+        self.query_one("#confirm-no", Button).focus()
         self.set_interval(1, self._tick)
 
     def _tick(self):
@@ -180,6 +299,7 @@ class ConfirmScreen(ModalScreen):
             self.dismiss(False)
             return
         self.query_one("#confirm-expiry", Label).update(self._expiry_text())
+        self.query_one("#confirm-status", Static).update(self._status())
 
     def on_button_pressed(self, event: Button.Pressed):
         self.dismiss(event.button.id == "confirm-yes")
