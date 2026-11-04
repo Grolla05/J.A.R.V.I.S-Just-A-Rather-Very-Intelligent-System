@@ -2,8 +2,9 @@
 
 Pacote `frontend` na raiz do repo; consome o backend (core/services) por import
 direto — main.py do backend põe a raiz no sys.path. Dois modos, alternados com Shift+Tab:
-- CHAT    → só conversa com o LLM (skills nunca executam);
-- COPILOT → agente: o mesmo pipeline, mas com skills liberadas.
+- CHAT    → conversa por texto com o LLM (skills nunca executam);
+- COPILOT → agente SÓ POR VOZ: o campo de texto dá lugar à barra de voz e à orb;
+            o mesmo pipeline de stream, com skills liberadas, e a resposta é falada.
 """
 import logging
 import re
@@ -21,7 +22,14 @@ from textual.worker import get_current_worker
 import core.state as state
 from core import db, log, settings
 from frontend.commands import help_markdown, parse, unescape
-from frontend.widgets import ConfirmScreen, MessageView, PromptInput, SessionPicker
+from frontend.widgets import (
+    ConfirmScreen,
+    CopilotHero,
+    MessageView,
+    PromptInput,
+    SessionPicker,
+    VoiceBar,
+)
 from services import sessions
 
 MODES = ("chat", "copilot")
@@ -33,11 +41,34 @@ def _default_stream(text, session_id, images, mode, on_route=None):
     return execute_command_stream(text, session_id=session_id, images=images, mode=mode, on_route=on_route)
 
 
+class _DefaultVoice:
+    """Sentidos reais (mic + TTS), importados só quando usados — import lazy
+    mantém o boot sem microfone/pygame. Os testes injetam um fake."""
+
+    def listen(self):
+        from services.listen import listen
+        return listen()
+
+    def speak(self, text):
+        from services.speak import speak
+        speak(text, show=False)
+
+    def pause(self):
+        from services.listen import ear_pause
+        ear_pause()
+
+    def resume(self):
+        from services.listen import ear_resume
+        ear_resume()
+
+
 def _now_hhmm():
     return time.strftime("%H:%M")
 
 
-class JarvisApp(App):
+class JarvisApp(App, inherit_bindings=False):
+    # inherit_bindings=False: o ctrl+q prioritário do App base furava a ordem
+    # do rodapé ("Sair" antes de "Nova"); o ctrl+c dele é recolocado abaixo.
     CSS_PATH = "jarvis.tcss"
     TITLE = "J.A.R.V.I.S"
     ENABLE_COMMAND_PALETTE = False
@@ -51,7 +82,9 @@ class JarvisApp(App):
         Binding("ctrl+t", "toggle_voice", "Voz"),
         Binding("escape", "cancel", "Parar", show=False),
         Binding("ctrl+l", "clear", "Limpar", show=False),
-        Binding("ctrl+q", "quit", "Sair", priority=True),
+        # sem priority: o Footer lista bindings prioritários primeiro, e Sair fica no fim
+        Binding("ctrl+q", "quit", "Sair"),
+        Binding("ctrl+c", "help_quit", show=False, system=True),
     ]
 
     # init=False: os watchers consultam widgets que só existem após o compose
@@ -59,19 +92,21 @@ class JarvisApp(App):
     critical = reactive(False, init=False)
     busy = reactive(False, init=False)
 
-    def __init__(self, stream_fn=None, start_services=True):
+    def __init__(self, stream_fn=None, start_services=True, voice=None):
         super().__init__()
         self._stream_fn = stream_fn or _default_stream
         self._start_services = start_services
+        self.voice = voice or _DefaultVoice()
         self.session_id = sessions.new_session_id()
         self.session_title = sessions.DEFAULT_TITLE
         self.pending_image = None   # anexo aguardando a próxima mensagem
         self.edit_message_id = None  # id da msg sendo editada (↑ / /edit)
         self._voice_thread = None
-        self._voice_session_id = f"voice_{sessions.new_session_id()}"
+        self._voice_stop = threading.Event()  # encerra o loop de voz junto com o app
         self._telemetry = ""
         self._session_info = "nova sessão"  # "sessão N de M" (cache, evita SQL a cada refresh)
         self._skills_info = ""
+        self._skills_active = 0
 
     # ------------------------------------------------------------------ layout
     def compose(self) -> ComposeResult:
@@ -80,17 +115,21 @@ class JarvisApp(App):
             yield Static(id="mode-badge")
             yield Static(id="session-title")
             yield Static(id="topbar-info")
+        yield CopilotHero(model=settings.OLLAMA_MODEL, id="copilot-hero")
         yield VerticalScroll(id="log")
         yield Static(id="attachbar")
         yield PromptInput(id="prompt", placeholder="Fale com o JARVIS…  (/help)")
-        with Horizontal(id="statusbar"):
-            yield Static(id="status-left")
-            yield Static("shift+tab troca o modo · /help", id="status-right")
-        yield Footer()
+        yield VoiceBar(id="voicebar")
+        # Telemetria e atalhos dividem UMA linha (canvas "JARVIS TUI")
+        with Horizontal(id="statusbar", classes="statusbar"):
+            yield Static(id="status-left", classes="status-left")
+            yield Footer(show_command_palette=False)
 
     def on_mount(self):
         self._main_thread = threading.get_ident()
         self.query_one("#attachbar").display = False
+        self.query_one("#voicebar").display = False
+        self.query_one("#copilot-hero").display = False
         self._refresh_counts()
         self._refresh_topbar()
         self._refresh_status()
@@ -137,10 +176,13 @@ class JarvisApp(App):
         try:
             from services.skill_settings import list_skills
             active = sum(1 for cat in list_skills() for s in cat["skills"] if s["enabled"])
+            self._skills_active = active
             self._skills_info = f"skills ativas: {active}"
         except Exception as e:
             log.debug(f"Contagem de skills indisponível: {e}")
+            self._skills_active = 0
             self._skills_info = ""
+        self.query_one("#copilot-hero", CopilotHero).set_info(settings.OLLAMA_MODEL, self._skills_active)
 
     def _refresh_topbar(self):
         self.query_one("#mode-badge", Static).update("COPILOT" if self.mode == "copilot" else "CHAT")
@@ -149,29 +191,49 @@ class JarvisApp(App):
         if self.critical:
             info = "⚠ PROTOCOLO CRÍTICO"
         elif self.mode == "copilot":
-            info = self._skills_info
+            info = " · ".join(p for p in ("somente voz", self._skills_info) if p)
         else:
             info = self._session_info
         self.query_one("#topbar-info", Static).update(info)
 
-    def _refresh_status(self):
+    def status_text(self):
+        """Lado esquerdo da linha de status: telemetria · voz · modelo · ocupado."""
         voice = "voz on" if state.voice_enabled else "voz off"
         busy = "   pensando…" if self.busy else ""
         model = settings.OLLAMA_MODEL or "?"
-        self.query_one("#status-left", Static).update(f"{self._telemetry}   {voice}   {model}{busy}")
+        parts = [p for p in (self._telemetry, voice, model) if p]
+        return "   ".join(parts) + busy
+
+    def _refresh_status(self):
+        self.query_one("#status-left", Static).update(self.status_text())
 
     # --------------------------------------------------------------- watchers
+    @property
+    def main_screen(self):
+        """Tela da conversa — com um modal aberto, self.screen é o modal."""
+        return self.screen_stack[0]
+
     def watch_mode(self, mode):
-        self.screen.set_class(mode == "copilot", "-copilot")
+        copilot = mode == "copilot"
+        self.main_screen.set_class(copilot, "-copilot")
         prompt = self.query_one("#prompt", PromptInput)
-        prompt.placeholder = (
-            "Peça uma ação ao Copilot…  (skills ativas)" if mode == "copilot"
-            else "Fale com o JARVIS…  (/help)"
-        )
+        prompt.display = not copilot
+        self.query_one("#voicebar").display = copilot
+        self.query_one("#copilot-hero").display = copilot
+        if not copilot:
+            prompt.focus()
+        self._set_voice(copilot)  # Copilot é só por voz; o Chat é só texto
         self._refresh_topbar()
+        self.refresh_bindings()
+
+    def check_action(self, action, parameters):
+        # ^t no Copilot não faz sentido (a voz já está ligada): some do rodapé
+        if action == "toggle_voice" and self.mode == "copilot":
+            return False
+        return True
 
     def watch_critical(self, critical):
-        self.screen.set_class(critical, "-critical")
+        self.main_screen.set_class(critical, "-critical")
         self._refresh_topbar()
 
     def watch_busy(self, _busy):
@@ -232,14 +294,22 @@ class JarvisApp(App):
         self.log_view.remove_children()
 
     def action_toggle_voice(self):
-        state.voice_enabled = not state.voice_enabled
-        if state.voice_enabled:
+        """Voz = Copilot: ^t (ou /voice) entra no Copilot ou volta ao Chat."""
+        self.mode = "chat" if self.mode == "copilot" else "copilot"
+
+    def _set_voice(self, on):
+        if on == state.voice_enabled:
+            return
+        state.voice_enabled = on
+        if on:
             self._ensure_voice_thread()
-            self.add_system("Voz ativada. Diga \"Jarvis\" para chamar.")
+            self.add_system("Copilot por voz ativo. Diga \"Jarvis\" e peça uma ação.")
         else:
-            from services.listen import ear_pause
-            ear_pause()
-            self.add_system("Voz desativada.")
+            try:
+                self.voice.pause()
+            except Exception as e:
+                log.debug(f"Falha ao pausar o microfone: {e}")
+            self.add_system("Voz desativada — de volta ao Chat.")
         self._refresh_status()
 
     async def action_quit(self):
@@ -394,20 +464,41 @@ class JarvisApp(App):
         image = self.pending_image
         self._set_pending_image(None)
         now = _now_hhmm()
-        self.add_message("user", text, meta=now + (f" · anexo: {image['name']}" if image else ""))
+        reply = self._begin_turn(text, user_meta=now + (f" · anexo: {image['name']}" if image else ""))
+        self._stream(text, image, self.mode, self.session_id, reply)
+
+    def _begin_turn(self, text, user_meta):
+        """Bolha do usuário + bolha vazia da resposta; marca a TUI como ocupada."""
+        now = _now_hhmm()
+        self.add_message("user", text, meta=user_meta)
         reply = self.add_message("assistant", "", meta=f"copilot · {now}" if self.mode == "copilot" else now)
         self.busy = True
-        self._stream(text, image, self.mode, self.session_id, reply)
+        return reply
 
     @work(thread=True, exclusive=True, group="chat")
     def _stream(self, text, image, mode, session_id, reply):
-        worker = get_current_worker()
+        full = self._run_turn(text, image, mode, session_id, reply, worker=get_current_worker())
+        if full == "PROTOCOL_SHUTDOWN":
+            self.call_from_thread(self.shutdown_jarvis)
+
+    def _run_turn(self, text, image, mode, session_id, reply, worker=None, on_output=None):
+        """Roda UMA mensagem pelo brain numa thread de fundo e pinta a resposta.
+        Usado pelo Chat (worker) e pelo Copilot por voz. on_output() avisa o
+        1º sinal de resposta (skill roteada ou 1º trecho) — a orb passa a 'respondendo'.
+        Retorna o texto final ('PROTOCOL_SHUTDOWN' se o brain pediu desligamento)."""
         full = ""
         base_meta = reply.meta
         skill = []  # intent da skill acionada (Copilot), p/ o badge no cabeçalho
+        started = []
+
+        def output_started():
+            if on_output and not started:
+                started.append(True)
+                on_output()
 
         def on_route(intent):
             skill.append(intent)
+            output_started()
             self.call_from_thread(reply.set_meta, f"{base_meta} · [{intent}] executando…")
 
         try:
@@ -422,9 +513,11 @@ class JarvisApp(App):
 
             last_flush = 0.0
             for chunk in self._stream_fn(text, session_id, images, mode, on_route=on_route):
-                if worker.is_cancelled:
+                if worker is not None and worker.is_cancelled:
                     full += "\n\n_(interrompido)_"
                     break
+                if chunk:
+                    output_started()
                 full += chunk or ""
                 now = time.monotonic()
                 if now - last_flush >= STREAM_FLUSH_S:
@@ -432,8 +525,7 @@ class JarvisApp(App):
                     last_flush = now
 
             if full.strip() == "PROTOCOL_SHUTDOWN":
-                self.call_from_thread(self.shutdown_jarvis)
-                return
+                return "PROTOCOL_SHUTDOWN"
             if not full.strip():
                 full = "_Sem resposta do modelo. O Ollama está rodando?_"
             self.call_from_thread(reply.set_text, full)
@@ -445,8 +537,10 @@ class JarvisApp(App):
             self.call_from_thread(reply.set_text, f"**Erro:** `{e}`")
             if skill:
                 self.call_from_thread(reply.set_meta, f"{base_meta} · [{skill[0]}] ✗")
+            full = ""
         finally:
             self.call_from_thread(self._stream_done, session_id)
+        return full
 
     def _stream_done(self, session_id):
         self.busy = False
@@ -465,9 +559,11 @@ class JarvisApp(App):
         self.add_system(text)
         pending = state.pending_critical_action
         if pending and not isinstance(self.screen, ConfirmScreen):
+            self.query_one("#voicebar", VoiceBar).set_awaiting(True)
             self.push_screen(ConfirmScreen(text, deadline=pending.get("timeout")), self._resolve_critical)
 
     def _resolve_critical(self, approved):
+        self.query_one("#voicebar", VoiceBar).set_awaiting(False)
         self._confirm_worker(bool(approved))
 
     @work(thread=True, group="confirm")
@@ -508,44 +604,56 @@ class JarvisApp(App):
     # ------------------------------------------------------------------ voice
     def _ensure_voice_thread(self):
         if self._voice_thread and self._voice_thread.is_alive():
-            from services.listen import ear_resume
-            ear_resume()
+            try:
+                self.voice.resume()
+            except Exception as e:
+                log.debug(f"Falha ao retomar o microfone: {e}")
             return
         self._voice_thread = threading.Thread(target=self._voice_loop, daemon=True)
         self._voice_thread.start()
 
+    def _set_orb(self, orb_state):
+        self.query_one("#copilot-hero", CopilotHero).set_state(orb_state)
+
     def _voice_loop(self):
-        """Loop de voz antigo do main.py, agora opcional e espelhado no log."""
-        from services.brain import execute_command
-        from services.listen import ear_pause, ear_resume, listen
-        from services.speak import speak
-        while True:
+        """Copilot por voz: ouve → mesmo pipeline de stream do Copilot → fala.
+        Grava na sessão atual (aparece no Ctrl+O). Estados da orb:
+        ouvindo (mic aberto) → pensando (comando recebido) → respondendo
+        (1º trecho ou skill roteada, até o fim da fala) → ouvindo."""
+        while not self._voice_stop.is_set():
             try:
                 if not state.voice_enabled:
-                    time.sleep(0.5)
+                    time.sleep(0.3)
                     continue
-                command = listen()
+                self._call_ui(self._set_orb, "ouvindo")
+                command = self.voice.listen()
                 if not command or not state.voice_enabled:
+                    time.sleep(0.05)
                     continue
-                self._call_ui(self.add_message, "user", command, "🎙 voz")
-                db.log_interaction("user", command, self._voice_session_id)
-                response = execute_command(command, session_id=self._voice_session_id)
-                if response == "PROTOCOL_SHUTDOWN":
-                    ear_pause()
-                    speak("Desativando núcleo de força. Até logo, Senhor.")
-                    self._call_ui(self.shutdown_jarvis)
-                    return
-                if response:
-                    db.log_interaction("assistant", response, self._voice_session_id)
-                    self._call_ui(self.add_message, "assistant", response, "🎙 voz")
-                    ear_pause()
-                    try:
-                        speak(response, show=False)
-                    finally:
-                        ear_resume()
+                self._call_ui(self._set_orb, "pensando")
+                session_id = self.session_id
+                reply = self._call_ui(self._begin_turn, command, f"voz · {_now_hhmm()}")
+                full = self._run_turn(command, None, "copilot", session_id, reply,
+                                      on_output=lambda: self._call_ui(self._set_orb, "respondendo"))
+                self._call_ui(self._set_orb, "respondendo")
+                self.voice.pause()
+                try:
+                    if full == "PROTOCOL_SHUTDOWN":
+                        self.voice.speak("Desativando núcleo de força. Até logo, Senhor.")
+                        self._call_ui(self.shutdown_jarvis)
+                        return
+                    if full:
+                        self.voice.speak(full)
+                finally:
+                    self.voice.resume()
             except Exception as e:
+                if self._voice_stop.is_set() or not self.is_running:
+                    return  # app encerrado no meio do turno
                 log.error(f"Erro no loop de voz: {e}")
                 time.sleep(1)
+
+    def on_unmount(self):
+        self._voice_stop.set()
 
     # ------------------------------------------------------------------- boot
     @work(thread=True, group="boot")
@@ -559,6 +667,7 @@ class JarvisApp(App):
 
     def shutdown_jarvis(self):
         log.info("Aplicação encerrada pela TUI.")
+        self._voice_stop.set()
         state.announce = None
         self.exit()
 

@@ -16,6 +16,14 @@ $j-user: #6aa8ff;
 $j-ink: #001018;
 $j-white: #ffffff;
 $j-badge-ink: #0b1f3f;
+$j-neon-soft: #7ff2ff;
+/* Orb pixel-art do Copilot */
+$j-orb-core: #1e6fd9;
+$j-orb-shade: #1553a8;
+$j-orb-hl: #9fd0ff;
+$j-orb-ring: #ffffff;
+$j-orb-ring-dim: #22324a;
+$j-orb-white-dim: #8fa3bf;
 
 Screen {
     background: $j-bg;
@@ -96,29 +104,72 @@ Markdown.msg-body {
 
 #prompt:focus { border: tall $j-neon; }
 
-#statusbar {
+/* Telemetria (esquerda) + atalhos (direita) numa linha só */
+.statusbar {
+    dock: bottom;
     height: 1;
     background: $j-panel;
     color: $j-muted;
 }
 
-#status-left { width: 1fr; padding: 0 1; }
-#status-right { width: auto; padding: 0 1; }
+.status-left { width: auto; padding: 0 1; }
 
-Footer {
-    background: $j-footer;
+.statusbar Footer {
+    dock: none;
+    width: 1fr;
+    height: 1;
+    background: $j-panel;
+    align-horizontal: right;
 }
 
-Footer FooterKey {
-    background: $j-footer;
+.statusbar Footer FooterKey {
+    background: $j-panel;
     color: $j-text-soft;
 }
 
-Footer FooterKey .footer-key--key {
-    background: $j-footer;
+.statusbar Footer FooterKey .footer-key--key {
+    background: $j-panel;
     color: $j-neon;
     text-style: bold;
 }
+
+/* --- Copilot: orb + boas-vindas e barra de voz (no lugar do input) --- */
+#copilot-hero {
+    height: auto;
+    width: auto;
+    margin: 1 0 0 2;
+    padding: 0 2;
+    border: round $j-line;
+    background: $j-panel;
+}
+
+#hero-text { width: auto; height: auto; padding: 0 0 0 3; }
+#hero-title { color: $j-neon; }
+#hero-info { color: $j-text-soft; }
+#hero-state { color: $j-neon; }
+#hero-hint { color: $j-muted; }
+
+JarvisOrb > .orb--ring { color: $j-orb-ring; }
+JarvisOrb > .orb--ring-dim { color: $j-orb-ring-dim; }
+JarvisOrb > .orb--core { color: $j-orb-core; }
+JarvisOrb > .orb--shade { color: $j-orb-shade; }
+JarvisOrb > .orb--hl { color: $j-orb-hl; }
+JarvisOrb > .orb--white { color: $j-orb-ring; }
+JarvisOrb > .orb--white-dim { color: $j-orb-white-dim; }
+
+#voicebar {
+    height: 3;
+    margin: 0 1;
+    padding: 0 1;
+    border: tall $j-neon;
+    background: $j-panel;
+}
+
+#voicebar Static { width: auto; padding: 0 1 0 0; }
+#voice-mic { color: $j-neon; }
+#voice-wave { color: $j-neon-soft; }
+#voicebar #voice-text { width: 1fr; color: $j-text-soft; }
+#voice-hint { color: $j-muted; }
 
 /* --- Modo Copilot: tudo puxa pro ciano neon --- */
 Screen.-copilot #topbar { background: $j-neon; color: $j-ink; }
@@ -131,6 +182,11 @@ Screen.-critical #topbar { background: $j-danger-strong; color: $j-white; }
 Screen.-critical #topbar-info { text-style: bold; }
 Screen.-critical #log { border-left: outer $j-danger; }
 Screen.-critical #prompt { border: tall $j-danger; }
+Screen.-critical #voicebar { border: tall $j-danger; }
+Screen.-critical #voice-mic, Screen.-critical #voice-wave { color: $j-danger-soft; }
+
+/* Linha de status do modal crítico: atalhos s/n em vermelho */
+ConfirmScreen .statusbar Footer FooterKey .footer-key--key { color: $j-danger-soft; }
 
 /* --- Modais (o fundo escurece a conversa) --- */
 SessionPicker, ConfirmScreen {

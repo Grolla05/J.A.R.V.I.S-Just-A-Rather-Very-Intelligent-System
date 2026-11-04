@@ -2,6 +2,24 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+**Data:** 2026-11-04
+**Escopo:** Copilot passa a ser **só por voz**, com orb pixel-art 16×16 (ouvindo / pensando / respondendo); telemetria e atalhos numa **linha só**. Segue a revisão do canvas "JARVIS TUI".
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | Copilot só voz: o input dá lugar à barra de voz; entrar no Copilot liga a voz, voltar ao Chat desliga. `Ctrl+T`/`/voice` alternam entre Chat e Copilot | `frontend/app.py`, `frontend/widgets.py` (`VoiceBar`) |
+| 2 | Voz usa o mesmo pipeline de stream do Copilot (`_run_turn`): selo `[SKILL] ✓`, resposta em tempo real, fala no fim. Grava na sessão atual (aparece no `Ctrl+O`), com cabeçalho `voz · HH:MM` | `frontend/app.py` |
+| 3 | Orb pixel-art: grade 16×16 em meio-bloco (16×8 células). Ouvindo = bola azul + anel branco parado; pensando = tudo branco pulsando em degraus; respondendo = falha percorrendo o anel. Timer só roda nos estados animados | `frontend/orb.py` (novo), `frontend/widgets.py` (`JarvisOrb`, `CopilotHero`), `frontend/jarvis.tcss` |
+| 4 | Rodapé em 1 linha: `Footer` dentro do `#statusbar` (telemetria à esquerda, atalhos à direita); `^t` some no Copilot; `Sair` volta a ser o último | `frontend/app.py`, `frontend/jarvis.tcss` |
+| 5 | Protocolo crítico: a classe `-critical` agora vai para a tela da conversa (antes caía no modal se ele já estivesse aberto); modal tem a mesma linha única com `s`/`n` e foca "Manter"; barra de voz pede "sim" ou "não" | `frontend/app.py`, `frontend/widgets.py`, `frontend/jarvis.tcss` |
+| 6 | Voz injetável (`JarvisApp(voice=...)`) e loop de voz encerra junto com o app | `frontend/app.py` |
+
+**Decisões:** comandos `/` só existem no Chat (no Copilot não há campo de texto). "Ouvindo" cobre todo o tempo com o microfone aberto: o `listen()` não avisa quando a fala começa.
+
+**Testes novos:** `test_tui_orb.py` (grade 16×16 simétrica, pensando só branco e pulsando, falha do anel percorre os 8 oitavos, meio-bloco 16×8) e, em `test_tui_app.py`, Copilot só voz, `Ctrl+T`, turno de voz completo (stream + selo + fala + sessão), orb pensando até a 1ª saída, rodapé em 1 linha e crítico com modal aberto.
+
+---
+
 **Data:** 2026-11-03
 **Escopo:** Interface trocada por uma TUI de terminal (Textual), na nova pasta `frontend/` (pacote Python). Frontend React/PyWebView removido. Modos **Chat** e **Copilot** alternados com `Shift+Tab`; voz opcional. Visual segue o canvas de design "JARVIS TUI".
 
