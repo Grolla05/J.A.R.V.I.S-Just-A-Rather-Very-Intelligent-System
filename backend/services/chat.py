@@ -87,7 +87,7 @@ def ask_local_ai(text, intent_type="CHAT", entity=None, vault_context="", vault_
     return "Erro de processamento neural."
 
 
-def ask_local_ai_stream(text, intent_type="CHAT", entity=None, vault_context="", vault_filename="", session_id="default", images=None):
+def ask_local_ai_stream(text, intent_type="CHAT", entity=None, vault_context="", vault_filename="", session_id="default", images=None, mode="chat"):
     if images:
         # Imagem anexada: roteia pro modelo de visão com um contexto mínimo e
         # dedicado. Moondream/LLaVA são modelos pequenos — empilhar a
@@ -109,7 +109,8 @@ def ask_local_ai_stream(text, intent_type="CHAT", entity=None, vault_context="",
 
     db_history = get_session_history_for_ai(session_id, limit=8)
 
-    sys_instruction = SYSTEM_PROMPT['content'] + "\n\n[MODO ATUAL: CHAT] Aplique REGRAS DE CHAT. Formate a resposta em Markdown. Use **negrito**, `código`, listas e blocos de código quando apropriado."
+    mode_prompt = "mode_copilot.md" if mode == "copilot" else "mode_chat.md"
+    sys_instruction = SYSTEM_PROMPT['content'] + "\n\n" + load_prompt(mode_prompt)
 
     if intent_type == "HARDWARE":
         sys_instruction += f"\n[DADOS DE HARDWARE]:\n{state.sys_monitor.get_detailed_hardware_context()}\nUSE ISSO."

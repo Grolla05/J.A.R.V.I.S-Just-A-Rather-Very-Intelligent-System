@@ -39,22 +39,3 @@ class TTLCache:
 
     def clear(self):
         self._store.clear()
-
-
-def escape_js(text) -> str:
-    """Escapa texto para injeção segura em evaluate_js.
-
-    Uma aspa/quebra de linha não escapada na resposta do Ollama paralisa o
-    frontend silenciosamente. Cobre barra, aspas, \\n, \\r e \\t.
-    """
-    if text is None:
-        return ""
-    return (
-        str(text)
-        .replace("\\", "\\\\")
-        .replace("'", "\\'")
-        .replace('"', '\\"')
-        .replace("\n", "\\n")
-        .replace("\r", "\\r")
-        .replace("\t", "\\t")
-    )

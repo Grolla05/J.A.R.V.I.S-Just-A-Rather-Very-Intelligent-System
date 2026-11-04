@@ -2,6 +2,96 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+**Data:** 2026-11-03
+**Escopo:** Interface trocada por uma TUI de terminal (Textual), na nova pasta `frontend/` (pacote Python). Frontend React/PyWebView removido. Modos **Chat** e **Copilot** alternados com `Shift+Tab`; voz opcional. Visual segue o canvas de design "JARVIS TUI".
+
+---
+
+## Resumo
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | TUI Textual: chat em Markdown com streaming, sessões, anexos, telemetria em 1 linha, alertas | `frontend/app.py`, `frontend/widgets.py`, `frontend/commands.py`, `frontend/jarvis.tcss` (novos), `backend/main.py` |
+| 2 | Modos Chat (sem skills) e Copilot (skills + confirmação de ação crítica) | `services/brain.py`, `services/chat.py`, `prompts/mode_chat.md`, `prompts/mode_copilot.md` (novos) |
+| 3 | Voz opcional e lazy: mic/pyttsx3/pygame só abrem com `/voice` | `services/listen.py`, `services/speak.py`, `core/alerts.py`, `core/state.py` |
+| 4 | SQL de sessões e toggles de skills saíram da bridge | `services/sessions.py`, `services/skill_settings.py` (novos) |
+| 5 | Logger não escreve no stdout com a TUI ativa | `core/logger.py` |
+| 6 | Remoção do HUD: React/Vite em `frontend/`, `core/bridge.py`, `escape_js`, `pywebview` | `core/__init__.py`, `core/utils.py`, `core/uploads.py`, `requirements.txt`, CI, dependabot |
+| 7 | `frontend/` reaproveitada para a TUI + design aprovado aplicado | `frontend/*`, `services/brain.py` (`on_route`), `services/sessions.py` (hora local), `backend/tests/__init__.py`, `pyproject.toml` |
+
+---
+
+## 7. Pasta `frontend/` e design aplicado
+
+**Pasta:** a TUI saiu de `backend/tui/` para `frontend/` na raiz, como pacote Python `frontend`. `backend/main.py` põe a raiz no `sys.path` e importa `frontend.app`; `boot.bat` não muda. `backend/tests/__init__.py` faz o mesmo para os testes. `frontend/pyproject.toml` herda o ruff do backend (com `known-first-party` para `core`, `services`, `frontend`...), e o CI passou a rodar `ruff check ../frontend` e `compileall` nela.
+
+**Design (canvas "JARVIS TUI"):**
+- Barra superior em 4 partes: marca, selo do modo (CHAT branco / COPILOT escuro sobre ciano), título da sessão e info à direita: "sessão N de M" no Chat, "skills ativas: N" no Copilot, "⚠ PROTOCOLO CRÍTICO" no estado crítico.
+- Cabeçalhos com hora (`você › 14:02`); no Copilot a resposta ganha o selo da skill: `[AUDIO_CONTROL] executando…` → `✓` (ou `✗` em erro). Para isso `execute_command_stream` ganhou `on_route(intent)`, chamado quando a mensagem vira skill.
+- Paleta revisada para contraste (cinza `#8593ab`, azul do usuário `#6aa8ff`), barra de status dividida (telemetria à esquerda, dica à direita) e footer com teclas em ciano.
+- **Trocar sessão:** campo de filtro por título (Enter abre o primeiro, ↓ vai para a lista), `●` atual, `★` fixada e coluna de quando (`HH:MM`, `ontem`, `dd/mm`).
+- **Confirmação crítica:** botões reais `s · Encerrar` / `n · Manter` e contagem "Expira em N s"; sem resposta, fecha como "não" no prazo da ação.
+
+**Bugs corrigidos no caminho:**
+- O badge `[APP_CONTROL]` sumia do cabeçalho: o markup do Textual lê colchetes em MAIÚSCULAS como tag e o `escape` dele não cobre esse caso. O cabeçalho agora é montado com `Content.assemble`.
+- Horários vinham em UTC (o SQLite grava `CURRENT_TIMESTAMP` em UTC): `sessions.to_local()` converte para a hora local no histórico e na lista de sessões.
+
+**Testes novos:** selo da skill no Copilot (e ausência no Chat), barra superior (selo, "sessão N de M", "skills ativas", crítico), filtro do seletor de sessões, confirmação que expira como "não" e que aceita `s`, `format_when`, `to_local`.
+
+---
+
+## 1. TUI (Textual)
+
+**Por quê:** o HUD (React 19 + Three.js + Framer Motion dentro do WebView2) pesava demais em RAM/GPU. A TUI roda no próprio terminal, 100% Python.
+
+**Layout:** barra superior (modo + título da sessão + aviso crítico), log de mensagens (JARVIS em Markdown), barra de anexo, input, barra de status (CPU/RAM/GPU, voz, modelo) e footer com atalhos.
+
+**Atalhos:** `Shift+Tab` modo · `Ctrl+N` nova sessão · `Ctrl+O` sessões · `Ctrl+R` regenerar · `Ctrl+T` voz · `Esc` interrompe o stream · `↑` (input vazio) edita a última mensagem · `Ctrl+Q` sair.
+
+**Comandos:** `/help`, `/new`, `/sessions`, `/rename`, `/pin`, `/regen`, `/edit`, `/attach <caminho>`, `/detach`, `/mode`, `/voice`, `/skills [on|off X]`, `/clear`, `/quit`. `//texto` envia mensagem começando com barra.
+
+**Streaming:** worker em thread consome `execute_command_stream` e re-renderiza a bolha no máximo a cada 50 ms. Histórico salvo no SQLite igual ao HUD antigo (sessões antigas continuam abrindo).
+
+**Anexos:** `/attach` de imagem vai junto com a próxima mensagem (modelo de visão); áudio é transcrito pelo Whisper e cai no input, como no HUD.
+
+**Telemetria:** polling a cada 3 s (`TELEMETRY_INTERVAL`) numa linha — sai o stream push delta-gated da bridge.
+
+**Fora do escopo:** KaTeX (o terminal mostra LaTeX em bloco de código), reator animado, legendas.
+
+## 2. Modos Chat e Copilot
+
+- `execute_command_stream(..., mode="chat"|"copilot")`. **Chat** classifica com `skip_skills=True` e nunca executa skill (antes o chat do HUD executava skills sem querer). **Copilot** libera as skills.
+- Prompt do modo saiu de string Python para `prompts/mode_chat.md` / `prompts/mode_copilot.md`.
+- Ação crítica (ex: matar processo pesado) abre um modal `s/n` na TUI → `brain.confirm_pending_action()`. A lógica duplicada de confirmação em `execute_command`/`execute_command_stream` virou uma função só.
+
+## 3. Voz opcional e lazy
+
+- `state.voice_enabled` (começa `False`). `/voice` ou `Ctrl+T` liga o loop de voz antigo do `main.py`, agora numa thread daemon que espelha transcrição e resposta no log.
+- `services/listen.py`: `Ear()` não é mais criado no import (`get_ear()` lazy); `ear_pause/resume` são no-op sem ouvido.
+- `services/speak.py`: pyttsx3/pygame/edge-tts inicializados na 1ª fala; `speak()` só exibe o texto (via `state.announce`) quando a voz está desligada. Removido `typewriter_effect` (escrevia no stdout e corromperia a TUI).
+- `core/alerts.py` e `services/brain.py`: import tardio dos sentidos; `scan_system_hardware()` saiu do import do brain e roda em thread no boot.
+
+## 4–5. Serviços extraídos e logger
+
+- `services/sessions.py`: histórico, editar/regenerar, título, pin e sessões recentes (todas as conexões fecham em `finally`).
+- `services/skill_settings.py`: listar e ligar/desligar skills/categorias.
+- `core/logger.py`: `log.use_tui(handler)` remove o handler de console; WARNING+ vira notificação na TUI; arquivo de log continua.
+
+## 6. Removido
+
+O app React/Vite inteiro de `frontend/` (a pasta agora guarda a TUI), `core/bridge.py` (+ `docs/core/bridge.md`), `core.utils.escape_js` (+ `tests/test_utils.py`), `read_upload_as_data_url`, `pywebview` do `requirements.txt`, stub `webview` dos testes, job `frontend` do CI e o bloco npm do dependabot. Settings `TELEMETRY_*_DELTA` removidos.
+
+## Testes
+
+- Novos: `test_tui_app.py` (Pilot: Shift+Tab, stream + log no banco, Copilot, `/new` e `Ctrl+N`, regenerar, comando desconhecido), `test_tui_commands.py`, `test_mode_routing.py`, `test_sessions_service.py`, `test_lazy_imports.py`.
+- `test_alerts_cache.py` passou a mockar `alerts._announce`.
+- Resultado: **152 passam**; 11 falhas em `test_work_macros_spotify.py` já existiam antes desta mudança (funções `_sanitize_spotify_uri`/`_is_playing_title` ausentes) — por isso o `pytest` segue comentado no CI. `ruff check` limpo em `backend/` e `frontend/`.
+- **Não medido:** consumo de RAM/CPU antes × depois. **Não testado ao vivo:** voz, Ollama real e skills reais na TUI (testes usam stream fake).
+
+---
+
+## Mudança anterior
+
 **Data:** 2026-09-28
 **Escopo:** Multimodalidade no Chat Mode — upload de imagem (análise via modelo de visão local) e upload de áudio (transcrição local via Whisper).
 

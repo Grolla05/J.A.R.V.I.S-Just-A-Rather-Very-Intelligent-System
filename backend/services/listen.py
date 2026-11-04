@@ -120,13 +120,24 @@ class Ear:
                     log.critical(f"❌ [ERRO GENÉRICO]: {e}")
                     time.sleep(1)
 
-jarvis_ear = Ear()
+# Singleton lazy: abrir o microfone no import travava o boot e mantinha o
+# dispositivo ocupado mesmo com a voz desligada na TUI.
+jarvis_ear = None
+
+def get_ear():
+    global jarvis_ear
+    if jarvis_ear is None:
+        jarvis_ear = Ear()
+    return jarvis_ear
 
 def listen():
-    return jarvis_ear.listen()
+    return get_ear().listen()
 
 def ear_pause():
-    jarvis_ear.pause()
+    # Sem ouvido criado não há o que pausar — não abre o mic só pra isso.
+    if jarvis_ear is not None:
+        jarvis_ear.pause()
 
 def ear_resume():
-    jarvis_ear.resume()
+    if jarvis_ear is not None:
+        jarvis_ear.resume()

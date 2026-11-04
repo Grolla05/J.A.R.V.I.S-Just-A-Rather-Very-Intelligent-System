@@ -103,11 +103,8 @@ class Settings:
     INTENT_CACHE_TTL: int = 30   # Segundos de validade de cada entrada
     INTENT_CACHE_SIZE: int = 64  # Máximo de entradas antes da evicção LRU
 
-    # --- Telemetria Push (Backend -> UI por delta, sem polling) ---
-    TELEMETRY_INTERVAL: float = 1.0   # Frequência de amostragem do loop (s)
-    TELEMETRY_CPU_DELTA: float = 5.0  # Push se |ΔCPU%| > este valor
-    TELEMETRY_RAM_DELTA: float = 2.0  # Push se |ΔRAM%| > este valor
-    TELEMETRY_GPU_DELTA: float = 5.0  # Push se |ΔGPU load%| > este valor
+    # --- Telemetria da barra de status da TUI (polling leve) ---
+    TELEMETRY_INTERVAL: float = 3.0   # Intervalo de atualização da StatusBar (s)
 
     # --- Configurações de Áudio (Listen/Speak) ---
     DEFAULT_LANGUAGE: str = "pt-BR"

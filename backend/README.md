@@ -4,7 +4,7 @@ Este diretório contém o motor lógico, a cognição e a infraestrutura do assi
 
 ## 🎯 Objetivo do Projeto
 
-O objetivo do J.A.R.V.I.S. é ser um assistente pessoal de **IA Local** de baixíssima latência. Ele prioriza a privacidade e a autonomia rodando o modelo `llama3.1` via Ollama diretamente no hardware do usuário. Ele oferece controle profundo do sistema operacional Windows, persistência de memória em Markdown (Cofre Obsidian) via protocolo MCP, e uma interface gráfica fluida acoplada em React/PyWebView.
+O objetivo do J.A.R.V.I.S. é ser um assistente pessoal de **IA Local** de baixíssima latência. Ele prioriza a privacidade e a autonomia rodando o modelo `llama3.1` via Ollama diretamente no hardware do usuário. Ele oferece controle profundo do sistema operacional Windows, persistência de memória em Markdown (Cofre Obsidian) via protocolo MCP, e uma interface de terminal (TUI em Textual) com modos Chat e Copilot alternados por `Shift+Tab`.
 
 ---
 
@@ -15,7 +15,6 @@ Para garantir a fácil manutenção e escalabilidade do backend, cada módulo pr
 ### 🧩 Orquestração e Core
 
 - [O Orquestrador Principal (`main.py`)](docs/main_orchestrator.md)
-- [A Ponte PyWebView (`bridge.py`)](docs/core/bridge.md)
 - [Configurações Globais (`config.py`)](docs/core/config.md)
 - [Motor de Telemetria (`SystemInfo.py`)](docs/core/SystemInfo.md)
 - [Integração Obsidian e MCP (`obsidian.py`)](docs/core/obsidian.md)
@@ -58,7 +57,7 @@ O J.A.R.V.I.S. suporta *Skills* Plug-and-Play. Adicionar um novo arquivo `.py` c
 
 O backend é dividido em três blocos operacionais:
 
-1. **`core/` (A Fundição)**: Singletons e infraestrutura de baixo nível — SQLite, Ollama LLM, Monitoramento de CPU/GPU, Logging, MCP Client, Webview Bridge, sistema de alertas e carregamento de prompts.
+1. **`core/` (A Fundição)**: Singletons e infraestrutura de baixo nível — SQLite, Ollama LLM, Monitoramento de CPU/GPU, Logging, MCP Client, sistema de alertas e carregamento de prompts.
 2. **`services/` (Os Sentidos e a Mente)**: Pipeline de processamento de comandos. `listen.py` capta áudio → `brain.py` coordena → `intent.py` classifica a intenção via LLM (JSON mode) → roteia para skill, `chat.py` (resposta LLM), ou `memory.py` (gravação no vault) → `speak.py` sintetiza em áudio com efeito "Typewriter" no terminal.
 3. **`skills/` (Os Membros)**: Comandos plug-and-play. Cada arquivo com contrato `INTENT + execute()` é carregado automaticamente no boot e mapeado para o roteador de intenção.
 

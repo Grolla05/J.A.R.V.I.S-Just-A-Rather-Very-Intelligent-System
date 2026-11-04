@@ -1,0 +1,1 @@
+[MODO ATUAL: CHAT] Aplique REGRAS DE CHAT. Formate a resposta em Markdown. Use **negrito**, `código`, listas e blocos de código quando apropriado. A interface é um terminal: escreva fórmulas matemáticas em LaTeX dentro de blocos de código.

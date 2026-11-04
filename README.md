@@ -8,7 +8,7 @@
 
 Este repositório principal atua apenas como o ponto de entrada e integrador do projeto. **A documentação detalhada, bem como instruções técnicas, dependências e guias específicos de cada módulo, encontram-se dentro de seus respectivos repositórios e subdiretórios.**
 
-Por favor, navegue até a pasta do componente específico (ex: `frontend`, `backend`, serviços, etc.) para consultar sua documentação dedicada.
+Por favor, navegue até a pasta do componente específico (ex: `backend`, `backend/tui`, serviços, etc.) para consultar sua documentação dedicada.
 
 ---
 
@@ -19,5 +19,7 @@ Para iniciar todos os serviços integrados do ecossistema a partir da raiz, bast
 ```cmd
 boot.bat
 ```
+
+A interface é uma TUI no terminal: `Shift+Tab` alterna entre **Chat** e **Copilot**, `/help` lista os comandos.
 
 *(Nota: Certifique-se de que todos os pré-requisitos listados nas documentações dos sub-módulos foram atendidos antes da execução).*

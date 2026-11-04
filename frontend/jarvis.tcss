@@ -1,0 +1,206 @@
+/* Tema do J.A.R.V.I.S no terminal — segue o canvas "JARVIS TUI" aprovado.
+   Cores só aqui, como variáveis (nada hardcoded no Python).
+   Prefixo j- evita sobrescrever variáveis do tema do Textual ($panel...). */
+$j-bg: #05080f;
+$j-ocean: #1e6fd9;
+$j-neon: #00e5ff;
+$j-danger: #ff3b3b;
+$j-danger-strong: #c81e1e;
+$j-danger-soft: #ff6b6b;
+$j-panel: #0b1220;
+$j-footer: #101a2c;
+$j-line: #1a2436;
+$j-muted: #8593ab;
+$j-text-soft: #c9d6ea;
+$j-user: #6aa8ff;
+$j-ink: #001018;
+$j-white: #ffffff;
+$j-badge-ink: #0b1f3f;
+
+Screen {
+    background: $j-bg;
+    color: $j-text-soft;
+}
+
+/* --- Barra superior: marca · selo do modo · sessão · info --- */
+#topbar {
+    height: 1;
+    background: $j-ocean;
+    color: $j-white;
+}
+
+#brand {
+    width: auto;
+    padding: 0 2 0 1;
+    text-style: bold;
+}
+
+#mode-badge {
+    width: auto;
+    padding: 0 1;
+    background: $j-white;
+    color: $j-badge-ink;
+    text-style: bold;
+}
+
+#session-title {
+    width: 1fr;
+    padding: 0 2;
+}
+
+#topbar-info {
+    width: auto;
+    padding: 0 1;
+}
+
+/* --- Log de mensagens --- */
+#log {
+    padding: 0 2 0 1;
+    scrollbar-size-vertical: 1;
+    border-left: outer $j-ocean;
+}
+
+.msg {
+    height: auto;
+    margin: 1 0 0 0;
+}
+
+.msg-header { color: $j-muted; }
+.msg.-user .msg-header { color: $j-user; text-style: bold; }
+.msg.-assistant .msg-header { color: $j-neon; text-style: bold; }
+.msg.-system .msg-header { color: $j-muted; }
+.msg.-system .msg-body { color: $j-muted; }
+
+.msg-body {
+    height: auto;
+    padding: 0 0 0 2;
+    margin: 0;
+}
+
+Markdown.msg-body {
+    background: transparent;
+}
+
+/* --- Anexo pendente, input, status --- */
+#attachbar {
+    height: 1;
+    background: $j-panel;
+    color: $j-neon;
+}
+
+#prompt {
+    margin: 0 1;
+    border: tall $j-ocean;
+    background: $j-panel;
+}
+
+#prompt:focus { border: tall $j-neon; }
+
+#statusbar {
+    height: 1;
+    background: $j-panel;
+    color: $j-muted;
+}
+
+#status-left { width: 1fr; padding: 0 1; }
+#status-right { width: auto; padding: 0 1; }
+
+Footer {
+    background: $j-footer;
+}
+
+Footer FooterKey {
+    background: $j-footer;
+    color: $j-text-soft;
+}
+
+Footer FooterKey .footer-key--key {
+    background: $j-footer;
+    color: $j-neon;
+    text-style: bold;
+}
+
+/* --- Modo Copilot: tudo puxa pro ciano neon --- */
+Screen.-copilot #topbar { background: $j-neon; color: $j-ink; }
+Screen.-copilot #mode-badge { background: $j-ink; color: $j-neon; }
+Screen.-copilot #log { border-left: outer $j-neon; }
+Screen.-copilot #prompt { border: tall $j-neon; }
+
+/* --- Protocolo crítico: vermelho sobrepõe qualquer modo --- */
+Screen.-critical #topbar { background: $j-danger-strong; color: $j-white; }
+Screen.-critical #topbar-info { text-style: bold; }
+Screen.-critical #log { border-left: outer $j-danger; }
+Screen.-critical #prompt { border: tall $j-danger; }
+
+/* --- Modais (o fundo escurece a conversa) --- */
+SessionPicker, ConfirmScreen {
+    align: center middle;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+.hint { color: $j-muted; }
+
+#picker {
+    width: 84;
+    max-width: 95%;
+    height: auto;
+    max-height: 85%;
+    border: tall $j-ocean;
+    background: $j-panel;
+    padding: 1 2;
+}
+
+#picker-head { height: 1; }
+#picker-title { width: 1fr; color: $j-white; text-style: bold; }
+
+#picker-filter {
+    margin: 1 0;
+    border: tall $j-line;
+    background: $j-panel;
+}
+
+#picker-filter:focus { border: tall $j-neon; }
+
+#picker-list {
+    height: auto;
+    max-height: 16;
+    margin-bottom: 1;
+    border: none;
+    background: $j-panel;
+}
+
+#confirm {
+    width: 64;
+    max-width: 95%;
+    height: auto;
+    border: tall $j-danger;
+    background: $j-panel;
+    padding: 1 2;
+}
+
+#confirm-title {
+    color: $j-danger-soft;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#confirm-expiry { margin: 1 0; }
+
+#confirm-buttons {
+    height: auto;
+}
+
+#confirm-buttons Button {
+    margin-right: 2;
+}
+
+#confirm-yes {
+    background: $j-danger-strong;
+    color: $j-white;
+    text-style: bold;
+}
+
+#confirm-no {
+    background: $j-panel;
+    color: $j-text-soft;
+}
