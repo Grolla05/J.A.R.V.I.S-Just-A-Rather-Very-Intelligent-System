@@ -22,9 +22,10 @@ class ObsidianClient:
         }
 
     def _req(self, method, path, **kwargs):
+        headers = kwargs.pop("headers", self.headers)
         try:
             r = requests.request(method, f"{self.base}{path}",
-                                 headers=self.headers, timeout=5, **kwargs)
+                                 headers=headers, timeout=5, **kwargs)
             if r.status_code == 404:
                 return None  # Nota não existe — comportamento normal
             r.raise_for_status()
@@ -48,6 +49,30 @@ class ObsidianClient:
                 if ctx:
                     parts.append(f"[{fname}]: {ctx}")
         return "\n".join(parts)
+
+    def search_results(self, query: str, limit: int = 8) -> list:
+        """Busca estruturada p/ a tela /vault: [{'filename', 'score'}], maior score primeiro."""
+        encoded = urllib.parse.quote(query, safe="", encoding="utf-8")
+        r = self._req("GET", f"/search/simple/?query={encoded}&contextLength=80")
+        if not r:
+            return []
+        items = [{"filename": i.get("filename", ""), "score": float(i.get("score", 0) or 0)}
+                 for i in r.json() if i.get("filename")]
+        items.sort(key=lambda i: i["score"], reverse=True)
+        return items[:limit]
+
+    def list_dir(self, path: str = "") -> Optional[list]:
+        """Itens de uma pasta do vault (pastas terminam com '/'). None se inacessível."""
+        folder = path.strip("/")
+        encoded = urllib.parse.quote(folder, safe="/", encoding="utf-8")
+        r = self._req("GET", f"/vault/{encoded}/" if folder else "/vault/",
+                      headers={**self.headers, "Accept": "application/json"})
+        if not r:
+            return None
+        try:
+            return sorted(r.json().get("files", []), key=lambda n: (not n.endswith("/"), n.lower()))
+        except ValueError:
+            return None
 
     def get_file(self, path: str) -> Optional[str]:
         """Lê conteúdo de uma nota pelo caminho."""

@@ -1,30 +1,76 @@
+import math
 import re
 import time
+from array import array
 
 import speech_recognition as sr
 
 from core import log, settings
 
+LEVEL_FULL_SCALE = 6000.0  # RMS (int16) que já conta como "voz cheia" (nível 1.0)
+LEVEL_MAX_HZ = 8           # no máx. 8 avisos de nível por segundo (= fps da orb)
+
+
+def rms_level(chunk):
+    """Nível 0..1 de um bloco PCM 16-bit little-endian (sem audioop, removido no 3.13)."""
+    if not chunk:
+        return 0.0
+    samples = array("h")
+    samples.frombytes(chunk[: len(chunk) - (len(chunk) % 2)])
+    if not samples:
+        return 0.0
+    rms = math.sqrt(sum(s * s for s in samples) / len(samples))
+    return min(1.0, rms / LEVEL_FULL_SCALE)
+
+
+class _LevelTap:
+    """Envolve o stream do microfone: cada read() devolve o áudio intacto ao
+    recognizer e, de quebra, avisa o nível (RMS) para o visualizador da TUI."""
+
+    def __init__(self, stream, on_level, clock=time.monotonic):
+        self._stream = stream
+        self._on_level = on_level
+        self._clock = clock
+        self._last = float("-inf")  # 1º bloco sempre avisa
+
+    def read(self, size):
+        data = self._stream.read(size)
+        now = self._clock()
+        if self._on_level and now - self._last >= 1 / LEVEL_MAX_HZ:
+            self._last = now
+            try:
+                self._on_level(rms_level(data))
+            except Exception as e:
+                log.debug(f"on_level falhou: {e}")
+        return data
+
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
+
 
 class Ear:
     def __init__(self):
+        from services import user_prefs
+
         self.recognizer = sr.Recognizer()
         self.microphone = sr.Microphone(device_index=settings.MIC_INDEX)
-        
+        self.on_level = None  # callback(nível 0..1) do visualizador de voz
+
         # Configurações de Sensibilidade
         # Threshold estático evita que o ruído de ventilador eleve o limiar e o mic
-        # pare de ouvir. Se MIC_ENERGY_THRESHOLD <= 0, volta ao modo dinâmico.
-        if settings.MIC_ENERGY_THRESHOLD > 0:
+        # pare de ouvir. Se o limiar for <= 0, volta ao modo dinâmico.
+        threshold = user_prefs.get("mic_threshold")
+        if threshold > 0:
             self.recognizer.dynamic_energy_threshold = False
-            self.recognizer.energy_threshold = settings.MIC_ENERGY_THRESHOLD
+            self.recognizer.energy_threshold = threshold
         else:
             self.recognizer.dynamic_energy_threshold = True
         self.recognizer.pause_threshold = 1.5
-        
+
         # Configurações de Estado
         self.WAKE_WORDS = ['jarvis', 'jar', 'jair', 'javis', 'davis', 'gervis', 'jarbas', 'garvis', 'jefferson', 'jorge', 'jair vis']
         self.last_interaction_time = 0
-        self.conversation_timeout = 60 # 60s de janela de atenção
+        self.conversation_timeout = user_prefs.get("attention_window")  # janela de atenção (s)
         
         # Controle de "Ouvidos Tapados"
         self.is_paused = False
@@ -61,8 +107,12 @@ class Ear:
                 time_since_last = time.time() - self.last_interaction_time
                 is_active_mode = time_since_last < self.conversation_timeout
 
+                if self.on_level and not isinstance(source.stream, _LevelTap):
+                    source.stream = _LevelTap(source.stream, self.on_level)
                 try:
                     audio = self.recognizer.listen(source, timeout=None)
+                    if self.on_level:
+                        self.on_level(0.0)  # fim da fala: barras zeram
                     
                     if self.is_paused: 
                         continue
@@ -130,8 +180,12 @@ def get_ear():
         jarvis_ear = Ear()
     return jarvis_ear
 
-def listen():
-    return get_ear().listen()
+def listen(on_level=None):
+    """Ouve até um comando. `on_level(0..1)` recebe o nível do microfone
+    (no máx. LEVEL_MAX_HZ vezes por segundo) para o visualizador da TUI."""
+    ear = get_ear()
+    ear.on_level = on_level
+    return ear.listen()
 
 def ear_pause():
     # Sem ouvido criado não há o que pausar — não abre o mic só pra isso.

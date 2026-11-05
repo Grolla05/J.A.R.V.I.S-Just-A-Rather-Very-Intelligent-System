@@ -6,6 +6,7 @@ direto — main.py do backend põe a raiz no sys.path. Dois modos, alternados co
 - COPILOT → agente SÓ POR VOZ: o campo de texto dá lugar à barra de voz e à orb;
             o mesmo pipeline de stream, com skills liberadas, e a resposta é falada.
 """
+import inspect
 import logging
 import re
 import threading
@@ -23,7 +24,18 @@ from textual.worker import get_current_worker
 import core.state as state
 from core import db, log, settings
 from frontend.commands import help_markdown, parse, unescape
-from frontend.screens import JarvisScreen, LogScreen, SkillsScreen, StatusScreen
+from frontend.screens import (
+    BootScreen,
+    HousePartyScreen,
+    JarvisScreen,
+    LogScreen,
+    SettingsScreen,
+    ShutdownScreen,
+    SkillsScreen,
+    StatusScreen,
+    VaultScreen,
+    is_trigger,
+)
 from frontend.sprites import block_bar
 from frontend.widgets import (
     ConfirmScreen,
@@ -39,6 +51,7 @@ from services import sessions
 MODES = ("chat", "copilot")
 STREAM_FLUSH_S = 0.05  # re-render do Markdown no máx. a cada 50 ms durante o stream
 TELEMETRY_HISTORY = 40  # amostras guardadas p/ os sparklines (40 × 3 s = 2 min)
+NOTE_CONTEXT_MAX = 4000  # caracteres da nota do /vault que vão ao modelo
 
 
 def _default_stream(text, session_id, images, mode, on_route=None):
@@ -50,9 +63,9 @@ class _DefaultVoice:
     """Sentidos reais (mic + TTS), importados só quando usados — import lazy
     mantém o boot sem microfone/pygame. Os testes injetam um fake."""
 
-    def listen(self):
+    def listen(self, on_level=None):
         from services.listen import listen
-        return listen()
+        return listen(on_level=on_level)
 
     def speak(self, text):
         from services.speak import speak
@@ -97,14 +110,19 @@ class JarvisApp(App, inherit_bindings=False):
     critical = reactive(False, init=False)
     busy = reactive(False, init=False)
 
-    def __init__(self, stream_fn=None, start_services=True, voice=None):
+    def __init__(self, stream_fn=None, start_services=True, voice=None, boot_fn=None):
+        """`boot_fn(report)` (core.boot.run_boot) mostra a tela de boot antes da
+        conversa; None (testes, `start_services=False`) pula direto pro chat."""
         super().__init__()
         self._stream_fn = stream_fn or _default_stream
         self._start_services = start_services
+        self._boot_fn = boot_fn
+        self._shutting_down = False
         self.voice = voice or _DefaultVoice()
         self.session_id = sessions.new_session_id()
         self.session_title = sessions.DEFAULT_TITLE
         self.pending_image = None   # anexo aguardando a próxima mensagem
+        self.pending_note = None    # nota do /vault aguardando a próxima mensagem
         self.edit_message_id = None  # id da msg sendo editada (↑ / /edit)
         self._voice_thread = None
         self._voice_stop = threading.Event()  # encerra o loop de voz junto com o app
@@ -154,6 +172,12 @@ class JarvisApp(App, inherit_bindings=False):
             self._boot_greeting()
         else:
             self.add_system("`[  OK  ]` Sistemas online.")
+        if self._boot_fn:
+            from core.boot import STEPS
+            self.push_screen(BootScreen(self._boot_fn, total_steps=len(STEPS)), self._boot_closed)
+
+    def _boot_closed(self, _result=None):
+        self.main_screen.query_one("#prompt").focus()
 
     # ---------------------------------------------------------------- helpers
     @property
@@ -360,6 +384,9 @@ class JarvisApp(App, inherit_bindings=False):
         if command:
             self.run_command(command)
             return
+        if is_trigger(text):
+            self.push_screen(HousePartyScreen())  # easter egg: não vai ao modelo
+            return
         if self.busy:
             self.notify("Aguarde a resposta atual (Esc interrompe).", severity="warning")
             event.input.value = text
@@ -398,6 +425,7 @@ class JarvisApp(App, inherit_bindings=False):
         elif name == "attach":
             self._attach(arg)
         elif name == "detach":
+            self.pending_note = None
             self._set_pending_image(None)
         elif name == "mode":
             if arg in MODES:
@@ -414,6 +442,10 @@ class JarvisApp(App, inherit_bindings=False):
             self.push_screen(StatusScreen())
         elif name == "log":
             self.push_screen(LogScreen())
+        elif name == "vault":
+            self.push_screen(VaultScreen(arg), self._use_note)
+        elif name == "config":
+            self.push_screen(SettingsScreen())
         elif name == "clear":
             self.action_clear()
         elif name == "quit":
@@ -438,10 +470,34 @@ class JarvisApp(App, inherit_bindings=False):
 
     def _set_pending_image(self, upload):
         self.pending_image = upload
+        self._refresh_attachbar()
+
+    def _use_note(self, note):
+        """Callback do /vault: a nota escolhida vai junto da próxima mensagem."""
+        if note:
+            self.pending_note = note
+            self._refresh_attachbar()
+            self.main_screen.query_one("#prompt", PromptInput).focus()
+
+    def _refresh_attachbar(self):
+        parts = []
+        if self.pending_image:
+            parts.append(f"📎 {self.pending_image['name']}")
+        if self.pending_note:
+            parts.append(f"▣ nota {self.pending_note['path'].rsplit('/', 1)[-1]}")
         bar = self.main_screen.query_one("#attachbar", Static)
-        bar.display = upload is not None
-        if upload:
-            bar.update(f" 📎 {upload['name']} — vai junto com a próxima mensagem   [dim]/detach remove[/]")
+        bar.display = bool(parts)
+        if parts:
+            bar.update(f" {' · '.join(parts)} — vai junto com a próxima mensagem   [dim]/detach remove[/]")
+
+    def _with_note(self, text, note):
+        """Texto que vai ao modelo: a mensagem + a nota do vault como contexto
+        (prompt em backend/prompts/vault_note_context.md). O histórico guarda só a mensagem."""
+        if not note:
+            return text
+        from core.prompts import load_prompt
+        return load_prompt("vault_note_context.md", note_path=note["path"],
+                           note_content=note["content"][:NOTE_CONTEXT_MAX], message=text)
 
     @work(thread=True, group="transcribe")
     def _transcribe(self, upload):
@@ -481,11 +537,14 @@ class JarvisApp(App, inherit_bindings=False):
 
     # ------------------------------------------------------------------- chat
     def send(self, text):
-        image = self.pending_image
-        self._set_pending_image(None)
+        image, note = self.pending_image, self.pending_note
+        self.pending_image = self.pending_note = None
+        self._refresh_attachbar()
         now = _now_hhmm()
-        reply = self._begin_turn(text, user_meta=now + (f" · anexo: {image['name']}" if image else ""))
-        self._stream(text, image, self.mode, self.session_id, reply)
+        meta = now + (f" · anexo: {image['name']}" if image else "")
+        meta += f" · nota: {note['path'].rsplit('/', 1)[-1]}" if note else ""
+        reply = self._begin_turn(text, user_meta=meta)
+        self._stream(text, image, self.mode, self.session_id, reply, self._with_note(text, note))
 
     def _begin_turn(self, text, user_meta):
         """Bolha do usuário + bolha vazia da resposta; marca a TUI como ocupada."""
@@ -496,12 +555,13 @@ class JarvisApp(App, inherit_bindings=False):
         return reply
 
     @work(thread=True, exclusive=True, group="chat")
-    def _stream(self, text, image, mode, session_id, reply):
-        full = self._run_turn(text, image, mode, session_id, reply, worker=get_current_worker())
+    def _stream(self, text, image, mode, session_id, reply, model_text=None):
+        full = self._run_turn(text, image, mode, session_id, reply, worker=get_current_worker(),
+                              model_text=model_text)
         if full == "PROTOCOL_SHUTDOWN":
             self.call_from_thread(self.shutdown_jarvis)
 
-    def _run_turn(self, text, image, mode, session_id, reply, worker=None, on_output=None):
+    def _run_turn(self, text, image, mode, session_id, reply, worker=None, on_output=None, model_text=None):
         """Roda UMA mensagem pelo brain numa thread de fundo e pinta a resposta.
         Usado pelo Chat (worker) e pelo Copilot por voz. on_output() avisa o
         1º sinal de resposta (skill roteada ou 1º trecho) — a orb passa a 'respondendo'.
@@ -534,7 +594,7 @@ class JarvisApp(App, inherit_bindings=False):
             db.log_interaction("user", text, session_id, att_type, att_path)
 
             last_flush = 0.0
-            for chunk in self._stream_fn(text, session_id, images, mode, on_route=on_route):
+            for chunk in self._stream_fn(model_text or text, session_id, images, mode, on_route=on_route):
                 if worker is not None and worker.is_cancelled:
                     full += "\n\n_(interrompido)_"
                     break
@@ -651,6 +711,22 @@ class JarvisApp(App, inherit_bindings=False):
         self._voice_thread = threading.Thread(target=self._voice_loop, daemon=True)
         self._voice_thread.start()
 
+    def _listen_with_level(self):
+        """voice.listen com o nível do mic indo p/ a barra de voz (se a voz
+        injetada aceitar `on_level`; os fakes antigos dos testes não aceitam)."""
+        try:
+            accepts = "on_level" in inspect.signature(self.voice.listen).parameters
+        except (TypeError, ValueError):
+            accepts = False
+        if not accepts:
+            return self.voice.listen()
+        return self.voice.listen(on_level=lambda lvl: self._call_ui(self._set_voice_level, lvl))
+
+    def _set_voice_level(self, level):
+        if not self.is_running:
+            return
+        self.main_screen.query_one("#voicebar", VoiceBar).set_level(level)
+
     def _set_orb(self, orb_state):
         self.main_screen.query_one("#copilot-hero", CopilotHero).set_state(orb_state)
 
@@ -665,10 +741,11 @@ class JarvisApp(App, inherit_bindings=False):
                     time.sleep(0.3)
                     continue
                 self._call_ui(self._set_orb, "ouvindo")
-                command = self.voice.listen()
+                command = self._listen_with_level()
                 if not command or not state.voice_enabled:
                     time.sleep(0.05)
                     continue
+                self._call_ui(self._set_voice_level, None)  # saiu de "ouvindo": barras zeram
                 self._call_ui(self._set_orb, "pensando")
                 session_id = self.session_id
                 reply = self._call_ui(self._begin_turn, command, f"voz · {_now_hhmm()}")
@@ -705,7 +782,18 @@ class JarvisApp(App, inherit_bindings=False):
         self.call_from_thread(self.add_system, f"`[  OK  ]` Sistemas online. Bem-vindo de volta, {name}.")
 
     def shutdown_jarvis(self):
+        """Encerra com o desligamento CRT; chamado de novo (Ctrl+Q duas vezes) sai na hora."""
+        if self._shutting_down:
+            self._exit_now()
+            return
+        self._shutting_down = True
         log.info("Aplicação encerrada pela TUI.")
+        self._voice_stop.set()
+        state.announce = None
+        self.push_screen(ShutdownScreen(self._exit_now))
+
+    def _exit_now(self):
+        self._shutting_down = True
         self._voice_stop.set()
         state.announce = None
         self.exit()

@@ -67,10 +67,22 @@ def _treat_text(text):
         text = re.sub(slang, expansion, text, flags=re.IGNORECASE)
     return text.strip()
 
+def _voice_prefs():
+    """Voz, velocidade (+N%) e volume (0..1) escolhidos no /config da TUI."""
+    try:
+        from services import user_prefs
+        return (user_prefs.get("tts_voice"), f"{user_prefs.get('tts_rate'):+d}%",
+                user_prefs.get("tts_volume") / 100)
+    except Exception as e:
+        log.debug(f"Preferências de voz indisponíveis: {e}")
+        return VOICE_ONLINE, "+10%", 1.0
+
+
 async def _generate_audio_online(text, file_path):
     import edge_tts
     clean_text = _treat_text(text)
-    communicate = edge_tts.Communicate(clean_text, VOICE_ONLINE, rate="+10%")
+    voice, rate, _volume = _voice_prefs()
+    communicate = edge_tts.Communicate(clean_text, voice, rate=rate)
     await communicate.save(file_path)
 
 def speak_online(text, on_play=None):
@@ -91,6 +103,7 @@ def speak_online(text, on_play=None):
 
         # 3. Toca o áudio
         pygame.mixer.music.load(filename_str)
+        pygame.mixer.music.set_volume(_voice_prefs()[2])
 
         if on_play:
             on_play()

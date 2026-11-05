@@ -17,6 +17,8 @@ COMMANDS = {
     "skills":   ("/skills [on|off <skill|categoria>]", "cartuchos das skills (ou alterna direto)"),
     "status":   ("/status", "dashboard do sistema: CPU, RAM, GPU, rede e processos"),
     "log":      ("/log", "log de atividade com filtros e o último turno do Copilot"),
+    "vault":    ("/vault [termo]", "memória no Obsidian: árvore, busca e nota no chat"),
+    "config":   ("/config", "ajustes de voz e microfone (menu estilo RPG)"),
     "clear":    ("/clear", "limpa a tela (não apaga o histórico)"),
     "quit":     ("/quit", "encerra o J.A.R.V.I.S (Ctrl+Q)"),
 }

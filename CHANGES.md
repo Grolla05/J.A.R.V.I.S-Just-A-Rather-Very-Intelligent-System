@@ -3,6 +3,27 @@
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
 **Data:** 2026-11-05
+**Escopo:** Fases 3 e 4 de 4 das novas telas 16-bit: `/vault`, `/config`, nível real do microfone na barra de voz, tela de boot, desligamento CRT e o easter egg "House Party Protocol".
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | Nível real do microfone: `_LevelTap` envolve o stream do mic e calcula o RMS de cada bloco (sem `audioop`, removido no 3.13), avisando no máx. 8×/s. `listen(on_level=)` repassa para a TUI | `backend/services/listen.py` |
+| 2 | Barra de voz do Copilot mostra o espectro real (24 amostras ▁…█) e um VU de 15 blocos; zera fora do estado "ouvindo", sem timer | `frontend/widgets.py` (`VoiceBar.set_level`), `frontend/app.py` (`_listen_with_level`) |
+| 3 | `/vault [termo]`: árvore do vault carregada pasta a pasta, busca com radar pixel-art girando só durante a busca, prévia em Markdown e "▶ usar no chat" — a nota vai como contexto da próxima mensagem (o histórico guarda só a pergunta) | `frontend/screens/vault.py` (novo), `backend/core/obsidian.py` (`list_dir`, `search_results`), `backend/prompts/vault_note_context.md` (novo), `frontend/app.py` (`pending_note`) |
+| 4 | `/config`: menu estilo RPG (VOZ, MICROFONE, MODELO, SOBRE) com cursor ▶, opções ◀ ▶ e barra de blocos, e caixa de diálogo com o rosto pixel-art do JARVIS | `frontend/screens/settings.py` (novo), `backend/services/user_prefs.py` (novo) |
+| 5 | Preferências persistidas na tabela `config`: voz neural, velocidade e volume do TTS; limiar do mic e janela de atenção | `backend/services/user_prefs.py`, `backend/services/speak.py`, `backend/services/listen.py` |
+| 6 | Tela de boot: checagens estilo BIOS (`[  OK  ]`/`[ WARN ]`/`[ FAIL ]`), logo montado por scanline a 8 fps e barra de progresso; fecha sozinha (ou `Esc`). Warm-up do Ollama e scan de hardware seguem em threads daemon | `backend/core/boot.py` (novo), `frontend/screens/boot.py` (novo), `backend/main.py` |
+| 7 | Desligamento CRT no `Ctrl+Q`/`/quit`: 3 linhas `[  OK  ]` e 5 quadros (tela cheia → faixa → linha → ponto); `Ctrl+Q` de novo sai na hora | `frontend/screens/shutdown.py` (novo), `frontend/app.py` (`shutdown_jarvis`) |
+| 8 | Easter egg: digitar "house party" no Chat abre 8 armaduras genéricas em pixel art entrando 1 por quadro; não vai ao modelo | `frontend/screens/house_party.py` (novo), `frontend/app.py` |
+| 9 | Comandos novos `/vault` e `/config` no `/help` | `frontend/commands.py` |
+
+**Decisões:** o nível do mic é lido no próprio stream que o `speech_recognition` usa (nada de abrir um 2º dispositivo). A janela de boot não espera o Ollama (pode levar até 120 s): ele aquece em segundo plano. Labels com `[  OK  ]` usam `markup=False` — o Textual lia o selo como tag e o apagava. O modelo do Ollama segue só no `.env` (o `/config` mostra, não troca).
+
+**Testes novos:** `test_tui_phase34.py`: RMS (silêncio, cheio, meio), `_LevelTap` (áudio intacto, limite de 8×/s, repasse do resto do stream), `user_prefs` (padrão, passo com limite, lixo no banco), `run_boot` (etapas, falha, fim), barra de voz com nível, `/config` persistindo, `/vault` (busca, radar parado, nota indo ao modelo sem sujar o histórico), boot fechando sozinho, CRT antes do `exit`, `Ctrl+Q` duplo e o easter egg.
+
+---
+
+**Data:** 2026-11-05
 **Escopo:** Fase 2 de 4 das novas telas 16-bit: telas de dados (`/status`, `/skills`, `/log` e save slots) + ajustes da Fase 1 após comparar capturas reais da TUI com o canvas "JARVIS TUI".
 
 | # | Mudança | Arquivos |

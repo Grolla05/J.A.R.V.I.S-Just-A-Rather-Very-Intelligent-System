@@ -1,6 +1,7 @@
 """Widgets da TUI do J.A.R.V.I.S (Textual)."""
 import re
 import time
+from collections import deque
 from datetime import date, datetime, timedelta
 
 from rich.style import Style as RichStyle
@@ -299,11 +300,33 @@ class VoiceBar(Horizontal):
     LISTENING = 'Ouvindo… diga "Jarvis" e peça uma ação'
     AWAITING = 'Aguardando sua resposta: diga "sim" ou "não"'
 
+    WAVE_WIDTH = 24  # amostras do espectro (8 por segundo → ~3 s de histórico)
+    VU_WIDTH = 15
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.levels = deque([0.0] * self.WAVE_WIDTH, maxlen=self.WAVE_WIDTH)
+
     def compose(self) -> ComposeResult:
         yield Static("●", id="voice-mic")
         yield Static(VOICE_WAVE, id="voice-wave")
         yield Static(self.LISTENING, id="voice-text", markup=False)
+        yield Static(sprites.block_bar(0, self.VU_WIDTH, "█", "░"), id="voice-vu")
         yield Static("Esc interrompe", id="voice-hint")
+
+    def set_level(self, level):
+        """Nível real do microfone (0..1) — vem do RMS do listen.py. `None`
+        zera tudo (fora do estado 'ouvindo' as barras ficam paradas em zero)."""
+        if level is None:
+            self.levels.extend([0.0] * self.WAVE_WIDTH)
+            level = 0.0
+        else:
+            level = max(0.0, min(1.0, float(level)))
+            self.levels.append(level)
+        self.query_one("#voice-wave", Static).update(
+            sprites.sparkline([v * 100 for v in self.levels], width=self.WAVE_WIDTH))
+        self.query_one("#voice-vu", Static).update(
+            sprites.block_bar(level * 100, self.VU_WIDTH, "█", "░"))
 
     def set_awaiting(self, awaiting):
         self.query_one("#voice-text", Static).update(self.AWAITING if awaiting else self.LISTENING)
