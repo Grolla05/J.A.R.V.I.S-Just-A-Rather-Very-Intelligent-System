@@ -232,6 +232,8 @@ class SystemInfo:
         return {
             "upload_speed": self._get_size(sent_per_sec) + "/s",
             "download_speed": self._get_size(recv_per_sec) + "/s",
+            "upload_bps": max(0.0, sent_per_sec),    # números crus p/ o sparkline da TUI
+            "download_bps": max(0.0, recv_per_sec),
             "total_sent": self._get_size(net.bytes_sent),
             "total_recv": self._get_size(net.bytes_recv)
         }

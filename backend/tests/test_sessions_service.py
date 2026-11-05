@@ -86,6 +86,20 @@ class TestSessionsService(unittest.TestCase):
         self.assertTrue(recent[0]["is_pinned"])
         self.assertEqual(recent[0]["title"], "velha")
 
+    def test_recent_sessions_bring_count_and_last_message(self):
+        self._chat("s1", ("oi", "olá"), ("tudo bem?", "tudo certo, Senhor"))
+        recent = sessions.get_recent_sessions()
+        self.assertEqual(recent[0]["msg_count"], 4)
+        self.assertEqual(recent[0]["last_message"], "tudo certo, Senhor")
+
+    def test_delete_session_removes_history_and_meta(self):
+        self._chat("s1", ("a", "b"))
+        self._chat("s2", ("c", "d"))
+        sessions.toggle_session_pin("s1", True)
+        self.assertTrue(sessions.delete_session("s1"))
+        self.assertEqual(sessions.get_chat_history("s1"), [])
+        self.assertEqual([s["id"] for s in sessions.get_recent_sessions()], ["s2"])
+
 
 if __name__ == "__main__":
     unittest.main()

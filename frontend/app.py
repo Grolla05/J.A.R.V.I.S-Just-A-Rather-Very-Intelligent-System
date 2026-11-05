@@ -10,6 +10,7 @@ import logging
 import re
 import threading
 import time
+from collections import deque
 
 from textual import work
 from textual.app import App, ComposeResult
@@ -22,18 +23,22 @@ from textual.worker import get_current_worker
 import core.state as state
 from core import db, log, settings
 from frontend.commands import help_markdown, parse, unescape
+from frontend.screens import JarvisScreen, LogScreen, SkillsScreen, StatusScreen
+from frontend.sprites import block_bar
 from frontend.widgets import (
     ConfirmScreen,
     CopilotHero,
     MessageView,
     PromptInput,
     SessionPicker,
+    StatusLine,
     VoiceBar,
 )
 from services import sessions
 
 MODES = ("chat", "copilot")
 STREAM_FLUSH_S = 0.05  # re-render do Markdown no máx. a cada 50 ms durante o stream
+TELEMETRY_HISTORY = 40  # amostras guardadas p/ os sparklines (40 × 3 s = 2 min)
 
 
 def _default_stream(text, session_id, images, mode, on_route=None):
@@ -107,6 +112,11 @@ class JarvisApp(App, inherit_bindings=False):
         self._session_info = "nova sessão"  # "sessão N de M" (cache, evita SQL a cada refresh)
         self._skills_info = ""
         self._skills_active = 0
+        # Histórico curto da telemetria (sparklines do /status) e último turno
+        # com skill (timeline do /log). Só a thread da UI escreve aqui.
+        self.telemetry_history = {name: deque(maxlen=TELEMETRY_HISTORY)
+                                  for name in ("CPU", "RAM", "GPU", "REDE")}
+        self.last_skill_turn = None
 
     # ------------------------------------------------------------------ layout
     def compose(self) -> ComposeResult:
@@ -122,18 +132,18 @@ class JarvisApp(App, inherit_bindings=False):
         yield VoiceBar(id="voicebar")
         # Telemetria e atalhos dividem UMA linha (canvas "JARVIS TUI")
         with Horizontal(id="statusbar", classes="statusbar"):
-            yield Static(id="status-left", classes="status-left")
+            yield StatusLine(id="status-left", classes="status-left")
             yield Footer(show_command_palette=False)
 
     def on_mount(self):
         self._main_thread = threading.get_ident()
-        self.query_one("#attachbar").display = False
-        self.query_one("#voicebar").display = False
-        self.query_one("#copilot-hero").display = False
+        self.main_screen.query_one("#attachbar").display = False
+        self.main_screen.query_one("#voicebar").display = False
+        self.main_screen.query_one("#copilot-hero").display = False
         self._refresh_counts()
         self._refresh_topbar()
         self._refresh_status()
-        self.query_one("#prompt").focus()
+        self.main_screen.query_one("#prompt").focus()
         state.announce = self._announce_from_any_thread
         if self._start_services:
             log.use_tui(_TuiLogHandler(self))
@@ -143,12 +153,12 @@ class JarvisApp(App, inherit_bindings=False):
             self._poll_telemetry()
             self._boot_greeting()
         else:
-            self.add_system("Sistemas online.")
+            self.add_system("`[  OK  ]` Sistemas online.")
 
     # ---------------------------------------------------------------- helpers
     @property
     def log_view(self) -> VerticalScroll:
-        return self.query_one("#log", VerticalScroll)
+        return self.main_screen.query_one("#log", VerticalScroll)
 
     def add_message(self, role, text, meta=""):
         view = MessageView(role, text, meta=meta)
@@ -182,30 +192,30 @@ class JarvisApp(App, inherit_bindings=False):
             log.debug(f"Contagem de skills indisponível: {e}")
             self._skills_active = 0
             self._skills_info = ""
-        self.query_one("#copilot-hero", CopilotHero).set_info(settings.OLLAMA_MODEL, self._skills_active)
+        self.main_screen.query_one("#copilot-hero", CopilotHero).set_info(settings.OLLAMA_MODEL, self._skills_active)
 
     def _refresh_topbar(self):
-        self.query_one("#mode-badge", Static).update("COPILOT" if self.mode == "copilot" else "CHAT")
+        self.main_screen.query_one("#mode-badge", Static).update("COPILOT" if self.mode == "copilot" else "CHAT")
         title = (self.session_title or sessions.DEFAULT_TITLE).replace("\n", " ")[:70]
-        self.query_one("#session-title", Static).update(title)
+        self.main_screen.query_one("#session-title", Static).update(title)
         if self.critical:
             info = "⚠ PROTOCOLO CRÍTICO"
         elif self.mode == "copilot":
             info = " · ".join(p for p in ("somente voz", self._skills_info) if p)
         else:
             info = self._session_info
-        self.query_one("#topbar-info", Static).update(info)
+        self.main_screen.query_one("#topbar-info", Static).update(info)
 
     def status_text(self):
         """Lado esquerdo da linha de status: telemetria · voz · modelo · ocupado."""
         voice = "voz on" if state.voice_enabled else "voz off"
-        busy = "   pensando…" if self.busy else ""
+        busy = "   ▚ pensando…" if self.busy else ""
         model = settings.OLLAMA_MODEL or "?"
         parts = [p for p in (self._telemetry, voice, model) if p]
         return "   ".join(parts) + busy
 
     def _refresh_status(self):
-        self.query_one("#status-left", Static).update(self.status_text())
+        self.main_screen.query_one("#status-left", StatusLine).update(self.status_text())
 
     # --------------------------------------------------------------- watchers
     @property
@@ -216,17 +226,22 @@ class JarvisApp(App, inherit_bindings=False):
     def watch_mode(self, mode):
         copilot = mode == "copilot"
         self.main_screen.set_class(copilot, "-copilot")
-        prompt = self.query_one("#prompt", PromptInput)
+        prompt = self.main_screen.query_one("#prompt", PromptInput)
         prompt.display = not copilot
-        self.query_one("#voicebar").display = copilot
-        self.query_one("#copilot-hero").display = copilot
+        self.main_screen.query_one("#voicebar").display = copilot
+        self.main_screen.query_one("#copilot-hero").display = copilot
         if not copilot:
             prompt.focus()
         self._set_voice(copilot)  # Copilot é só por voz; o Chat é só texto
         self._refresh_topbar()
         self.refresh_bindings()
 
+    # Atalhos da conversa que não valem dentro das telas cheias (/status, /log…)
+    _CONVERSATION_ACTIONS = {"toggle_mode", "new_session", "sessions", "regen", "toggle_voice", "cancel", "clear"}
+
     def check_action(self, action, parameters):
+        if action in self._CONVERSATION_ACTIONS and isinstance(self.screen, JarvisScreen):
+            return False
         # ^t no Copilot não faz sentido (a voz já está ligada): some do rodapé
         if action == "toggle_voice" and self.mode == "copilot":
             return False
@@ -257,7 +272,7 @@ class JarvisApp(App, inherit_bindings=False):
     def action_sessions(self):
         if self.busy:
             return
-        self.push_screen(SessionPicker(sessions.get_recent_sessions(20), self.session_id),
+        self.push_screen(SessionPicker(sessions.get_recent_sessions(20), self.session_id, service=sessions),
                          self._open_session)
 
     def action_regen(self):
@@ -278,7 +293,7 @@ class JarvisApp(App, inherit_bindings=False):
         if not last_user:
             return
         self.edit_message_id = last_user["id"]
-        prompt = self.query_one("#prompt", PromptInput)
+        prompt = self.main_screen.query_one("#prompt", PromptInput)
         prompt.value = last_user["content"]
         prompt.cursor_position = len(prompt.value)
         self.notify("Editando a última mensagem — Enter reenvia, Esc cancela.")
@@ -286,7 +301,7 @@ class JarvisApp(App, inherit_bindings=False):
     def action_cancel(self):
         if self.edit_message_id is not None:
             self.edit_message_id = None
-            self.query_one("#prompt", PromptInput).value = ""
+            self.main_screen.query_one("#prompt", PromptInput).value = ""
             return
         self.workers.cancel_group(self, "chat")
 
@@ -395,6 +410,10 @@ class JarvisApp(App, inherit_bindings=False):
             self.action_toggle_voice()
         elif name == "skills":
             self._skills(arg)
+        elif name == "status":
+            self.push_screen(StatusScreen())
+        elif name == "log":
+            self.push_screen(LogScreen())
         elif name == "clear":
             self.action_clear()
         elif name == "quit":
@@ -419,7 +438,7 @@ class JarvisApp(App, inherit_bindings=False):
 
     def _set_pending_image(self, upload):
         self.pending_image = upload
-        bar = self.query_one("#attachbar", Static)
+        bar = self.main_screen.query_one("#attachbar", Static)
         bar.display = upload is not None
         if upload:
             bar.update(f" 📎 {upload['name']} — vai junto com a próxima mensagem   [dim]/detach remove[/]")
@@ -436,28 +455,29 @@ class JarvisApp(App, inherit_bindings=False):
         if not text:
             self.notify("Falha na transcrição do áudio.", severity="error")
             return
-        prompt = self.query_one("#prompt", PromptInput)
+        prompt = self.main_screen.query_one("#prompt", PromptInput)
         prompt.value = (prompt.value + " " + text).strip()
         prompt.cursor_position = len(prompt.value)
         prompt.focus()
 
     # ----------------------------------------------------------------- skills
     def _skills(self, arg):
-        from services.skill_settings import list_skills, set_enabled
+        from services.skill_settings import set_enabled
         action, _, target = arg.partition(" ")
         if action in ("on", "off") and target:
             kind = set_enabled(target.strip(), action == "on")
             if kind:
                 self.notify(f"{kind} '{target}' {'ativada' if action == 'on' else 'desativada'}.")
+                self._refresh_counts()
+                self._refresh_topbar()
             else:
                 self.notify(f"Skill/categoria não encontrada: {target}", severity="error")
             return
-        lines = []
-        for cat in list_skills():
-            lines.append(f"**{cat['id']}** {'' if cat['enabled'] else '_(desligada)_'}")
-            lines += [f"- {'✅' if s['enabled'] else '⛔'} `{s['id']}`" for s in cat["skills"]]
-        lines.append("\n`/skills on|off <skill|categoria>` para alternar.")
-        self.add_message("assistant", "\n".join(lines) if len(lines) > 1 else "Nenhuma skill carregada.")
+        self.push_screen(SkillsScreen(), self._skills_closed)
+
+    def _skills_closed(self, _result=None):
+        self._refresh_counts()
+        self._refresh_topbar()
 
     # ------------------------------------------------------------------- chat
     def send(self, text):
@@ -498,8 +518,10 @@ class JarvisApp(App, inherit_bindings=False):
 
         def on_route(intent):
             skill.append(intent)
+            self.last_skill_turn = {"command": text, "intent": intent, "status": "run",
+                                    "voice": on_output is not None, "time": _now_hhmm()}
             output_started()
-            self.call_from_thread(reply.set_meta, f"{base_meta} · [{intent}] executando…")
+            self.call_from_thread(reply.set_meta, f"{base_meta} · ▚ [{intent}] executando…")
 
         try:
             images, att_type, att_path = None, None, None
@@ -530,17 +552,25 @@ class JarvisApp(App, inherit_bindings=False):
                 full = "_Sem resposta do modelo. O Ollama está rodando?_"
             self.call_from_thread(reply.set_text, full)
             if skill:
-                self.call_from_thread(reply.set_meta, f"{base_meta} · [{skill[0]}] ✓")
+                self.call_from_thread(reply.set_meta, f"{base_meta} · ■ [{skill[0]}] ✓")
+                self._finish_skill_turn("ok", full)
             db.log_interaction("assistant", full, session_id)
         except Exception as e:
             log.error(f"Erro no stream do chat: {e}")
             self.call_from_thread(reply.set_text, f"**Erro:** `{e}`")
             if skill:
-                self.call_from_thread(reply.set_meta, f"{base_meta} · [{skill[0]}] ✗")
+                self.call_from_thread(reply.set_meta, f"{base_meta} · ■ [{skill[0]}] ✗")
+                self._finish_skill_turn("fail", str(e))
             full = ""
         finally:
             self.call_from_thread(self._stream_done, session_id)
         return full
+
+    def _finish_skill_turn(self, status, result):
+        turn = self.last_skill_turn
+        if turn:
+            self.last_skill_turn = {**turn, "status": status,
+                                    "result": " ".join(str(result or "").split())[:60]}
 
     def _stream_done(self, session_id):
         self.busy = False
@@ -559,11 +589,11 @@ class JarvisApp(App, inherit_bindings=False):
         self.add_system(text)
         pending = state.pending_critical_action
         if pending and not isinstance(self.screen, ConfirmScreen):
-            self.query_one("#voicebar", VoiceBar).set_awaiting(True)
+            self.main_screen.query_one("#voicebar", VoiceBar).set_awaiting(True)
             self.push_screen(ConfirmScreen(text, deadline=pending.get("timeout")), self._resolve_critical)
 
     def _resolve_critical(self, approved):
-        self.query_one("#voicebar", VoiceBar).set_awaiting(False)
+        self.main_screen.query_one("#voicebar", VoiceBar).set_awaiting(False)
         self._confirm_worker(bool(approved))
 
     @work(thread=True, group="confirm")
@@ -587,18 +617,27 @@ class JarvisApp(App, inherit_bindings=False):
 
     def _read_telemetry(self):
         mon = state.sys_monitor
+        values = {}
         try:
             cpu = (mon.get_cpu_detailed() or {}).get("usage", 0) or 0
             ram = (mon.get_ram_usage() or {}).get("percent", 0) or 0
             gpu = (mon.get_gpu_info() or {}).get("load", 0) or 0
-            text = f"CPU {cpu:.0f}%   RAM {ram:.0f}%   GPU {gpu:.0f}%"
+            values = {"CPU": cpu, "RAM": ram, "GPU": gpu}
+            net_fn = getattr(mon, "get_network_speed", None)
+            if callable(net_fn):
+                net = net_fn() or {}
+                values["REDE"] = (net.get("download_bps", 0) or 0) + (net.get("upload_bps", 0) or 0)
+            text = "   ".join(f"{name} {block_bar(value)} {value:.0f}%"
+                              for name, value in (("CPU", cpu), ("RAM", ram), ("GPU", gpu)))
         except Exception as e:
             log.debug(f"Telemetria indisponível: {e}")
             text = "telemetria indisponível"
-        self.call_from_thread(self._set_telemetry, text)
+        self.call_from_thread(self._set_telemetry, text, values)
 
-    def _set_telemetry(self, text):
+    def _set_telemetry(self, text, values=None):
         self._telemetry = text
+        for name, value in (values or {}).items():
+            self.telemetry_history.setdefault(name, deque(maxlen=TELEMETRY_HISTORY)).append(value)
         self._refresh_status()
 
     # ------------------------------------------------------------------ voice
@@ -613,7 +652,7 @@ class JarvisApp(App, inherit_bindings=False):
         self._voice_thread.start()
 
     def _set_orb(self, orb_state):
-        self.query_one("#copilot-hero", CopilotHero).set_state(orb_state)
+        self.main_screen.query_one("#copilot-hero", CopilotHero).set_state(orb_state)
 
     def _voice_loop(self):
         """Copilot por voz: ouve → mesmo pipeline de stream do Copilot → fala.
@@ -663,7 +702,7 @@ class JarvisApp(App, inherit_bindings=False):
             name = obsidian.get_memory("nome") or "Senhor"
         except Exception:
             name = "Senhor"
-        self.call_from_thread(self.add_system, f"Sistemas online. Bem-vindo de volta, {name}.")
+        self.call_from_thread(self.add_system, f"`[  OK  ]` Sistemas online. Bem-vindo de volta, {name}.")
 
     def shutdown_jarvis(self):
         log.info("Aplicação encerrada pela TUI.")

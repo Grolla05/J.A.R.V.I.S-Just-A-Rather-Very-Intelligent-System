@@ -14,7 +14,9 @@ COMMANDS = {
     "detach":   ("/detach", "remove o anexo pendente"),
     "mode":     ("/mode [chat|copilot]", "troca o modo (Shift+Tab)"),
     "voice":    ("/voice", "liga/desliga wake word + voz (Ctrl+T)"),
-    "skills":   ("/skills [on|off <skill|categoria>]", "lista ou alterna skills"),
+    "skills":   ("/skills [on|off <skill|categoria>]", "cartuchos das skills (ou alterna direto)"),
+    "status":   ("/status", "dashboard do sistema: CPU, RAM, GPU, rede e processos"),
+    "log":      ("/log", "log de atividade com filtros e o último turno do Copilot"),
     "clear":    ("/clear", "limpa a tela (não apaga o histórico)"),
     "quit":     ("/quit", "encerra o J.A.R.V.I.S (Ctrl+Q)"),
 }

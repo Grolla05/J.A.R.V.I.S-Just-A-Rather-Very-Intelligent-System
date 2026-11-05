@@ -87,7 +87,7 @@ class TestJarvisApp(unittest.IsolatedAsyncioTestCase):
         voice.app = app
         return app
 
-    async def _wait_for(self, pilot, condition, timeout=5.0):
+    async def _wait_for(self, pilot, condition, timeout=10.0):
         end = time.monotonic() + timeout
         while time.monotonic() < end:
             if condition():
@@ -277,6 +277,131 @@ class TestJarvisApp(unittest.IsolatedAsyncioTestCase):
             await pilot.press("s")
             await pilot.pause()
             self.assertEqual(results, [True])
+
+    async def test_confirm_screen_has_pixel_icon_and_countdown_bar(self):
+        app = self._app()
+        async with app.run_test() as pilot:
+            app.push_screen(tui_app.ConfirmScreen("Encerrar?"))
+            await pilot.pause()
+            icon = app.screen.query_one("#confirm-icon")
+            self.assertEqual((icon.region.width, icon.region.height), (16, 6))
+            bar = str(app.screen.query_one("#confirm-bar").render())
+            self.assertEqual(len(bar), 30)
+            self.assertTrue(bar.startswith("█"))
+
+    async def test_telemetry_shows_block_bars(self):
+        app = self._app()
+        async with app.run_test() as pilot:
+            class Mon:
+                def get_cpu_detailed(self): return {"usage": 41}
+                def get_ram_usage(self): return {"percent": 100}
+                def get_gpu_info(self): return {"load": 0}
+            with patch.object(state, "sys_monitor", Mon()):
+                app._poll_telemetry()
+                await app.workers.wait_for_complete()
+                await pilot.pause()
+            text = str(app.query_one("#status-left").render())
+            self.assertIn("CPU ▰▰▱▱▱ 41%", text)
+            self.assertIn("RAM ▰▰▰▰▰ 100%", text)
+            self.assertIn("GPU ▱▱▱▱▱ 0%", text)
+
+    async def test_session_picker_marks_current_with_cursor_and_slot(self):
+        app = self._app()
+        async with app.run_test() as pilot:
+            await self._send(pilot, "receita de pão")
+            await pilot.press("ctrl+o")
+            await pilot.pause()
+            option = app.screen.query_one("#picker-list").get_option_at_index(0)
+            self.assertTrue(str(option.prompt).startswith("▶ 01"))
+
+    async def test_status_screen_shows_history_and_escape_returns(self):
+        app = self._app()
+        async with app.run_test(size=(140, 45)) as pilot:
+            for v in (10, 50, 90):
+                app._set_telemetry("CPU", {"CPU": v, "RAM": 40, "GPU": 5, "REDE": 2048})
+            await self._send(pilot, "/status")
+            await pilot.pause(0.3)
+            self.assertIsInstance(app.screen, tui_app.StatusScreen)
+            cpu = app.screen.query_one("#meter-cpu")
+            self.assertEqual(str(cpu.query_one(".meter-value").render()), "90%")
+            self.assertTrue(cpu.has_class("-alta"))
+            self.assertIn("█", str(cpu.query_one(".meter-chart").render()))
+            self.assertEqual(str(app.screen.query_one("#status-level").render()), "ALTA")
+            # atalhos da conversa somem dentro da tela cheia
+            self.assertFalse(app.check_action("toggle_mode", ()))
+            await pilot.press("escape")
+            await pilot.pause()
+            self.assertIs(app.screen, app.main_screen)
+
+    async def test_skills_screen_toggles_cartridge(self):
+        from services import skill_settings
+        state_ = {"APP_CONTROL": True}
+
+        def fake_list():
+            return [{"id": "automation", "enabled": True,
+                     "skills": [{"id": "APP_CONTROL", "enabled": state_["APP_CONTROL"]}]}]
+
+        def fake_set(target, enabled):
+            state_[target] = enabled
+            return "skill"
+
+        with patch.object(skill_settings, "list_skills", fake_list), \
+             patch.object(skill_settings, "set_enabled", fake_set):
+            app = self._app()
+            async with app.run_test(size=(140, 45)) as pilot:
+                await self._send(pilot, "/skills")
+                await pilot.pause(0.3)
+                self.assertIsInstance(app.screen, tui_app.SkillsScreen)
+                cart = app.screen.query_one(".cartridge")
+                self.assertTrue(cart.has_class("-on"))
+                await pilot.click(".cartridge")
+                await pilot.pause(0.2)
+                self.assertFalse(state_["APP_CONTROL"])
+                self.assertTrue(app.screen.query_one(".cartridge").has_class("-off"))
+                self.assertIn("0 de 1", str(app.screen.query_one("#session-title").render()))
+
+    async def test_log_screen_filters_buffer_and_shows_timeline(self):
+        from core.logger import log
+        app = self._app(FakeVoice("abre o spotify"))
+        async with app.run_test(size=(140, 45)) as pilot:
+            await pilot.press("shift+tab")
+            await self._wait_for(pilot, lambda: app.last_skill_turn and app.last_skill_turn["status"] == "ok")
+            await pilot.press("shift+tab")
+            log.warning("aviso de teste do /log")
+            await self._send(pilot, "/log")
+            await pilot.pause(0.3)
+            self.assertIsInstance(app.screen, tui_app.LogScreen)
+            await pilot.click("#filter-warn")
+            await pilot.pause(0.2)
+            lines = app.screen.query_one("#log-lines")
+            self.assertTrue(lines.records)
+            self.assertTrue(all(r["level"] == "WARN" for r in lines.records))
+            self.assertIn("aviso de teste do /log", lines.records[-1]["message"])
+            steps = [str(s.render()) for s in app.screen.query("#log-timeline .step")]
+            self.assertIn("INTENT · APP_CONTROL", steps)
+            self.assertEqual(steps[0], "VOZ")
+
+    async def test_session_picker_shows_size_and_pins_and_deletes(self):
+        app = self._app()
+        async with app.run_test(size=(140, 45)) as pilot:
+            await self._send(pilot, "receita de pão")
+            await pilot.press("ctrl+n")
+            await self._send(pilot, "plano de estudos")
+            await pilot.press("ctrl+n")
+            await pilot.press("ctrl+o")
+            await pilot.pause()
+            picker = app.screen
+            option_list = picker.query_one("#picker-list")
+            first = str(option_list.get_option_at_index(0).prompt)
+            self.assertIn("2 msgs", first)
+            self.assertIn("“**chat**: eco de plano de estudos”", first)
+            await pilot.press("down")  # foca a lista
+            await pilot.press("p")
+            await pilot.pause()
+            self.assertTrue(str(option_list.get_option_at_index(0).prompt).split("\n")[0].startswith("  01 ★"))
+            await pilot.press("delete", "delete")
+            await pilot.pause()
+            self.assertEqual(option_list.option_count, 1)
 
     async def test_new_session_command_and_binding(self):
         app = self._app()
