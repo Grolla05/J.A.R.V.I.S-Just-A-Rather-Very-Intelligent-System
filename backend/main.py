@@ -1,6 +1,5 @@
 import os
 import sys
-import threading
 
 from core import log, settings
 
@@ -14,19 +13,16 @@ def start_jarvis():
         sys.path.insert(0, str(settings.DIR_ROOT))
 
     try:
-        from core.hardware import scan_system_hardware
-        from core.llm import warm_up_ollama
+        from core.boot import run_boot
         from frontend.app import JarvisApp
     except ImportError as e:
         log.critical(f"Falha na importação dos módulos de serviço: {e}")
         sys.exit(1)
 
-    # Warm-up do Ollama e scan de hardware (PowerShell WMI) em paralelo à TUI:
-    # escondem a latência do 1º comando sem travar o boot.
-    threading.Thread(target=warm_up_ollama, daemon=True).start()
-    threading.Thread(target=scan_system_hardware, daemon=True).start()
-
-    JarvisApp().run()
+    # A tela de boot roda as checagens (config, banco, skills, Obsidian, mic) e
+    # dispara em threads daemon o warm-up do Ollama e o scan de hardware (WMI),
+    # que escondem a latência do 1º comando sem travar o boot.
+    JarvisApp(boot_fn=run_boot).run()
 
 
 if __name__ == '__main__':
