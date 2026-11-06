@@ -12,9 +12,28 @@ FILE_PATH = Path(__file__).resolve()
 BACKEND_DIR = FILE_PATH.parent.parent
 ROOT_DIR = BACKEND_DIR.parent  # A raiz do projeto (onde fica o .env)
 
+# Modo instalado (JARVIS-Setup.exe): a pasta do programa pode ser só leitura
+# (Arquivos de Programas), então o launcher define JARVIS_DATA_DIR
+# (%APPDATA%\JARVIS) e tudo que é gravado (.env, logs, banco, uploads, áudio
+# do TTS) vai para lá. Sem a variável (modo dev) nada muda: .env na raiz e
+# dados dentro de backend/.
+_DATA_DIR_RAW = os.getenv("JARVIS_DATA_DIR", "").strip()
+DATA_DIR = Path(_DATA_DIR_RAW).expanduser() if _DATA_DIR_RAW else None
+_ENV_DIR = DATA_DIR or ROOT_DIR
+_STORAGE_DIR = DATA_DIR or BACKEND_DIR
+
 # 2. Carregar variáveis de ambiente (.env)
-env_path = ROOT_DIR / ".env"
+env_path = _ENV_DIR / ".env"
 load_dotenv(dotenv_path=env_path)
+
+
+def _read_version():
+    """Versão do arquivo VERSION na raiz (o release grava a versão completa nele)."""
+    try:
+        text = (ROOT_DIR / "VERSION").read_text(encoding="utf-8").strip()
+    except OSError:
+        return "1.0.0"
+    return text or "1.0.0"
 
 def _optional_int(name):
     """Lê inteiro opcional do .env. Ausente/inválido -> None (= não repassa ao Ollama)."""
@@ -25,22 +44,26 @@ def _optional_int(name):
 class Settings:
     # --- Informações do Projeto ---
     PROJECT_NAME: str = "J.A.R.V.I.S."
-    VERSION: str = "1.0.0"
+    VERSION: str = _read_version()
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
     DEBUG: bool = os.getenv("DEBUG_MODE", "False").lower() == "true"
 
     # --- Caminhos de Diretórios (Essencial para não dar erro de file not found) ---
     DIR_ROOT = ROOT_DIR
     DIR_BACKEND = BACKEND_DIR
-    DIR_LOGS = BACKEND_DIR / "logs"
+    # Pasta de dados gravaveis: backend/ no dev, JARVIS_DATA_DIR quando instalado
+    DIR_DATA = _STORAGE_DIR
+    ENV_PATH = env_path
+    IS_INSTALLED: bool = DATA_DIR is not None
+    DIR_LOGS = _STORAGE_DIR / "logs"
     LOG_FILE_PATH = DIR_LOGS / "jarvis-"
-    DIR_DATABASE = BACKEND_DIR / "database"
-    DIR_SOUNDS = BACKEND_DIR / "assets" / "sounds"
+    DIR_DATABASE = _STORAGE_DIR / "database"
+    DIR_SOUNDS = _STORAGE_DIR / "assets" / "sounds"
     
     # --- Configurações de IA Local (Ollama) ---
     # Agora o modelo é controlado por aqui. Se mudar no .env, muda no cérebro todo.
-    OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL")
-    OLLAMA_HOST: str = os.getenv("OLLAMA_HOST")
+    OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL") or "llama3.2"
+    OLLAMA_HOST: str = os.getenv("OLLAMA_HOST") or "http://localhost:11434"
     # keep_alive do modelo na VRAM. -1 = nunca descarrega (resposta sempre rápida,
     # mas ocupa VRAM enquanto o JARVIS roda). Aceita também duração ("30m").
     # Numérico vira int (a API trata "30m" como duração, mas "-1" precisa ser int).
@@ -71,14 +94,14 @@ class Settings:
     TIMEOUT_TRANSCRIPTION: int = int(os.getenv("TIMEOUT_TRANSCRIPTION", "60"))
 
     # --- Uploads de Chat (imagem/áudio anexados pelo usuário) ---
-    DIR_UPLOADS = BACKEND_DIR / "uploads"
+    DIR_UPLOADS = _STORAGE_DIR / "uploads"
     MAX_UPLOAD_SIZE_MB: int = int(os.getenv("MAX_UPLOAD_SIZE_MB", "15"))
     ALLOWED_IMAGE_MIME = {"image/png", "image/jpeg", "image/webp", "image/gif"}
     ALLOWED_AUDIO_MIME = {"audio/mpeg", "audio/wav", "audio/x-wav", "audio/mp4", "audio/webm", "audio/ogg"}
 
     # --- Configurações do Obsidian (Memória de Longo Prazo) ---
-    OBSIDIAN_HOST: str = os.getenv("OBSIDIAN_HOST")
-    OBSIDIAN_API_KEY: str = os.getenv("OBSIDIAN_API_KEY")
+    OBSIDIAN_HOST: str = os.getenv("OBSIDIAN_HOST") or "http://127.0.0.1:27123"
+    OBSIDIAN_API_KEY: str = os.getenv("OBSIDIAN_API_KEY", "")
 
     # --- Configurações do Spotify (Web API — OAuth PKCE) ---
     # PKCE não usa client_secret: o único segredo em disco é o refresh token.
@@ -112,8 +135,8 @@ class Settings:
 
     # --- Configurações de Áudio (Listen/Speak) ---
     DEFAULT_LANGUAGE: str = "pt-BR"
-    SPEECH_RATE: int = int(os.getenv("SPEECH_RATE"))    # Velocidade da fala
-    MIC_INDEX: int = int(os.getenv("MIC_INDEX")) # Índice do microfone padrão
+    SPEECH_RATE: int = int(os.getenv("SPEECH_RATE") or "180")  # Velocidade da fala
+    MIC_INDEX: int = int(os.getenv("MIC_INDEX") or "0")        # Índice do microfone padrão
     # Threshold de energia estático. >0 desliga o dynamic_energy_threshold (instável
     # com ruído de ventilador). 0 mantém o modo dinâmico automático.
     MIC_ENERGY_THRESHOLD: int = int(os.getenv("MIC_ENERGY_THRESHOLD", "300"))

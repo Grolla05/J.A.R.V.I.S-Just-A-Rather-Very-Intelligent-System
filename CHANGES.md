@@ -3,6 +3,28 @@
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
 **Data:** 2026-11-06
+**Escopo:** Instalador completo `JARVIS-Setup.exe` (mesmo processo do OhmFlow: Inno Setup + teste do setup) e Release automático a cada merge na `main`, com o instalador como único asset.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | Instalador Inno Setup 6: Python 3.11 embutido com todas as libs do `requirements.txt` + código; sem admin por padrão (`%LOCALAPPDATA%\Programs\JARVIS`), atalhos, opção de PATH (`jarvis`), atualização limpa por cima (AppId fixo) e desinstalador que pergunta se apaga os dados | `installer/jarvis.iss` (novo) |
+| 2 | Página "Ollama necessário": se o Ollama não for encontrado, mostra o link oficial `https://ollama.com/download`, trava o Avançar e verifica a cada 2 s (pasta padrão, PATH do processo e do registro); ao detectar, avança sozinho | `installer/jarvis.iss` |
+| 3 | Página "Modelo de IA": dropdown com llama3.2 (padrão), llama3.1:8b, qwen2.5:7b, mistral, gemma2:9b, phi3 ou "não baixar"; marca os já instalados (`ollama list`); opção do modelo de visão moondream. No fim, `ollama pull` em janela visível e `OLLAMA_MODEL` gravado no `.env` | `installer/jarvis.iss` |
+| 4 | Montagem do conteúdo do setup: pacote NuGet oficial `python` 3.11.9 → `dist/runtime`, `pip install`, limpeza, bytecode pré-compilado e smoke test das libs; código sem testes/dados → `dist/app` | `installer/build_runtime.ps1` (novo) |
+| 5 | Launcher: abre no Windows Terminal quando existir (`--here` roda no terminal atual) e define `JARVIS_DATA_DIR=%APPDATA%\JARVIS` | `installer/jarvis.cmd` (novo) |
+| 6 | Modo instalado no config: com `JARVIS_DATA_DIR`, `.env`, logs, banco, uploads, áudio do TTS e token do Spotify vão para essa pasta (a pasta do programa pode ser só leitura). Sem a variável (dev) nada muda. `VERSION` lido do arquivo `VERSION` | `backend/core/config.py`, `VERSION` (novo) |
+| 7 | Defaults para rodar sem `.env` completo: `SPEECH_RATE` (180), `MIC_INDEX` (0), `OLLAMA_HOST`, `OLLAMA_MODEL` (llama3.2) e `OBSIDIAN_HOST` — antes `int(None)` / `None.replace` derrubavam o import | `backend/core/config.py` |
+| 8 | Teste do setup: instala em silêncio (`/SKIPOLLAMA`), confere arquivos, importa o JARVIS com o Python instalado em modo instalado (dados fora da pasta do programa), chave de desinstalação, desinstala e confere que nada ficou | `installer/test_setup.ps1` (novo) |
+| 9 | Workflow de Release: no push da `main` (merge) roda ruff + pytest, calcula a versão (major.minor do `VERSION`, patch = última tag `vX.Y.*` + 1), monta o runtime, gera e testa o setup e publica o Release `vX.Y.Z` só com `JARVIS-Setup.exe` | `.github/workflows/release.yml` (novo) |
+| 10 | README com a seção "Instalar" e como gerar o setup localmente | `README.md` |
+
+**Decisões:** Python embutido em vez de PyInstaller, para o `SkillLoader` continuar carregando skills por arquivo (plug-and-play) e evitar hidden-imports de pycaw/ctranslate2. O modelo escolhido é **acrescentado** no fim do `.env` (o python-dotenv usa o último valor) para não reescrever nem recodificar o arquivo do usuário. O GitHub sempre anexa "Source code (zip/tar.gz)" ao Release; o único asset enviado é o `JARVIS-Setup.exe`. Ícone próprio fica para depois (o `.iss` usa `installer/assets/jarvis.ico` se existir; sem ele, o ícone do Python).
+
+**Testes novos:** `test_config_paths.py` (modo instalado com `JARVIS_DATA_DIR`: dados e `.env` na pasta de dados, pastas criadas; modo dev inalterado; defaults sem `.env`); `installer/test_setup.ps1` (25 verificações). Tamanho: ~479 MB instalado, setup de ~130 MB.
+
+---
+
+**Data:** 2026-11-06
 **Escopo:** Falso "PROTOCOLO CRÍTICO" corrigido e telas `/status` (canvas "6 · Dashboard de sistema") e `/log` (canvas "9 · Log de atividade") refeitas para ficarem iguais ao canvas.
 
 | # | Mudança | Arquivos |
