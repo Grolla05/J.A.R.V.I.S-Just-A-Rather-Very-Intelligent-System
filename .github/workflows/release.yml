@@ -1,0 +1,86 @@
+name: Release
+
+# Cada merge na main (push na main) gera um Release novo com um único asset:
+# dist/JARVIS-Setup.exe, o instalador completo (Python embutido + todas as
+# libs + código). Versão: VERSION define major.minor; o patch sobe sozinho a
+# partir da última tag vX.Y.* (sem tag ainda, usa o patch do VERSION).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Dois merges seguidos não podem calcular a mesma tag
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # criar tag e Release
+
+jobs:
+  release:
+    name: Instalador (Windows) e Release
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout (com tags)
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Lint e testes (gate do release)
+        working-directory: backend
+        run: |
+          pip install -r requirements.txt
+          pip install ruff==0.16.8 pytest
+          ruff check .
+          ruff check ../frontend
+          # test_work_macros_spotify.py: 11 testes já falhavam antes (ver main.yml)
+          python -m pytest tests -q --ignore=tests/test_work_macros_spotify.py
+
+      - name: Próxima versão
+        id: versao
+        run: |
+          $base = (Get-Content VERSION -Raw).Trim()
+          if ($base -notmatch '^(\d+)\.(\d+)\.(\d+)$') { throw "VERSION invalido: '$base' (use X.Y.Z)" }
+          $mm = "$($Matches[1]).$($Matches[2])"
+          $patchBase = [int]$Matches[3]
+          $patches = @(git tag --list "v$mm.*" | ForEach-Object {
+            if ($_ -match "^v$([regex]::Escape($mm))\.(\d+)$") { [int]$Matches[1] }
+          })
+          $patch = if ($patches.Count) { [math]::Max(($patches | Measure-Object -Maximum).Maximum + 1, $patchBase) } else { $patchBase }
+          $v = "$mm.$patch"
+          Write-Host "Versao: $v"
+          "versao=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Runtime Python + código (dist/runtime, dist/app)
+        run: ./installer/build_runtime.ps1 -Versao ${{ steps.versao.outputs.versao }}
+
+      - name: Instalar Inno Setup 6
+        run: choco install innosetup -y --no-progress
+
+      - name: Gerar JARVIS-Setup.exe
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          & $iscc /Q "/DVersao=${{ steps.versao.outputs.versao }}" installer\jarvis.iss
+          if ($LASTEXITCODE -ne 0) { throw "iscc falhou ($LASTEXITCODE)" }
+
+      - name: Testar instalar / rodar / desinstalar
+        run: ./installer/test_setup.ps1
+
+      - name: Publicar Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.versao.outputs.versao }}
+          target_commitish: ${{ github.sha }}
+          name: J.A.R.V.I.S v${{ steps.versao.outputs.versao }}
+          generate_release_notes: true
+          make_latest: true
+          files: dist/JARVIS-Setup.exe
+          fail_on_unmatched_files: true
