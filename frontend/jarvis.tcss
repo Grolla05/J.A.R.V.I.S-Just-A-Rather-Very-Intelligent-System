@@ -24,6 +24,24 @@ $j-orb-hl: #9fd0ff;
 $j-orb-ring: #ffffff;
 $j-orb-ring-dim: #22324a;
 $j-orb-white-dim: #8fa3bf;
+/* Estilo 16-bit (sprites, barras e selos) */
+$j-ok: #4ade80;
+$j-warn: #ffcb6b;
+$j-deep: #0e7490;
+$j-pale: #c9fbff;
+$j-scanline: #2a0f14;
+
+/* Sprites pixel-art (frontend/sprites.py → PixelSprite) */
+PixelSprite > .px--neon { color: $j-neon; }
+PixelSprite > .px--ocean { color: $j-ocean; }
+PixelSprite > .px--deep { color: $j-deep; }
+PixelSprite > .px--pale { color: $j-pale; }
+PixelSprite > .px--white { color: $j-white; }
+PixelSprite > .px--danger { color: $j-danger; }
+PixelSprite > .px--warn { color: $j-warn; }
+PixelSprite > .px--ok { color: $j-ok; }
+PixelSprite > .px--ink { color: $j-bg; }
+PixelSprite > .px--muted { color: $j-muted; }
 
 Screen {
     background: $j-bg;
@@ -89,6 +107,44 @@ Markdown.msg-body {
     background: transparent;
 }
 
+/* Títulos do Markdown: branco e negrito (sem o sublinhado azul padrão) */
+.msg-body MarkdownH1, .msg-body MarkdownH2, .msg-body MarkdownH3 {
+    color: $j-white;
+    background: transparent;
+    text-style: bold;
+    content-align: left middle;
+    margin: 1 0 0 0;
+}
+
+/* Bloco de código: filete ciano à esquerda + "┌─ linguagem" no topo */
+CodeFence {
+    background: $j-panel;
+    border-left: outer $j-neon;
+    border-top: solid $j-line;
+    border-title-align: left;
+    border-title-color: $j-muted;
+}
+
+CodeFence > Label { padding: 0 2; }
+
+/* "[  OK  ]" das mensagens do sistema, em verde de boot */
+.msg.-system MarkdownBlock > .code_inline {
+    color: $j-ok;
+    background: transparent;
+    text-style: bold;
+}
+
+/* Selo de skill: LED + [INTENT] + [ OK ] / [ FAIL ] / [ ▚▚ ] */
+MessageView > .msg--skill { color: $j-neon; text-style: bold; }
+MessageView > .msg--ok { color: $j-ok; text-style: bold; }
+MessageView > .msg--fail { color: $j-danger-soft; text-style: bold; }
+MessageView > .msg--run { color: $j-warn; text-style: bold; }
+
+/* Barras de bloco da linha de status: ciano (vermelho no crítico) */
+StatusLine > .status--bar { color: $j-neon; }
+Screen.-critical StatusLine > .status--bar,
+ConfirmScreen StatusLine > .status--bar { color: $j-danger; }
+
 /* --- Anexo pendente, input, status --- */
 #attachbar {
     height: 1;
@@ -98,11 +154,11 @@ Markdown.msg-body {
 
 #prompt {
     margin: 0 1;
-    border: tall $j-ocean;
+    border: double $j-ocean;
     background: $j-panel;
 }
 
-#prompt:focus { border: tall $j-neon; }
+#prompt:focus { border: double $j-neon; }
 
 /* Telemetria (esquerda) + atalhos (direita) numa linha só */
 .statusbar {
@@ -139,7 +195,7 @@ Markdown.msg-body {
     width: auto;
     margin: 1 0 0 2;
     padding: 0 2;
-    border: round $j-line;
+    border: double $j-neon;
     background: $j-panel;
 }
 
@@ -161,7 +217,7 @@ JarvisOrb > .orb--white-dim { color: $j-orb-white-dim; }
     height: 3;
     margin: 0 1;
     padding: 0 1;
-    border: tall $j-neon;
+    border: double $j-neon;
     background: $j-panel;
 }
 
@@ -175,14 +231,14 @@ JarvisOrb > .orb--white-dim { color: $j-orb-white-dim; }
 Screen.-copilot #topbar { background: $j-neon; color: $j-ink; }
 Screen.-copilot #mode-badge { background: $j-ink; color: $j-neon; }
 Screen.-copilot #log { border-left: outer $j-neon; }
-Screen.-copilot #prompt { border: tall $j-neon; }
+Screen.-copilot #prompt { border: double $j-neon; }
 
 /* --- Protocolo crítico: vermelho sobrepõe qualquer modo --- */
 Screen.-critical #topbar { background: $j-danger-strong; color: $j-white; }
 Screen.-critical #topbar-info { text-style: bold; }
 Screen.-critical #log { border-left: outer $j-danger; }
-Screen.-critical #prompt { border: tall $j-danger; }
-Screen.-critical #voicebar { border: tall $j-danger; }
+Screen.-critical #prompt { border: double $j-danger; }
+Screen.-critical #voicebar { border: double $j-danger; }
 Screen.-critical #voice-mic, Screen.-critical #voice-wave { color: $j-danger-soft; }
 
 /* Linha de status do modal crítico: atalhos s/n em vermelho */
@@ -194,6 +250,11 @@ SessionPicker, ConfirmScreen {
     background: rgba(0, 0, 0, 0.55);
 }
 
+/* Protocolo crítico: o fundo escurece puxado para o vermelho.
+   (hatch de scanline foi testado e "fura" a barra do topo: os espaços
+   perdem o fundo vermelho — por isso um véu translúcido.) */
+ConfirmScreen { background: $j-scanline 75%; }
+
 .hint { color: $j-muted; }
 
 #picker {
@@ -201,13 +262,13 @@ SessionPicker, ConfirmScreen {
     max-width: 95%;
     height: auto;
     max-height: 85%;
-    border: tall $j-ocean;
+    border: double $j-neon;
     background: $j-panel;
     padding: 1 2;
 }
 
 #picker-head { height: 1; }
-#picker-title { width: 1fr; color: $j-white; text-style: bold; }
+#picker-title { width: 1fr; color: $j-neon; text-style: bold; }
 
 #picker-filter {
     margin: 1 0;
@@ -229,15 +290,28 @@ SessionPicker, ConfirmScreen {
     width: 64;
     max-width: 95%;
     height: auto;
-    border: tall $j-danger;
+    border: double $j-danger;
     background: $j-panel;
     padding: 1 2;
 }
 
+#confirm-head {
+    height: auto;
+    margin-bottom: 1;
+}
+
+#confirm-icon { margin-right: 2; }
+
 #confirm-title {
+    height: 6;
+    content-align-vertical: middle;
     color: $j-danger-soft;
     text-style: bold;
-    margin-bottom: 1;
+}
+
+#confirm-bar {
+    margin-top: 1;
+    color: $j-danger;
 }
 
 #confirm-expiry { margin: 1 0; }
@@ -260,3 +334,129 @@ SessionPicker, ConfirmScreen {
     background: $j-panel;
     color: $j-text-soft;
 }
+
+/* ===================== Telas cheias (/status, /skills, /log) ===================== */
+JarvisScreen { background: $j-bg; }
+JarvisScreen.-critical #topbar { background: $j-danger-strong; color: $j-white; }
+JarvisScreen.-critical StatusLine > .status--bar { color: $j-danger; }
+
+/* --- /status: 4 medidores + painel lateral --- */
+#status-body { height: 1fr; padding: 1 2; }
+
+#status-grid {
+    grid-size: 2 2;
+    grid-gutter: 1 2;
+    width: 1fr;
+    height: 1fr;
+}
+
+.meter {
+    border: double $j-line;
+    background: $j-panel;
+    padding: 0 1;
+    height: 1fr;
+}
+
+.meter-name { color: $j-white; text-style: bold; }
+.meter-value { color: $j-neon; text-style: bold; }
+.meter-chart { color: $j-neon; height: 6; }
+.meter.-moderada .meter-value, .meter.-moderada .meter-chart { color: $j-warn; }
+.meter.-alta .meter-value, .meter.-alta .meter-chart { color: $j-danger-soft; }
+.meter-detail { color: $j-muted; }
+
+#status-side {
+    width: 34;
+    margin-left: 2;
+    border: double $j-neon;
+    background: $j-panel;
+    padding: 0 1;
+    align-horizontal: center;
+}
+
+#status-side Label, #status-side Static { width: 1fr; }
+#status-orb { margin: 1 0; width: auto; }
+#status-level { text-style: bold; color: $j-neon; content-align: center middle; }
+#status-level.-moderada { color: $j-warn; }
+#status-level.-alta { color: $j-danger-soft; }
+#status-procs { color: $j-text-soft; margin-bottom: 1; }
+
+/* --- /skills: grid de cartuchos --- */
+#skills-legend { height: 1; padding: 0 2; margin-top: 1; }
+#skills-legend .legend { width: auto; margin-right: 3; color: $j-text-soft; }
+#skills-legend .legend.-cat-automation { color: $j-neon; }
+#skills-legend .legend.-cat-system { color: $j-warn; }
+
+#skills-grid {
+    grid-size: 4;
+    grid-gutter: 1 2;
+    grid-rows: 7;
+    padding: 1 2;
+    height: 1fr;
+}
+
+#skills-hint { padding: 0 2; }
+
+.cartridge {
+    width: 1fr;
+    height: 6;
+    min-width: 16;
+    background: $j-panel;
+    color: $j-white;
+    border: tall $j-line;
+    text-style: bold;
+    content-align: center middle;
+}
+
+.cartridge.-on { border: tall $j-neon; }
+.cartridge.-on.-cat-system { border: tall $j-warn; }
+.cartridge.-off {
+    offset-y: 1;
+    background: $j-bg;
+    color: $j-muted;
+    text-style: none;
+}
+.cartridge:focus { border: double $j-white; background: $j-footer; text-style: bold; }
+.cartridge:hover { background: $j-footer; }
+
+/* --- /log: filtros, timeline e linhas --- */
+#log-filters { height: 3; padding: 0 2; margin-top: 1; }
+.log-filter {
+    min-width: 9;
+    margin-right: 1;
+    background: $j-panel;
+    color: $j-text-soft;
+    border: tall $j-line;
+}
+.log-filter.-active { background: $j-neon; color: $j-bg; border: tall $j-neon; text-style: bold; }
+
+#log-timeline {
+    height: auto;
+    margin: 1 2 0 2;
+    padding: 0 1;
+    border: double $j-line;
+    background: $j-panel;
+}
+
+#log-timeline Label { width: auto; }
+#timeline-title { margin-right: 2; }
+#log-timeline .step { padding: 0 1; background: $j-badge-ink; color: $j-white; text-style: bold; }
+#log-timeline .step.-ok { background: $j-ok; color: $j-bg; }
+#log-timeline .step.-fail { background: $j-danger-strong; color: $j-white; }
+#log-timeline .step.-run { background: $j-panel; color: $j-neon; text-style: bold italic; }
+#log-timeline .wire { color: $j-neon; }
+
+#log-scroll { margin: 1 2; height: 1fr; scrollbar-size-vertical: 1; }
+
+LogLines > .log--time { color: $j-muted; }
+LogLines > .log--module { color: $j-user; }
+LogLines > .log--old { color: $j-muted; }
+LogLines > .log--mid { color: $j-text-soft; }
+LogLines > .log--new { color: $j-white; }
+LogLines > .log--DEBUG { color: $j-muted; text-style: bold; }
+LogLines > .log--INFO { color: $j-neon; text-style: bold; }
+LogLines > .log--WARN { color: $j-warn; text-style: bold; }
+LogLines > .log--ERROR { color: $j-danger-soft; text-style: bold; }
+LogLines > .log--CRITICAL { color: $j-danger; text-style: bold reverse; }
+
+/* --- Save slots (SessionPicker): 2 linhas por slot --- */
+#picker-list > .option-list--option { padding: 0 1; }

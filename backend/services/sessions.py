@@ -129,13 +129,14 @@ def toggle_session_pin(session_id, is_pinned):
 
 def get_recent_sessions(limit=12):
     """Sessões de texto mais recentes (exclui voice_*), fixadas primeiro.
-    Dicts com id, title, is_pinned, last_active ('YYYY-MM-DD HH:MM:SS', hora local)."""
+    Dicts com id, title, is_pinned, last_active ('YYYY-MM-DD HH:MM:SS', hora local),
+    msg_count (mensagens na sessão) e last_message (texto da última, p/ preview)."""
     conn = None
     try:
         conn = db._get_connection()
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT session_id, MAX(timestamp) AS last_active
+            SELECT session_id, MAX(timestamp) AS last_active, COUNT(*) AS msg_count
             FROM history
             WHERE session_id NOT LIKE 'voice_%'
             GROUP BY session_id
@@ -145,20 +146,44 @@ def get_recent_sessions(limit=12):
         session_rows = cursor.fetchall()
 
         result = []
-        for s_id, last_active in session_rows:
+        for s_id, last_active, msg_count in session_rows:
             cursor.execute('SELECT title, is_pinned FROM sessions WHERE id = ?', (s_id,))
             meta = cursor.fetchone()
             if meta:
                 title, is_pinned = meta[0], bool(meta[1])
             else:
                 title, is_pinned = _first_prompt(cursor, s_id), False
+            cursor.execute('''
+                SELECT content FROM history WHERE session_id = ?
+                ORDER BY timestamp DESC, id DESC LIMIT 1
+            ''', (s_id,))
+            last = cursor.fetchone()
             result.append({"id": s_id, "title": title, "is_pinned": is_pinned,
-                           "last_active": to_local(last_active)})
+                           "last_active": to_local(last_active), "msg_count": msg_count,
+                           "last_message": (last[0] or "") if last else ""})
         result.sort(key=lambda s: not s["is_pinned"])  # sort estável: mantém recência
         return result
     except Exception as e:
         log.error(f"Erro ao obter sessões recentes: {e}")
         return []
+    finally:
+        if conn:
+            conn.close()
+
+
+def delete_session(session_id):
+    """Apaga a sessão inteira (histórico + título/fixação). True se deu certo."""
+    conn = None
+    try:
+        conn = db._get_connection()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM history WHERE session_id = ?', (session_id,))
+        cursor.execute('DELETE FROM sessions WHERE id = ?', (session_id,))
+        conn.commit()
+        return True
+    except Exception as e:
+        log.error(f"Erro ao apagar a sessão '{session_id}': {e}")
+        return False
     finally:
         if conn:
             conn.close()

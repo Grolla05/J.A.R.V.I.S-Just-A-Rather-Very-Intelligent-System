@@ -1,11 +1,48 @@
 import logging
+import re
 import sys
+import threading
+from collections import deque
 
 from colorama import Fore, Style, init
 
 from .config import settings
 
 init(autoreset=True)
+
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+_TAG = re.compile(r"^\[(DEBUG|INFO|WARN|ERROR|CRITICAL)\]\s*")
+
+
+class RingBufferHandler(logging.Handler):
+    """Guarda os últimos `capacity` registros em memória (tela /log da TUI).
+    Cada item: {'time': 'HH:MM:SS', 'level': 'INFO', 'module': 'brain', 'message': '...'}."""
+
+    def __init__(self, capacity=500):
+        super().__init__(level=logging.DEBUG)
+        self.records = deque(maxlen=capacity)
+        self._lock_buf = threading.Lock()
+
+    def emit(self, record):
+        try:
+            message = _TAG.sub("", _ANSI.sub("", record.getMessage()))
+            level = "WARN" if record.levelname == "WARNING" else record.levelname
+            from datetime import datetime
+            item = {
+                "time": datetime.fromtimestamp(record.created).strftime("%H:%M:%S"),
+                "level": level,
+                "module": record.module,
+                "message": message,
+            }
+            with self._lock_buf:
+                self.records.append(item)
+        except Exception:
+            self.handleError(record)
+
+    def snapshot(self):
+        with self._lock_buf:
+            return list(self.records)
+
 
 class JarvisLogger:
     _instance = None
@@ -22,6 +59,10 @@ class JarvisLogger:
         
         if self.logger.handlers:
             return
+
+        # Buffer em memória p/ a tela de log da TUI (independe do console/arquivo)
+        self.buffer = RingBufferHandler(500)
+        self.logger.addHandler(self.buffer)
 
         # Configura o handler de console com UTF-8 e errors='replace'
         # para que emojis nunca causem UnicodeEncodeError no terminal Windows (cp1252)
@@ -73,18 +114,18 @@ class JarvisLogger:
             self.logger.addHandler(ui_handler)
 
     def debug(self, msg):
-        if settings.DEBUG: self.logger.debug(f"{Fore.CYAN}[DEBUG]{Style.RESET_ALL} {msg}")
+        if settings.DEBUG: self.logger.debug(f"{Fore.CYAN}[DEBUG]{Style.RESET_ALL} {msg}", stacklevel=2)
 
     def info(self, msg): 
-        self.logger.info(f"{Fore.GREEN}[INFO]{Style.RESET_ALL} {msg}")
+        self.logger.info(f"{Fore.GREEN}[INFO]{Style.RESET_ALL} {msg}", stacklevel=2)
 
     def warning(self, msg): 
-        self.logger.warning(f"{Fore.YELLOW}[WARN]{Style.RESET_ALL} {msg}")
+        self.logger.warning(f"{Fore.YELLOW}[WARN]{Style.RESET_ALL} {msg}", stacklevel=2)
 
     def error(self, msg): 
-        self.logger.error(f"{Fore.RED}[ERROR]{Style.RESET_ALL} {msg}")
+        self.logger.error(f"{Fore.RED}[ERROR]{Style.RESET_ALL} {msg}", stacklevel=2)
 
     def critical(self, msg): 
-        self.logger.critical(f"{Fore.RED}{Style.BRIGHT}[CRITICAL]{Style.RESET_ALL} {msg}")
+        self.logger.critical(f"{Fore.RED}{Style.BRIGHT}[CRITICAL]{Style.RESET_ALL} {msg}", stacklevel=2)
 
 log = JarvisLogger()

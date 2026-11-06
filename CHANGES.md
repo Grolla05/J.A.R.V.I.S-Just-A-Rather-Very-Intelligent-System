@@ -2,6 +2,44 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+**Data:** 2026-11-05
+**Escopo:** Fase 2 de 4 das novas telas 16-bit: telas de dados (`/status`, `/skills`, `/log` e save slots) + ajustes da Fase 1 após comparar capturas reais da TUI com o canvas "JARVIS TUI".
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | Base das telas cheias: barra do topo com selo, corpo e linha única telemetria + atalhos; `Esc` volta. Atalhos da conversa (modo, nova, sessões, regenerar, voz) somem dentro delas | `frontend/screens/base.py` (novo, `JarvisScreen`), `frontend/app.py` (`check_action`) |
+| 2 | `/status`: CPU, RAM, GPU e REDE com gráfico de barras dos últimos 2 min (cor muda com a carga), mini-orb pixel-art recolorida pela carga, top processos e uptime em worker | `frontend/screens/status.py` (novo), `frontend/sprites.py` (`bar_chart`, `load_level`), `frontend/app.py` (`telemetry_history`), `backend/core/SystemInfo.py` (`upload_bps`/`download_bps`) |
+| 3 | `/skills` sem argumento abre a grade de cartuchos: ícone, INTENT, categoria e ON/OFF; desligado fica "fora do slot". Enter/clique alterna a skill, `c` a categoria inteira. `/skills on|off X` continua | `frontend/screens/skills.py` (novo), `frontend/app.py` |
+| 4 | `/log`: buffer em memória dos últimos 500 registros, filtros TODOS/DEBUG/INFO/WARN/ERROR (`f` cicla), pausa no espaço, linhas novas mais claras e a timeline do último turno com skill (VOZ → INTENT → SKILL → ✓ → FALA) | `frontend/screens/log.py` (novo), `backend/core/logger.py` (`RingBufferHandler`, `stacklevel=2` p/ registrar o módulo de origem), `frontend/app.py` (`last_skill_turn`) |
+| 5 | Save slots no `Ctrl+O`: cada sessão em 2 linhas, com barra do tamanho, nº de mensagens e prévia da última fala; `p` fixa, `Del Del` apaga (não apaga a aberta) | `frontend/widgets.py` (`SessionPicker`), `backend/services/sessions.py` (`msg_count`, `last_message`, `delete_session`) |
+| 6 | Ajustes da Fase 1: `[  OK  ]` verde; barras ▰▱ da linha de status em ciano (vermelho no crítico); títulos do Markdown brancos e em negrito; bloco de código com filete ciano e o nome da linguagem no topo; selo de skill colorido (`■ [INTENT] [ OK ]` / `[ FAIL ]` / `[ ▚▚ ]`); véu vermelho no protocolo crítico (o hatch de scanline "furava" a barra do topo) | `frontend/widgets.py` (`StatusLine`, `CodeFence`, `JarvisMarkdown`, `MessageView`), `frontend/jarvis.tcss` |
+| 7 | O app passa a procurar seus widgets sempre na tela da conversa (`main_screen`): telemetria e alertas não quebram com uma tela cheia aberta | `frontend/app.py` |
+
+**Decisões:** as telas cheias são `Screen` (não modal) para terem a própria linha de status. Animação de encaixe do cartucho ficou como deslocamento de 1 linha (sem timer). O save slot continua em lista (1 coluna) para manter o filtro por título e a navegação por setas.
+
+**Testes novos:** em `test_tui_app.py`, `/status` (histórico, faixa de carga, `Esc` volta, atalhos da conversa desativados), `/skills` (clique alterna o cartucho), `/log` (filtro WARN e timeline do turno de voz) e save slots (tamanho, prévia, fixar, apagar); `test_sessions_service.py` (`msg_count`, `last_message`, `delete_session`); `test_tui_sprites.py` (`bar_chart`, `load_level`). Espera dos testes de voz subiu para 10 s (rodando a suíte inteira, o turno de voz passava dos 5 s).
+
+---
+
+**Data:** 2026-11-05
+**Escopo:** Fase 1 de 4 das novas telas 16-bit: base de sprites/efeitos e as telas atuais harmonizadas com o canvas "JARVIS TUI" (telas 1–4 revisadas).
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | Base de sprites pixel-art (alerta, mini-orb, rosto, armadura, radar com 8 quadros) no mesmo formato do `orb.py`, mais efeitos de texto: barra de blocos `▰▱`, sparkline `▁…█`, quadros do desligamento CRT e revelar por scanline | `frontend/sprites.py` (novo) |
+| 2 | Widget `PixelSprite`: pinta qualquer grade em meio-bloco com cores `px--*` do tema; timer a 8 fps só com `animated=True`. Pintura em meio-bloco extraída para `paint_grid`, reaproveitada pela `JarvisOrb` | `frontend/widgets.py`, `frontend/jarvis.tcss` |
+| 3 | Linha de status com barras de bloco (`CPU ▰▰▱▱▱ 41%`) e `▚ pensando…` | `frontend/app.py` |
+| 4 | Selo de skill estilo cartucho: `▚ [INTENT] executando…` → `■ [INTENT] ✓/✗`; saudação começa com `[  OK  ]` | `frontend/app.py` |
+| 5 | Protocolo crítico: ícone de alerta em pixel art, título `AÇÃO CRÍTICA`, contagem regressiva em 30 blocos, scanlines vermelhas atrás do diálogo (`hatch`), borda dupla e `▶` no botão de encerrar | `frontend/widgets.py` (`ConfirmScreen`), `frontend/jarvis.tcss` |
+| 6 | Trocar sessão: borda dupla ciano, título em caixa alta, número de slot (`01`, `02`…) e `▶` na sessão atual | `frontend/widgets.py` (`SessionPicker`), `frontend/jarvis.tcss` |
+| 7 | Bordas duplas no input, na barra de voz e no painel da orb do Copilot; estado da orb com `▶` | `frontend/jarvis.tcss`, `frontend/widgets.py` (`CopilotHero`) |
+
+**Decisões:** novas cores entram como variáveis `$j-ok`, `$j-warn`, `$j-deep`, `$j-pale`, `$j-scanline`. Sprites ficam em lógica pura (testável) e o widget só mapeia código → cor. Fases seguintes: telas de dados (status, skills, log, save slots), depois vault/config/voz (RMS real) e por fim boot, shutdown CRT e easter egg.
+
+**Testes novos:** `test_tui_sprites.py` (sprites com linhas pares e códigos válidos, recolor, radar com 8 quadros distintos, `block_bar`, `sparkline`, CRT colapsando até 1 ponto, scanline) e, em `test_tui_app.py`, ícone 16×6 e barra de 30 blocos no `ConfirmScreen`, telemetria com barras e `▶ 01` na sessão atual do picker.
+
+---
+
 **Data:** 2026-11-04
 **Escopo:** Copilot passa a ser **só por voz**, com orb pixel-art 16×16 (ouvindo / pensando / respondendo); telemetria e atalhos numa **linha só**. Segue a revisão do canvas "JARVIS TUI".
 
