@@ -5,7 +5,7 @@ corpo, e uma linha única com telemetria (esquerda) + atalhos (direita).
 Esc volta para a conversa.
 """
 from textual.app import ComposeResult
-from textual.binding import Binding
+from textual.binding import Binding, BindingsMap
 from textual.containers import Horizontal
 from textual.screen import Screen
 from textual.widgets import Footer, Static
@@ -19,6 +19,16 @@ class JarvisScreen(Screen):
     STATUS_REFRESH_S = 3.0
 
     BINDINGS = [Binding("escape", "close", "Voltar")]
+
+    @classmethod
+    def _merge_bindings(cls) -> BindingsMap:
+        """Como no canvas, "esc Voltar" fecha o rodapé: o Textual mantém a
+        posição da 1ª definição da tecla (a desta base), então movemos o Esc
+        para o fim depois da mescla."""
+        keys = dict(super()._merge_bindings().key_to_bindings)
+        if "escape" in keys:
+            keys["escape"] = keys.pop("escape")
+        return BindingsMap.from_keys(keys)
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="topbar"):
@@ -37,14 +47,22 @@ class JarvisScreen(Screen):
     def info(self):
         return ""
 
+    def status_hint(self):
+        """Texto do lado esquerdo da linha de status. None = telemetria do app;
+        cada tela pode trocar por uma dica própria (como no canvas)."""
+        return None
+
     def on_mount(self):
         self.set_class(bool(getattr(self.app, "critical", False)), "-critical")
         self._refresh_statusline()
         self.set_interval(self.STATUS_REFRESH_S, self._refresh_statusline)
 
     def _refresh_statusline(self):
-        status = getattr(self.app, "status_text", None)
-        self.query_one("#screen-status", StatusLine).update(status() if callable(status) else "")
+        text = self.status_hint()
+        if text is None:
+            status = getattr(self.app, "status_text", None)
+            text = status() if callable(status) else ""
+        self.query_one("#screen-status", StatusLine).update(text)
         self.set_class(bool(getattr(self.app, "critical", False)), "-critical")
 
     def set_info(self, text):

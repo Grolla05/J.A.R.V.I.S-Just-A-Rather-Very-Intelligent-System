@@ -3,19 +3,19 @@ import unittest
 from datetime import date
 
 from frontend.commands import COMMANDS, help_markdown, parse, unescape
-from frontend.widgets import format_when
+from frontend.widgets import format_slot_when
 
 
-class TestFormatWhen(unittest.TestCase):
-    def test_today_yesterday_and_older(self):
-        today = date(2026, 11, 3)
-        self.assertEqual(format_when("2026-11-03 14:02:10", today), "14:02")
-        self.assertEqual(format_when("2026-11-02 23:59:59", today), "ontem")
-        self.assertEqual(format_when("2026-10-28 08:00:00", today), "28/10")
+class TestFormatSlotWhen(unittest.TestCase):
+    def test_today_yesterday_weekday_and_older(self):
+        today = date(2026, 11, 6)  # sexta
+        self.assertEqual(format_slot_when("2026-11-06 14:03:00", today), "hoje · 14:03")
+        self.assertEqual(format_slot_when("2026-11-05 21:40:00", today), "ontem · 21:40")
+        self.assertEqual(format_slot_when("2026-11-02 19:30:00", today), "seg · 19:30")
+        self.assertEqual(format_slot_when("2026-10-25 10:05:00", today), "25/10 · 10:05")
 
     def test_invalid_is_blank(self):
-        self.assertEqual(format_when(None), "")
-        self.assertEqual(format_when("ontem"), "")
+        self.assertEqual(format_slot_when(None), "")
 
 
 class TestCommandParser(unittest.TestCase):
@@ -50,7 +50,45 @@ class TestCommandParser(unittest.TestCase):
     def test_help_lists_every_command(self):
         md = help_markdown()
         for usage, _ in COMMANDS.values():
-            self.assertIn(usage, md)
+            self.assertIn(usage.replace("|", chr(92) + "|"), md)
+
+    def test_help_table_keeps_two_cells_with_pipes(self):
+        from markdown_it import MarkdownIt
+        tokens = MarkdownIt("gfm-like").parse(help_markdown())
+        rows, cells = [], None
+        for tok in tokens:
+            if tok.type == "tr_open":
+                cells = []
+            elif tok.type == "inline" and cells is not None:
+                cells.append(tok.children[0].content if tok.children else tok.content)
+            elif tok.type == "tr_close":
+                rows.append(cells)
+                cells = None
+        self.assertEqual(len(rows), len(COMMANDS) + 1)
+        self.assertTrue(all(len(r) == 2 for r in rows))
+        usages = [r[0] for r in rows[1:]]
+        self.assertIn("/mode [chat|copilot]", usages)
+        self.assertIn("/skills [on|off <skill|categoria>]", usages)
+
+
+class TestSkillGlyphs(unittest.TestCase):
+    def test_real_intents_have_their_own_icon(self):
+        from frontend.screens.skills import FALLBACK_GLYPH, glyph_for
+        expected = {"APP_CONTROL": "▣", "AUDIO_CONTROL": "♪", "SPOTIFY_CONTROL": "♫",
+                    "KEYBOARD_CONTROL": "⌨", "SCREEN_CONTROL": "▦", "WORK_MACRO": "⚙",
+                    "SYSTEM_REPORT": "≡", "SYSTEM_CLEANUP": "✕", "SYSTEM_SECURITY": "⛨"}
+        for intent, glyph in expected.items():
+            self.assertEqual(glyph_for(intent), glyph, intent)
+        self.assertEqual(glyph_for("ALGO_NOVO"), FALLBACK_GLYPH)
+
+    def test_glyphs_take_one_cell(self):
+        from rich.cells import cell_len
+
+        from frontend.screens.skills import _GLYPHS, FALLBACK_GLYPH, TAB
+        for _, glyph in _GLYPHS:
+            self.assertEqual(cell_len(glyph), 1, glyph)
+        self.assertEqual(cell_len(FALLBACK_GLYPH), 1)
+        self.assertEqual(cell_len(TAB), len(TAB))
 
 
 if __name__ == "__main__":

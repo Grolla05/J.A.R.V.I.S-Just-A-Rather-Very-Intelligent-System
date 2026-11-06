@@ -2,7 +2,7 @@
 import re
 import time
 from collections import deque
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
 from rich.style import Style as RichStyle
 from rich.text import Text
@@ -14,9 +14,8 @@ from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.style import Style
 from textual.widget import Widget
-from textual.widgets import Button, Footer, Input, Label, Markdown, OptionList, Static
+from textual.widgets import Button, Footer, Input, Label, Markdown, Static
 from textual.widgets.markdown import MarkdownFence
-from textual.widgets.option_list import Option
 
 from frontend import orb, sprites
 
@@ -25,18 +24,26 @@ ORB_FPS = 8  # quadros/s do orb — só roda enquanto pensa ou responde
 CONFIRM_SECONDS = 30  # prazo padrão do ConfirmScreen
 
 
-def format_when(last_active, today=None):
-    """'YYYY-MM-DD HH:MM:SS' → 'HH:MM' (hoje), 'ontem' ou 'dd/mm'."""
+WEEKDAYS = ("seg", "ter", "qua", "qui", "sex", "sáb", "dom")
+
+
+def format_slot_when(last_active, today=None):
+    """'YYYY-MM-DD HH:MM:SS' → 'hoje · 14:03', 'ontem · 21:40', 'seg · 19:30'
+    (até 6 dias) ou '25/10 · 10:05' — meta dos save slots."""
     try:
         moment = datetime.strptime(str(last_active)[:19], "%Y-%m-%d %H:%M:%S")
     except (TypeError, ValueError):
         return ""
-    today = today or date.today()
-    if moment.date() == today:
-        return moment.strftime("%H:%M")
-    if moment.date() == today - timedelta(days=1):
-        return "ontem"
-    return moment.strftime("%d/%m")
+    days = ((today or date.today()) - moment.date()).days
+    if days == 0:
+        day = "hoje"
+    elif days == 1:
+        day = "ontem"
+    elif 1 < days < 7:
+        day = WEEKDAYS[moment.weekday()]
+    else:
+        day = moment.strftime("%d/%m")
+    return f"{day} · {moment:%H:%M}"
 
 
 class CodeFence(MarkdownFence):
@@ -330,126 +337,6 @@ class VoiceBar(Horizontal):
 
     def set_awaiting(self, awaiting):
         self.query_one("#voice-text", Static).update(self.AWAITING if awaiting else self.LISTENING)
-
-
-class SessionPicker(ModalScreen):
-    """Sessões recentes com filtro por título. Devolve o id escolhido (ou None)."""
-
-    BINDINGS = [
-        Binding("escape", "dismiss(None)", "Fechar"),
-        Binding("down", "focus_list", "Lista", show=False),
-        Binding("p", "pin", "Fixar", show=False),
-        Binding("delete", "delete", "Apagar", show=False),
-    ]
-
-    DELETE_CONFIRM_S = 3.0
-
-    def __init__(self, sessions, current_id, service=None):
-        """`service` (o módulo services.sessions) habilita p = fixar e
-        Del Del = apagar; sem ele o picker só lista e abre."""
-        super().__init__()
-        self._sessions = sessions
-        self._current = current_id
-        self._service = service
-        self._pending_delete = None  # (id, instante) do 1º Del
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="picker"):
-            with Horizontal(id="picker-head"):
-                yield Label("SESSÕES RECENTES", id="picker-title")
-                yield Label("enter abre · esc fecha", classes="hint")
-            yield Input(placeholder="filtrar: digite parte do título…", id="picker-filter")
-            yield OptionList(*self._options(""), id="picker-list")
-            yield Label("p fixa · Del Del apaga · /rename muda o título", classes="hint")
-
-    def on_mount(self):
-        self.query_one("#picker-filter", Input).focus()
-
-    def _options(self, query):
-        query = query.strip().lower()
-        options = []
-        for slot, s in enumerate(self._sessions, start=1):
-            title = (s["title"] or "Nova conversa").replace("\n", " ")
-            if query and query not in title.lower():
-                continue
-            mark = "▶" if s["id"] == self._current else " "
-            pin = "★" if s["is_pinned"] else " "
-            when = "fixada" if s["is_pinned"] else format_when(s.get("last_active"))
-            count = s.get("msg_count") or 0
-            # Barra = tamanho da conversa (1 bloco a cada 5 mensagens, até 10)
-            size = sprites.block_bar(min(count, 50) * 2, 10, "▰", "▱")
-            last = " ".join(str(s.get("last_message") or "").split())
-            preview = f"“{last[:44]}…”" if len(last) > 44 else (f"“{last}”" if last else "")
-            options.append(Option(
-                f"{mark} {slot:02d} {pin} {title[:54]:<54} {when:>6}\n"
-                f"       {size} {count:>3} msgs  {preview}", id=s["id"]))
-        if not options:
-            options.append(Option("Nenhuma sessão encontrada.", id="__none__", disabled=True))
-        return options
-
-    def on_input_changed(self, event: Input.Changed):
-        option_list = self.query_one("#picker-list", OptionList)
-        option_list.clear_options()
-        option_list.add_options(self._options(event.value))
-        option_list.highlighted = 0
-
-    def on_input_submitted(self, event: Input.Submitted):
-        option_list = self.query_one("#picker-list", OptionList)
-        index = option_list.highlighted or 0
-        if option_list.option_count:
-            option = option_list.get_option_at_index(index)
-            if not option.disabled:
-                self.dismiss(option.id)
-
-    def action_focus_list(self):
-        self.query_one("#picker-list", OptionList).focus()
-
-    def _highlighted_id(self):
-        option_list = self.query_one("#picker-list", OptionList)
-        if option_list.highlighted is None or not option_list.option_count:
-            return None
-        option = option_list.get_option_at_index(option_list.highlighted)
-        return None if option.disabled else option.id
-
-    def _reload(self):
-        option_list = self.query_one("#picker-list", OptionList)
-        index = option_list.highlighted or 0
-        self._sessions = self._service.get_recent_sessions(20)
-        option_list.clear_options()
-        option_list.add_options(self._options(self.query_one("#picker-filter", Input).value))
-        if option_list.option_count:
-            option_list.highlighted = min(index, option_list.option_count - 1)
-
-    def action_pin(self):
-        session_id = self._highlighted_id()
-        if not session_id or not self._service:
-            return
-        current = next((s for s in self._sessions if s["id"] == session_id), None)
-        pinned = not (current and current["is_pinned"])
-        if self._service.toggle_session_pin(session_id, pinned):
-            self.notify("Sessão fixada." if pinned else "Sessão desafixada.")
-            self._reload()
-
-    def action_delete(self):
-        session_id = self._highlighted_id()
-        if not session_id or not self._service:
-            return
-        if session_id == self._current:
-            self.notify("Não dá para apagar a sessão aberta.", severity="warning")
-            return
-        now = time.monotonic()
-        pending = self._pending_delete
-        if not pending or pending[0] != session_id or now - pending[1] > self.DELETE_CONFIRM_S:
-            self._pending_delete = (session_id, now)
-            self.notify("Pressione Del de novo para apagar esta sessão.", severity="warning")
-            return
-        self._pending_delete = None
-        if self._service.delete_session(session_id):
-            self.notify("Sessão apagada.")
-            self._reload()
-
-    def on_option_list_option_selected(self, event: OptionList.OptionSelected):
-        self.dismiss(event.option.id)
 
 
 class ConfirmScreen(ModalScreen):

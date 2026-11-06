@@ -130,7 +130,9 @@ def toggle_session_pin(session_id, is_pinned):
 def get_recent_sessions(limit=12):
     """Sessões de texto mais recentes (exclui voice_*), fixadas primeiro.
     Dicts com id, title, is_pinned, last_active ('YYYY-MM-DD HH:MM:SS', hora local),
-    msg_count (mensagens na sessão) e last_message (texto da última, p/ preview)."""
+    msg_count (mensagens na sessão), last_message (texto da última), last_reply
+    (última resposta do JARVIS, ou a última mensagem) e mode ('chat'/'copilot',
+    da última mensagem com modo gravado; padrão 'chat') — p/ os save slots."""
     conn = None
     try:
         conn = db._get_connection()
@@ -158,9 +160,22 @@ def get_recent_sessions(limit=12):
                 ORDER BY timestamp DESC, id DESC LIMIT 1
             ''', (s_id,))
             last = cursor.fetchone()
+            last_message = (last[0] or "") if last else ""
+            cursor.execute('''
+                SELECT content FROM history WHERE session_id = ? AND role = 'assistant'
+                ORDER BY timestamp DESC, id DESC LIMIT 1
+            ''', (s_id,))
+            reply = cursor.fetchone()
+            cursor.execute('''
+                SELECT mode FROM history WHERE session_id = ? AND mode IS NOT NULL
+                ORDER BY timestamp DESC, id DESC LIMIT 1
+            ''', (s_id,))
+            mode = cursor.fetchone()
             result.append({"id": s_id, "title": title, "is_pinned": is_pinned,
                            "last_active": to_local(last_active), "msg_count": msg_count,
-                           "last_message": (last[0] or "") if last else ""})
+                           "last_message": last_message,
+                           "last_reply": (reply[0] or "") if reply else last_message,
+                           "mode": (mode[0] if mode else None) or "chat"})
         result.sort(key=lambda s: not s["is_pinned"])  # sort estável: mantém recência
         return result
     except Exception as e:

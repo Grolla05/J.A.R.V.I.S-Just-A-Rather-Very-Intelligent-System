@@ -29,6 +29,7 @@ from frontend.screens import (
     HousePartyScreen,
     JarvisScreen,
     LogScreen,
+    SessionPicker,
     SettingsScreen,
     ShutdownScreen,
     SkillsScreen,
@@ -42,7 +43,6 @@ from frontend.widgets import (
     CopilotHero,
     MessageView,
     PromptInput,
-    SessionPicker,
     StatusLine,
     VoiceBar,
 )
@@ -135,6 +135,7 @@ class JarvisApp(App, inherit_bindings=False):
         self.telemetry_history = {name: deque(maxlen=TELEMETRY_HISTORY)
                                   for name in ("CPU", "RAM", "GPU", "REDE")}
         self.last_skill_turn = None
+        self.last_net = (0.0, 0.0)
 
     # ------------------------------------------------------------------ layout
     def compose(self) -> ComposeResult:
@@ -223,7 +224,8 @@ class JarvisApp(App, inherit_bindings=False):
         title = (self.session_title or sessions.DEFAULT_TITLE).replace("\n", " ")[:70]
         self.main_screen.query_one("#session-title", Static).update(title)
         if self.critical:
-            info = "⚠ PROTOCOLO CRÍTICO"
+            reasons = getattr(state.sys_monitor, "critical_reasons", None) or []
+            info = " · ".join(["⚠ PROTOCOLO CRÍTICO", *reasons[:2]])
         elif self.mode == "copilot":
             info = " · ".join(p for p in ("somente voz", self._skills_info) if p)
         else:
@@ -591,7 +593,7 @@ class JarvisApp(App, inherit_bindings=False):
                 if saved:
                     images = [image["data"]]
                     att_type, att_path = "image", str(saved.relative_to(settings.DIR_UPLOADS))
-            db.log_interaction("user", text, session_id, att_type, att_path)
+            db.log_interaction("user", text, session_id, att_type, att_path, mode=mode)
 
             last_flush = 0.0
             for chunk in self._stream_fn(model_text or text, session_id, images, mode, on_route=on_route):
@@ -614,7 +616,7 @@ class JarvisApp(App, inherit_bindings=False):
             if skill:
                 self.call_from_thread(reply.set_meta, f"{base_meta} · ■ [{skill[0]}] ✓")
                 self._finish_skill_turn("ok", full)
-            db.log_interaction("assistant", full, session_id)
+            db.log_interaction("assistant", full, session_id, mode=mode)
         except Exception as e:
             log.error(f"Erro no stream do chat: {e}")
             self.call_from_thread(reply.set_text, f"**Erro:** `{e}`")
@@ -677,7 +679,7 @@ class JarvisApp(App, inherit_bindings=False):
 
     def _read_telemetry(self):
         mon = state.sys_monitor
-        values = {}
+        values, net_split = {}, None
         try:
             cpu = (mon.get_cpu_detailed() or {}).get("usage", 0) or 0
             ram = (mon.get_ram_usage() or {}).get("percent", 0) or 0
@@ -686,16 +688,19 @@ class JarvisApp(App, inherit_bindings=False):
             net_fn = getattr(mon, "get_network_speed", None)
             if callable(net_fn):
                 net = net_fn() or {}
-                values["REDE"] = (net.get("download_bps", 0) or 0) + (net.get("upload_bps", 0) or 0)
+                net_split = (net.get("download_bps", 0) or 0, net.get("upload_bps", 0) or 0)
+                values["REDE"] = sum(net_split)
             text = "   ".join(f"{name} {block_bar(value)} {value:.0f}%"
                               for name, value in (("CPU", cpu), ("RAM", ram), ("GPU", gpu)))
         except Exception as e:
             log.debug(f"Telemetria indisponível: {e}")
             text = "telemetria indisponível"
-        self.call_from_thread(self._set_telemetry, text, values)
+        self.call_from_thread(self._set_telemetry, text, values, net_split)
 
-    def _set_telemetry(self, text, values=None):
+    def _set_telemetry(self, text, values=None, net_split=None):
         self._telemetry = text
+        if net_split is not None:
+            self.last_net = net_split  # (↓ B/s, ↑ B/s) p/ o /status
         for name, value in (values or {}).items():
             self.telemetry_history.setdefault(name, deque(maxlen=TELEMETRY_HISTORY)).append(value)
         self._refresh_status()

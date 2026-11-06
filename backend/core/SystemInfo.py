@@ -16,23 +16,50 @@ except Exception:
     HAS_GPU_LIB = False
 # ------------------------
 
+# Limites que ligam o protocolo crítico (HUD vermelho) e os avisos falados
+DEFAULT_THRESHOLDS = {
+    'cpu_max': 90.0,
+    'ram_max': 90.0,
+    'gpu_temp_max': 85.0,
+    'disk_min_gb_warning': 20.0,
+    'disk_min_gb_critical': 10.0,
+    'battery_min': 15.0
+}
+
+
+def critical_reasons(cpu, ram_percent, gpu_temp, disks, battery, thresholds=None):
+    """Motivos do protocolo crítico agora (lista vazia = tudo normal).
+
+    Disco usa GB livres (o mesmo critério do aviso falado): porcentagem livre
+    acusava "cheio" um disco de 222 GB com 20 GB sobrando."""
+    th = thresholds or DEFAULT_THRESHOLDS
+    reasons = []
+    if (cpu or 0) > th['cpu_max']:
+        reasons.append(f"CPU {cpu:.0f}%")
+    if (ram_percent or 0) > th['ram_max']:
+        reasons.append(f"RAM {ram_percent:.0f}%")
+    if (gpu_temp or 0) > th['gpu_temp_max']:
+        reasons.append(f"GPU {gpu_temp:.0f}°C")
+    for d in disks if isinstance(disks, list) else []:
+        free_gb = d.get('free_gb')
+        if free_gb is not None and free_gb < th['disk_min_gb_critical']:
+            reasons.append(f"disco {d.get('mount', '?')} com {free_gb:.1f} GB livres")
+    battery = battery or {}
+    if not battery.get('plugged', True) and battery.get('percent', 100) <= th['battery_min']:
+        reasons.append(f"bateria {battery['percent']}%")
+    return reasons
+
+
 class SystemInfo:
     def __init__(self, brain_callback=None):
         self.os_name = platform.system()
         self.brain_callback = brain_callback
         self.is_monitoring = False
         self.in_critical_state = False # Rastreia se o HUD está vermelho atualmente
-        
+        self.critical_reasons = []     # Motivos do estado crítico (mostrados no topo da TUI)
+
         # --- CONFIGURAÇÃO DE LIMITES DE HARDWARE ---
-        self.thresholds = {
-            'cpu_max': 90.0,
-            'ram_max': 90.0,
-            'gpu_temp_max': 85.0,
-            'disk_space_min': 10.0,
-            'disk_min_gb_warning': 20.0,
-            'disk_min_gb_critical': 10.0,
-            'battery_min': 15.0
-        }
+        self.thresholds = dict(DEFAULT_THRESHOLDS)
 
         # Estado anterior (Debounce)
         self.alert_state = {
@@ -216,6 +243,40 @@ class SystemInfo:
             pass
         return {"name": "Integrada/N/A", "load": 0, "temp": 0}
 
+    def get_dashboard_details(self, top=5):
+        """Números crus p/ o /status da TUI: núcleos, GHz, RAM e VRAM em GB e
+        os processos que mais usam memória [(nome, bytes)]."""
+        details = {"cores": psutil.cpu_count(logical=True) or 0, "freq_ghz": 0.0,
+                   "ram_used_gb": 0.0, "ram_total_gb": 0.0, "gpu_name": "",
+                   "vram_used_gb": None, "vram_total_gb": None, "top_memory": []}
+        try:
+            freq = psutil.cpu_freq()
+            details["freq_ghz"] = (freq.current / 1000) if freq else 0.0
+            ram = psutil.virtual_memory()
+            details["ram_used_gb"] = ram.used / (1024 ** 3)
+            details["ram_total_gb"] = ram.total / (1024 ** 3)
+        except Exception as e:
+            log.debug(f"Detalhes de CPU/RAM indisponíveis: {e}")
+        if HAS_GPU_LIB:
+            try:
+                gpus = GPUtil.getGPUs()
+                if gpus:
+                    details["gpu_name"] = gpus[0].name
+                    details["vram_used_gb"] = gpus[0].memoryUsed / 1024
+                    details["vram_total_gb"] = gpus[0].memoryTotal / 1024
+            except Exception as e:
+                log.debug(f"Detalhes de GPU indisponíveis: {e}")
+        procs = []
+        for proc in psutil.process_iter(['name', 'memory_info']):
+            try:
+                mem = proc.info.get('memory_info')
+                if mem and proc.info.get('name'):
+                    procs.append((proc.info['name'], mem.rss))
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                continue
+        details["top_memory"] = sorted(procs, key=lambda p: p[1], reverse=True)[:top]
+        return details
+
     def get_network_speed(self):
         current_time = time.time()
         time_delta = current_time - self.last_time
@@ -395,24 +456,24 @@ class SystemInfo:
                 is_cpu_high = cpu > self.thresholds['cpu_max']
                 is_ram_high = ram['percent'] > self.thresholds['ram_max']
                 is_gpu_hot = gpu['temp'] > self.thresholds['gpu_temp_max']
-                is_disk_full = False
-                if isinstance(disk, list):
-                    for d in disk:
-                        if d['free_percent'] < self.thresholds['disk_space_min']:
-                            is_disk_full = True
-                            break
-                
+
                 # Bateria crítica: só se não estiver carregando e abaixo do mínimo
                 is_battery_crit = (not bat['plugged'] and bat['percent'] <= self.thresholds['battery_min'])
-                
-                # Estado Geral: Existe ALGUM problema agora?
-                current_danger = is_cpu_high or is_ram_high or is_gpu_hot or is_disk_full or is_battery_crit
+
+                # Estado Geral: Existe ALGUM problema agora? (motivos vão p/ o topo da TUI)
+                reasons = critical_reasons(cpu, ram['percent'], gpu['temp'], disk, bat, self.thresholds)
+                self.critical_reasons = reasons
+                current_danger = bool(reasons)
 
                 # --- 3. LÓGICA VISUAL (HUD RESPONSIVO) ---
                 # Detecta mudança de estado: Entrou em perigo OU Saiu do perigo
                 if current_danger != self.in_critical_state:
                     self.in_critical_state = current_danger
-                    
+                    if current_danger:
+                        log.warning(f"Protocolo crítico: {', '.join(reasons)}")
+                    else:
+                        log.info("Protocolo crítico encerrado: sistema normalizado.")
+
                     if self.brain_callback:
                         # Envia sinal puro de estado (sem texto para fala)
                         status_code = "CRITICAL_START" if current_danger else "CRITICAL_END"

@@ -30,6 +30,7 @@ $j-warn: #ffcb6b;
 $j-deep: #0e7490;
 $j-pale: #c9fbff;
 $j-scanline: #2a0f14;
+$j-contact: #8a6a1f;
 
 /* Sprites pixel-art (frontend/sprites.py → PixelSprite) */
 PixelSprite > .px--neon { color: $j-neon; }
@@ -258,35 +259,6 @@ ConfirmScreen { background: $j-scanline 75%; }
 
 .hint { color: $j-muted; }
 
-#picker {
-    width: 84;
-    max-width: 95%;
-    height: auto;
-    max-height: 85%;
-    border: double $j-neon;
-    background: $j-panel;
-    padding: 1 2;
-}
-
-#picker-head { height: 1; }
-#picker-title { width: 1fr; color: $j-neon; text-style: bold; }
-
-#picker-filter {
-    margin: 1 0;
-    border: tall $j-line;
-    background: $j-panel;
-}
-
-#picker-filter:focus { border: tall $j-neon; }
-
-#picker-list {
-    height: auto;
-    max-height: 16;
-    margin-bottom: 1;
-    border: none;
-    background: $j-panel;
-}
-
 #confirm {
     width: 64;
     max-width: 95%;
@@ -341,7 +313,7 @@ JarvisScreen { background: $j-bg; }
 JarvisScreen.-critical #topbar { background: $j-danger-strong; color: $j-white; }
 JarvisScreen.-critical StatusLine > .status--bar { color: $j-danger; }
 
-/* --- /status: 4 medidores + painel lateral --- */
+/* --- /status: 4 painéis (nome · valor, barras espaçadas, detalhe) + núcleo --- */
 #status-body { height: 1fr; padding: 1 2; }
 
 #status-grid {
@@ -352,34 +324,38 @@ JarvisScreen.-critical StatusLine > .status--bar { color: $j-danger; }
 }
 
 .meter {
-    border: double $j-line;
+    border: round $j-line;
     background: $j-panel;
-    padding: 0 1;
+    padding: 1 2;
     height: 1fr;
 }
 
-.meter-name { color: $j-white; text-style: bold; }
-.meter-value { color: $j-neon; text-style: bold; }
-.meter-chart { color: $j-neon; height: 6; }
-.meter.-moderada .meter-value, .meter.-moderada .meter-chart { color: $j-warn; }
-.meter.-alta .meter-value, .meter.-alta .meter-chart { color: $j-danger-soft; }
-.meter-detail { color: $j-muted; }
+.meter-head { height: 1; margin-bottom: 1; }
+.meter-name { width: 1fr; color: $j-white; text-style: bold; }
+.meter-value { width: auto; color: $j-neon; text-style: bold; }
+.meter.-moderada .meter-value { color: $j-warn; }
+.meter.-alta .meter-value { color: $j-danger-soft; }
+BarChart > .chart--baixa { color: $j-neon; }
+BarChart > .chart--moderada { color: $j-warn; }
+BarChart > .chart--alta { color: $j-danger-soft; }
+.meter-detail { height: 1; margin-top: 1; color: $j-muted; }
 
 #status-side {
     width: 34;
     margin-left: 2;
-    border: double $j-neon;
+    border: round $j-line;
     background: $j-panel;
-    padding: 0 1;
-    align-horizontal: center;
+    padding: 1 2;
 }
 
-#status-side Label, #status-side Static { width: 1fr; }
-#status-orb { margin: 1 0; width: auto; }
-#status-level { text-style: bold; color: $j-neon; content-align: center middle; }
-#status-level.-moderada { color: $j-warn; }
+#status-side Label { width: 1fr; }
+#status-orb-box { height: auto; margin-top: 1; }
+#status-level { margin: 1 0 2 0; text-style: bold; color: $j-neon; content-align: center middle; }
 #status-level.-alta { color: $j-danger-soft; }
-#status-procs { color: $j-text-soft; margin-bottom: 1; }
+#status-procs-title { margin-bottom: 1; }
+ProcessList > .procs--name { color: $j-white; }
+ProcessList > .procs--size { color: $j-muted; }
+#status-gap { height: 1fr; }
 
 /* --- /skills: grid de cartuchos --- */
 #skills-legend { height: 1; padding: 0 2; margin-top: 1; }
@@ -390,62 +366,91 @@ JarvisScreen.-critical StatusLine > .status--bar { color: $j-danger; }
 #skills-grid {
     grid-size: 4;
     grid-gutter: 1 2;
-    grid-rows: 7;
+    grid-rows: 12;
     padding: 1 2;
     height: 1fr;
 }
 
-#skills-hint { padding: 0 2; }
-
+/* Cartucho retrô: aba · etiqueta (ícone + nome) · ■ categoria  ON · contatos */
 .cartridge {
     width: 1fr;
-    height: 6;
-    min-width: 16;
+    height: 11;
+    min-width: 18;
+    padding: 0 1;
     background: $j-panel;
     color: $j-white;
-    border: tall $j-line;
-    text-style: bold;
-    content-align: center middle;
+    border: round $j-line;
 }
-
-.cartridge.-on { border: tall $j-neon; }
-.cartridge.-on.-cat-system { border: tall $j-warn; }
-.cartridge.-off {
-    offset-y: 1;
-    background: $j-bg;
-    color: $j-muted;
-    text-style: none;
-}
-.cartridge:focus { border: double $j-white; background: $j-footer; text-style: bold; }
 .cartridge:hover { background: $j-footer; }
+
+.cart-tab { width: 1fr; height: 1; content-align: center top; color: $j-neon; }
+.cart-label {
+    height: 4;
+    border: round $j-line;
+    background: $j-bg;
+}
+.cart-icon { width: 1fr; content-align: center middle; color: $j-white; text-style: bold; }
+.cart-name { width: 1fr; content-align: center middle; color: $j-white; text-style: bold; }
+.cart-info { height: 1; margin-top: 1; }
+.cart-dot { width: 2; color: $j-neon; }
+.cart-cat { width: 1fr; color: $j-muted; }
+.cart-state { width: auto; color: $j-neon; text-style: bold; }
+.cart-gap { height: 1fr; }
+.cart-contacts { width: 1fr; height: 1; color: $j-contact; }
+
+.cartridge.-on { border: round $j-neon; }
+.cartridge.-on.-cat-system { border: round $j-warn; }
+.cartridge.-cat-system .cart-tab,
+.cartridge.-cat-system .cart-dot,
+.cartridge.-cat-system .cart-state { color: $j-warn; }
+
+.cartridge.-off { offset-y: 1; background: $j-bg; border: round $j-line; }
+.cartridge.-off .cart-tab,
+.cartridge.-off .cart-dot,
+.cartridge.-off .cart-contacts { color: $j-line; }
+.cartridge.-off .cart-label { border: round $j-line; background: $j-bg; }
+.cartridge.-off .cart-icon,
+.cartridge.-off .cart-name,
+.cartridge.-off .cart-cat,
+.cartridge.-off .cart-state { color: $j-muted; text-style: none; }
+
+.cartridge:focus { border: round $j-white; background: $j-footer; }
 
 /* --- /log: filtros, timeline e linhas --- */
 #log-filters { height: 3; padding: 0 2; margin-top: 1; }
 .log-filter {
     min-width: 9;
+    height: 3;
     margin-right: 1;
-    background: $j-panel;
+    padding: 0 1;
+    background: $j-bg;
     color: $j-text-soft;
-    border: tall $j-line;
+    border: round $j-line;
+    text-style: none;
 }
-.log-filter.-active { background: $j-neon; color: $j-bg; border: tall $j-neon; text-style: bold; }
+.log-filter:hover { background: $j-panel; }
+.log-filter:focus { text-style: bold; }
+.log-filter.-active { background: $j-neon; color: $j-bg; border: round $j-neon; text-style: bold; }
 
 #log-timeline {
     height: auto;
     margin: 1 2 0 2;
-    padding: 0 1;
-    border: double $j-line;
+    padding: 1 2;
+    border: round $j-line;
     background: $j-panel;
 }
 
-#log-timeline Label { width: auto; }
-#timeline-title { margin-right: 2; }
-#log-timeline .step { padding: 0 1; background: $j-badge-ink; color: $j-white; text-style: bold; }
-#log-timeline .step.-ok { background: $j-ok; color: $j-bg; }
-#log-timeline .step.-fail { background: $j-danger-strong; color: $j-white; }
-#log-timeline .step.-run { background: $j-panel; color: $j-neon; text-style: bold italic; }
-#log-timeline .wire { color: $j-neon; }
+#timeline-title { margin-bottom: 1; }
+#timeline-steps { height: 3; }
+#timeline-steps Label { width: auto; height: 3; content-align: center middle; }
+#timeline-steps .step { padding: 0 2; background: $j-badge-ink; color: $j-white; text-style: bold; }
+#timeline-steps .step.-ok { background: $j-ok; color: $j-bg; }
+#timeline-steps .step.-fail { background: $j-danger-strong; color: $j-white; }
+#timeline-steps .step.-run { background: $j-panel; color: $j-neon; text-style: bold italic; }
+#timeline-steps .step.-speech { padding: 0 1; background: $j-panel; color: $j-neon; border: dashed $j-neon; }
+#timeline-steps .wire { color: $j-neon; }
 
+#log-search { margin: 1 2 0 2; border: tall $j-neon; background: $j-panel; }
 #log-scroll { margin: 1 2; height: 1fr; scrollbar-size-vertical: 1; }
 
 LogLines > .log--time { color: $j-muted; }
@@ -458,9 +463,42 @@ LogLines > .log--INFO { color: $j-neon; text-style: bold; }
 LogLines > .log--WARN { color: $j-warn; text-style: bold; }
 LogLines > .log--ERROR { color: $j-danger-soft; text-style: bold; }
 LogLines > .log--CRITICAL { color: $j-danger; text-style: bold reverse; }
+LogLines > .log--error-row { background: $j-scanline; }
 
-/* --- Save slots (SessionPicker): 2 linhas por slot --- */
-#picker-list > .option-list--option { padding: 0 1; }
+/* --- Save slots (SessionPicker, Ctrl+O): grade 2 colunas de cartões --- */
+#slots-scroll { height: 1fr; padding: 1 2 0 2; scrollbar-size-vertical: 1; }
+
+#slots-grid {
+    grid-size: 2;
+    grid-gutter: 1 2;
+    grid-rows: 8;
+    height: auto;
+}
+
+.slot {
+    height: 8;
+    padding: 0 1;
+    border: round $j-line;
+    background: $j-panel;
+}
+.slot:hover { background: $j-footer; }
+.slot:focus { border: round $j-neon; background: $j-footer; }
+
+.slot-head { height: 1; }
+.slot-badge { width: auto; padding: 0 1; margin-right: 1; background: $j-badge-ink; color: $j-white; text-style: bold; }
+.slot:focus .slot-badge { background: $j-neon; color: $j-ink; }
+.slot-title { width: 1fr; color: $j-white; text-style: bold; text-wrap: nowrap; text-overflow: ellipsis; }
+.slot-star { width: auto; color: $j-warn; }
+.slot-meta { width: 1fr; color: $j-muted; text-wrap: nowrap; text-overflow: ellipsis; }
+.slot-quote { width: 1fr; height: 1; margin-top: 1; color: $j-text-soft; }
+.slot-bar { width: 1fr; height: 1; margin-top: 1; color: $j-ocean; }
+.slot:focus .slot-bar { color: $j-neon; }
+SlotBar > .slot-bar--empty { color: $j-line; }
+
+#slots-search { height: 3; padding: 0 2; }
+#slots-search-label { width: auto; height: 3; content-align-vertical: middle; margin-right: 1; color: $j-muted; }
+#slots-filter { width: 1fr; border: tall $j-line; background: $j-panel; }
+#slots-filter:focus { border: tall $j-neon; }
 
 /* --- /vault: busca + árvore + prévia + radar --- */
 #vault-search {

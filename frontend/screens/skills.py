@@ -1,46 +1,75 @@
 """/skills — cartuchos das skills (canvas: "8 · Skills — cartuchos").
 
-Um cartucho por skill, agrupado por categoria. Enter/espaço liga ou desliga a
-skill em foco; `c` liga/desliga a categoria inteira. Ligado = encaixado (cor da
-categoria); desligado = "fora do slot" (desce 1 linha, apagado).
+Um cartucho retrô por skill: aba na cor da categoria, etiqueta com ícone e
+INTENT, linha "■ categoria … ON" e os contatos dourados no rodapé.
+Enter/espaço/clique liga ou desliga a skill em foco; `c` liga/desliga a
+categoria inteira. Ligado = encaixado (cor da categoria); desligado = "fora do
+slot" (desce 1 linha, apagado).
 """
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Grid, Horizontal
-from textual.widgets import Button, Label
+from textual.containers import Grid, Horizontal, Vertical
+from textual.widgets import Label, Static
 
 from core import log
 from frontend.screens.base import JarvisScreen
 
-# Ícone de 1 célula por palavra-chave do INTENT (fallback ◆)
-_GLYPHS = (("APP", "▣"), ("AUDIO", "♪"), ("KEYBOARD", "▤"), ("SCREEN", "▦"),
-           ("MACRO", "✱"), ("STATUS", "≡"), ("CLEAR", "✕"), ("SECURITY", "◈"))
+# Ícone de 1 célula por palavra-chave do INTENT (fallback ◆). Ordem importa:
+# a 1ª palavra encontrada no INTENT vence.
+_GLYPHS = (("SPOTIFY", "♫"), ("APP", "▣"), ("AUDIO", "♪"), ("KEYBOARD", "⌨"),
+           ("SCREEN", "▦"), ("MACRO", "⚙"), ("STATUS", "≡"), ("REPORT", "≡"),
+           ("CLEAN", "✕"), ("CLEAR", "✕"), ("SECURITY", "⛨"))
+FALLBACK_GLYPH = "◆"
+TAB = "▄" * 12  # aba de encaixe no topo do cartucho
 
 
 def glyph_for(intent):
-    return next((g for key, g in _GLYPHS if key in intent.upper()), "◆")
+    return next((g for key, g in _GLYPHS if key in intent.upper()), FALLBACK_GLYPH)
 
 
-class Cartridge(Button):
+class CartContacts(Static):
+    """Contatos do cartucho (▮ ▮ ▮…) ocupando a largura."""
+
+    def render(self):
+        width = max(self.size.width, 1)
+        return ("▮ " * (width // 2 + 1))[:width]
+
+
+class Cartridge(Vertical, can_focus=True):
     """Cartucho de uma skill. `-on`/`-off` + `-cat-<categoria>` dão a cor."""
 
     def __init__(self, intent, category, enabled, category_enabled=True):
-        super().__init__(self._label(intent, category, enabled), classes="cartridge")
+        super().__init__(classes=f"cartridge -cat-{category}")
         self.intent = intent
         self.category = category
+        self.enabled_ = False
         self.set_state(enabled, category_enabled)
 
-    @staticmethod
-    def _label(intent, category, enabled):
-        state = "ON" if enabled else "OFF"
-        return f"{glyph_for(intent)}\n{intent}\n■ {category}  {state}"
+    def compose(self) -> ComposeResult:
+        yield Static(TAB, classes="cart-tab")
+        with Vertical(classes="cart-label"):
+            yield Static(glyph_for(self.intent), classes="cart-icon", markup=False)
+            yield Static(self.intent, classes="cart-name", markup=False)
+        with Horizontal(classes="cart-info"):
+            yield Static("■", classes="cart-dot")
+            yield Static(self.category, classes="cart-cat", markup=False)
+            yield Static(self._state_text(), classes="cart-state")
+        yield Static(classes="cart-gap")
+        yield CartContacts(classes="cart-contacts")
+
+    def _state_text(self):
+        return "ON" if self.enabled_ else "OFF"
 
     def set_state(self, enabled, category_enabled=True):
-        self.enabled_ = enabled and category_enabled
-        self.label = self._label(self.intent, self.category, self.enabled_)
+        self.enabled_ = bool(enabled and category_enabled)
         self.set_class(self.enabled_, "-on")
         self.set_class(not self.enabled_, "-off")
-        self.add_class(f"-cat-{self.category}")
+        for state in self.query(".cart-state"):
+            state.update(self._state_text())
+
+    def on_click(self):
+        self.focus()
+        self.screen.toggle_cartridge(self)
 
 
 class SkillsScreen(JarvisScreen):
@@ -50,13 +79,21 @@ class SkillsScreen(JarvisScreen):
     BINDINGS = [
         Binding("escape", "close", "Voltar"),
         Binding("space", "toggle", "Liga/desliga"),
+        Binding("enter", "toggle", "Liga/desliga", show=False),
         Binding("c", "toggle_category", "Categoria inteira"),
+        Binding("up", "move(-4)", show=False),
+        Binding("down", "move(4)", show=False),
+        Binding("left", "move(-1)", show=False),
+        Binding("right", "move(1)", show=False),
     ]
+    COLUMNS = 4
 
     def body(self) -> ComposeResult:
         yield Horizontal(id="skills-legend")
         yield Grid(id="skills-grid")
-        yield Label("Skills só rodam no Copilot (voz).", classes="hint", id="skills-hint")
+
+    def status_hint(self):
+        return "skills só rodam no Copilot (voz)"
 
     def on_mount(self):
         super().on_mount()
@@ -105,17 +142,21 @@ class SkillsScreen(JarvisScreen):
     def _focused_cart(self):
         return self.focused if isinstance(self.focused, Cartridge) else None
 
-    def on_button_pressed(self, event: Button.Pressed):
-        if isinstance(event.button, Cartridge):
-            event.stop()
-            self._toggle(event.button)
+    def action_move(self, step):
+        carts = list(self.query(Cartridge))
+        cart = self._focused_cart()
+        if not carts or cart is None:
+            return
+        index = carts.index(cart) + step
+        if 0 <= index < len(carts):
+            carts[index].focus()
 
     def action_toggle(self):
         cart = self._focused_cart()
         if cart:
-            self._toggle(cart)
+            self.toggle_cartridge(cart)
 
-    def _toggle(self, cart):
+    def toggle_cartridge(self, cart):
         from services.skill_settings import set_enabled
         set_enabled(cart.intent, not cart.enabled_)
         self.reload()
