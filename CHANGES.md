@@ -3,6 +3,22 @@
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
 **Data:** 2026-11-05
+**Escopo:** Boot verifica o servidor Ollama e o inicia (`ollama serve`) se estiver offline, antes de carregar a TUI.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `ensure_ollama_running()`: sonda `GET /api/version` (2 s, sem proxy). Offline + host local → acha o `ollama` (PATH ou `%LOCALAPPDATA%\Programs\Ollama`), roda `ollama serve` sem janela, em outro grupo de processo e com a saída descartada, e espera a API por até `OLLAMA_START_TIMEOUT` s. Retorna `running` / `started` / `failed` e nunca derruba o boot | `backend/core/ollama_server.py` (novo) |
+| 2 | `main.py` chama a checagem logo após o sanity check, antes de importar a TUI | `backend/main.py` |
+| 3 | Etapa "core.llm / Ollama" da tela de boot mostra `[ FAIL ]` se o servidor seguir offline (e não dispara o warm-up à toa) | `backend/core/boot.py` |
+| 4 | Novas variáveis `OLLAMA_AUTOSTART` (padrão `True`) e `OLLAMA_START_TIMEOUT` (padrão `30`) | `backend/core/config.py`, `env.example` |
+
+**Decisões:** o servidor fica desacoplado e continua rodando depois que o JARVIS fecha (mesmo comportamento do app oficial do Ollama; evita recarregar o modelo a cada boot). Host remoto no `OLLAMA_HOST` não é iniciado — só avisa. Se o `ollama serve` morrer (ex.: outra instância já pegou a porta), uma última sonda decide. O `boot.bat` mantém a própria checagem; com ele, a do Python só confirma que está online.
+
+**Testes novos:** `test_ollama_server.py`: normalização do host, host local × remoto, sonda (200 e conexão recusada), fallback do executável no `%LOCALAPPDATA%`, `Popen` com `serve` e saída descartada, espera (responde depois de N sondas, para se o processo morrer) e `ensure_ollama_running` (já online, offline → inicia, não instalado, sem resposta, `OSError` no `Popen`, host remoto, autostart desligado).
+
+---
+
+**Data:** 2026-11-05
 **Escopo:** Fases 3 e 4 de 4 das novas telas 16-bit: `/vault`, `/config`, nível real do microfone na barra de voz, tela de boot, desligamento CRT e o easter egg "House Party Protocol".
 
 | # | Mudança | Arquivos |
