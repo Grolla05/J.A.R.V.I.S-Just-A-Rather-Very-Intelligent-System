@@ -34,6 +34,9 @@ def _check_skills():
 
 def _check_ollama():
     from .llm import warm_up_ollama
+    from .ollama_server import is_ollama_running
+    if not is_ollama_running():
+        return "fail", "servidor offline · chat indisponível"
     threading.Thread(target=warm_up_ollama, daemon=True).start()
     return "ok", f"{settings.OLLAMA_MODEL} aquecendo em segundo plano"
 

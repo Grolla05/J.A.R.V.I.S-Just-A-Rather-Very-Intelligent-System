@@ -52,6 +52,10 @@ class Settings:
     # o llm.py desativa esta opção e segue com o padrão do Ollama (ver core/llm.py).
     OLLAMA_NUM_CTX = _optional_int("OLLAMA_NUM_CTX")
     OLLAMA_NUM_GPU = _optional_int("OLLAMA_NUM_GPU")
+    # Boot: se o Ollama local estiver offline, o main.py roda `ollama serve` e espera
+    # até OLLAMA_START_TIMEOUT segundos pela API (ver core/ollama_server.py).
+    OLLAMA_AUTOSTART: bool = os.getenv("OLLAMA_AUTOSTART", "True").lower() == "true"
+    OLLAMA_START_TIMEOUT: int = int(os.getenv("OLLAMA_START_TIMEOUT", "30"))
 
     # --- Configurações de Visão (Ollama multimodal — upload de imagem no Chat) ---
     OLLAMA_VISION_MODEL: str = os.getenv("OLLAMA_VISION_MODEL", "moondream")

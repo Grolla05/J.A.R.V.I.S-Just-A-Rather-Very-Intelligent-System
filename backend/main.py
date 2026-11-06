@@ -8,6 +8,10 @@ def start_jarvis():
     settings.perform_sanity_check()
     log.info(f"Inicializando {settings.PROJECT_NAME} v{settings.VERSION} (TUI)")
 
+    # Antes de carregar a TUI: Ollama no ar (sobe `ollama serve` se estiver offline).
+    from core.ollama_server import ensure_ollama_running
+    ensure_ollama_running()
+
     # A TUI mora em <raiz>/frontend (pacote `frontend`), separada do backend.
     if str(settings.DIR_ROOT) not in sys.path:
         sys.path.insert(0, str(settings.DIR_ROOT))
