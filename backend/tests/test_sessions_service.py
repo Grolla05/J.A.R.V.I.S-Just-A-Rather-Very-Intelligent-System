@@ -92,6 +92,33 @@ class TestSessionsService(unittest.TestCase):
         self.assertEqual(recent[0]["msg_count"], 4)
         self.assertEqual(recent[0]["last_message"], "tudo certo, Senhor")
 
+    def test_recent_sessions_bring_mode_and_last_reply(self):
+        self.db.log_interaction("assistant", "Abrindo VS Code, Senhor.", "s1", mode="copilot")
+        self.db.log_interaction("user", "valeu", "s1", mode="copilot")
+        self._chat("s0", ("sem modo", "resposta antiga"))
+        recent = {s["id"]: s for s in sessions.get_recent_sessions()}
+        self.assertEqual(recent["s1"]["mode"], "copilot")
+        self.assertEqual(recent["s1"]["last_reply"], "Abrindo VS Code, Senhor.")
+        self.assertEqual(recent["s1"]["last_message"], "valeu")
+        self.assertEqual(recent["s0"]["mode"], "chat")  # banco antigo: sem modo = chat
+
+    def test_old_history_table_gains_mode_column(self):
+        import sqlite3
+        conn = sqlite3.connect(self._path)
+        conn.execute("DROP TABLE history")
+        conn.execute("CREATE TABLE history (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL "
+                     "DEFAULT 'default', role TEXT NOT NULL, content TEXT NOT NULL, "
+                     "timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+        conn.commit()
+        conn.close()
+        database.DatabaseManager()
+        conn = sqlite3.connect(self._path)
+        try:
+            columns = [c[1] for c in conn.execute("PRAGMA table_info(history)")]
+        finally:
+            conn.close()
+        self.assertIn("mode", columns)
+
     def test_delete_session_removes_history_and_meta(self):
         self._chat("s1", ("a", "b"))
         self._chat("s2", ("c", "d"))

@@ -235,9 +235,12 @@ class TestJarvisApp(unittest.IsolatedAsyncioTestCase):
             await pilot.press("shift+tab")
             self.assertEqual(str(badge.render()), "COPILOT")
             self.assertTrue(str(info.render()).startswith("somente voz"))
-            app.critical = True
-            await pilot.pause()
-            self.assertIn("PROTOCOLO CRÍTICO", str(info.render()))
+            class Mon:
+                critical_reasons = ["disco D: com 8.2 GB livres"]
+            with patch.object(state, "sys_monitor", Mon()):
+                app.critical = True
+                await pilot.pause()
+            self.assertIn("PROTOCOLO CRÍTICO · disco D: com 8.2 GB livres", str(info.render()))
             self.assertTrue(app.main_screen.has_class("-critical"))
 
     async def test_session_picker_filters_and_opens(self):
@@ -249,12 +252,14 @@ class TestJarvisApp(unittest.IsolatedAsyncioTestCase):
             await self._send(pilot, "plano de estudos")
             await pilot.press("ctrl+o")
             await pilot.pause()
+            await pilot.pause()
             picker = app.screen
             self.assertIsInstance(picker, tui_app.SessionPicker)
-            await pilot.press(*"pão")
+            self.assertEqual(str(picker.query_one("#mode-badge").render()), "CARREGAR")
+            self.assertIn("2 sessões", str(picker.query_one("#session-title").render()))
+            await pilot.press("slash", *"pão")
             await pilot.pause()
-            option_list = picker.query_one("#picker-list")
-            self.assertEqual(option_list.option_count, 1)
+            self.assertEqual(len(picker._cards()), 1)
             await pilot.press("enter")
             await pilot.pause()
             self.assertEqual(app.session_id, first)
@@ -305,14 +310,25 @@ class TestJarvisApp(unittest.IsolatedAsyncioTestCase):
             self.assertIn("RAM ▰▰▰▰▰ 100%", text)
             self.assertIn("GPU ▱▱▱▱▱ 0%", text)
 
-    async def test_session_picker_marks_current_with_cursor_and_slot(self):
+    async def test_session_picker_focuses_current_slot_card(self):
         app = self._app()
-        async with app.run_test() as pilot:
+        async with app.run_test(size=(140, 45)) as pilot:
             await self._send(pilot, "receita de pão")
+            older = app.session_id
+            await pilot.press("ctrl+n")
+            await self._send(pilot, "plano de estudos")
             await pilot.press("ctrl+o")
+            await pilot.pause(0.2)
+            screen = app.screen
+            cards = screen._cards()
+            self.assertEqual([c.slot for c in cards], [1, 2])
+            self.assertEqual(str(cards[0].query_one(".slot-badge").render()), "01")
+            self.assertEqual(screen.focused.session_id, app.session_id)
+            await pilot.press("right")
+            self.assertEqual(screen.focused.session_id, older)
+            await pilot.press("escape")
             await pilot.pause()
-            option = app.screen.query_one("#picker-list").get_option_at_index(0)
-            self.assertTrue(str(option.prompt).startswith("▶ 01"))
+            self.assertIs(app.screen, app.main_screen)
 
     async def test_status_screen_shows_history_and_escape_returns(self):
         app = self._app()
@@ -354,10 +370,15 @@ class TestJarvisApp(unittest.IsolatedAsyncioTestCase):
                 self.assertIsInstance(app.screen, tui_app.SkillsScreen)
                 cart = app.screen.query_one(".cartridge")
                 self.assertTrue(cart.has_class("-on"))
+                self.assertEqual(str(cart.query_one(".cart-icon").render()), "▣")
+                self.assertEqual(str(cart.query_one(".cart-name").render()), "APP_CONTROL")
+                self.assertEqual(str(cart.query_one(".cart-state").render()), "ON")
+                self.assertIn("▮", str(cart.query_one(".cart-contacts").render()))
                 await pilot.click(".cartridge")
                 await pilot.pause(0.2)
                 self.assertFalse(state_["APP_CONTROL"])
                 self.assertTrue(app.screen.query_one(".cartridge").has_class("-off"))
+                self.assertEqual(str(app.screen.query_one(".cart-state").render()), "OFF")
                 self.assertIn("0 de 1", str(app.screen.query_one("#session-title").render()))
 
     async def test_log_screen_filters_buffer_and_shows_timeline(self):
@@ -390,18 +411,20 @@ class TestJarvisApp(unittest.IsolatedAsyncioTestCase):
             await pilot.press("ctrl+n")
             await pilot.press("ctrl+o")
             await pilot.pause()
+            await pilot.pause(0.2)
             picker = app.screen
-            option_list = picker.query_one("#picker-list")
-            first = str(option_list.get_option_at_index(0).prompt)
-            self.assertIn("2 msgs", first)
-            self.assertIn("“**chat**: eco de plano de estudos”", first)
-            await pilot.press("down")  # foca a lista
+            first = picker._cards()[0]
+            self.assertIs(picker.focused, first)
+            meta = str(first.query_one(".slot-meta").render())
+            self.assertIn("2 msgs · chat", meta)
+            self.assertEqual(str(first.query_one(".slot-quote").render()), "“chat: eco de plano de estudos”")
+            self.assertIn("▰", str(first.query_one(".slot-bar").render()))
             await pilot.press("p")
-            await pilot.pause()
-            self.assertTrue(str(option_list.get_option_at_index(0).prompt).split("\n")[0].startswith("  01 ★"))
+            await pilot.pause(0.2)
+            self.assertEqual(str(picker._cards()[0].query_one(".slot-star").render()), "★")
             await pilot.press("delete", "delete")
-            await pilot.pause()
-            self.assertEqual(option_list.option_count, 1)
+            await pilot.pause(0.2)
+            self.assertEqual(len(picker._cards()), 1)
 
     async def test_new_session_command_and_binding(self):
         app = self._app()

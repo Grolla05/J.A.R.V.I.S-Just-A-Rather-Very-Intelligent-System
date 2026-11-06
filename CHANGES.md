@@ -2,6 +2,42 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+**Data:** 2026-11-06
+**Escopo:** Falso "PROTOCOLO CRÍTICO" corrigido e telas `/status` (canvas "6 · Dashboard de sistema") e `/log` (canvas "9 · Log de atividade") refeitas para ficarem iguais ao canvas.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | Protocolo crítico: o disco entrava em "cheio" por **porcentagem** livre (< 10%), então um C: de 222 GB com 20,9 GB sobrando deixava a TUI vermelha sem motivo. Agora usa **GB livres** (< 10 GB), o mesmo critério do aviso falado. Lógica extraída para `critical_reasons()` (testável) | `backend/core/SystemInfo.py` |
+| 2 | O topo mostra o motivo (`⚠ PROTOCOLO CRÍTICO · disco C:\ com 8.2 GB livres`) e a entrada/saída do estado vai para o log | `backend/core/SystemInfo.py` (`critical_reasons`), `frontend/app.py` |
+| 3 | `/status`: painéis com nome e valor no topo, gráfico de **barras espaçadas** que ocupa o painel inteiro com cada barra na cor da sua carga (ciano/âmbar/vermelho), detalhe embaixo em pt-BR (`8 núcleos · 3,6 GHz`, `22,7 / 32 GB`, `RTX 3060 · VRAM 7,1 / 12 GB`, `↓ 1,1 · ↑ 0,1 MB/s`). Lateral: núcleo pixel-art 16×16, faixa de carga, top processos por memória (`ollama · 2,1 GB`) e o limiar crítico. Topo `últimos N s` e `uptime HH:MM:SS`; `p` pausa | `frontend/screens/status.py`, `frontend/sprites.py` (`core_orb`, `spaced_bar_chart`, `bar_slots`), `backend/core/SystemInfo.py` (`get_dashboard_details`), `frontend/jarvis.tcss` |
+| 4 | Rede do `/status` usa a última amostra da telemetria (antes uma 2ª chamada a `get_network_speed` zerava o contador e mostrava ~92 B/s) | `frontend/app.py` (`last_net`) |
+| 5 | `/log`: topo com o arquivo do dia (`backend/logs/jarvis_AAAA-MM-DD.log · seguindo`), filtros com borda, timeline em caixa (título + passos em blocos ligados por fio, `✓ SPOTIFY ABERTO`, `FALA` tracejado), horário com milissegundos, módulo com pacote (`services.listen`), linha de erro com fundo vermelho, emojis tirados da exibição e `/` para buscar | `frontend/screens/log.py`, `backend/core/logger.py` (`dotted_module`, `file_path`), `frontend/jarvis.tcss` |
+| 6 | Linha de status das telas cheias aceita uma dica própria, como no canvas: `/status` → `atualiza a cada 3 s`, `/log` → `N linhas · N avisos · N erros`, `/skills` → `skills só rodam no Copilot (voz)` | `frontend/screens/base.py` (`status_hint`), `frontend/screens/status.py`, `frontend/screens/log.py`, `frontend/screens/skills.py` |
+
+**Decisões:** a orb e o rótulo da carga ficam ciano em BAIXA/MODERADA (como no canvas) e só ficam vermelhos em ALTA; as barras é que mostram a faixa. "Encerrar processo" (`k` no rodapé do canvas) ficou de fora: é ação destrutiva e pediria confirmação própria.
+
+**Testes novos:** `test_tui_dashboard.py` (`critical_reasons` com disco em GB, CPU/RAM/GPU/bateria; `dotted_module`; barras espaçadas; números pt-BR, janela e uptime; textos do dashboard e processos; emojis, contagem, filtro com busca e timeline do `/log`); `test_tui_app.py` (motivo no topo crítico).
+
+---
+
+**Data:** 2026-11-06
+**Escopo:** Ajustes de interface para ficar igual ao canvas "JARVIS TUI": tabela do `/help`, save slots em tela cheia (canvas "11 · Histórico — save slots") e cartuchos retrô no `/skills` (canvas "8 · Skills — cartuchos").
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `/help`: o `\|` de `/mode [chat\|copilot]` e `/skills [on\|off <skill\|categoria>]` quebrava a coluna da tabela Markdown; agora é escapado e a linha fica com 2 células | `frontend/commands.py` |
+| 2 | Save slots (`Ctrl+O` / `/sessions`) viram tela cheia `CARREGAR` · "Escolha um save · N sessões", com grade de 2 colunas de cartões: nº do slot, título, `★` fixada, `hoje · 14:03 · 48 msgs · copilot`, última fala do JARVIS entre aspas e barra `▰` do tamanho da conversa. Foco começa na sessão aberta; setas navegam, Enter carrega, `p` fixa, `Del Del` apaga, `/` busca por título ou trecho | `frontend/screens/save_slots.py` (novo), `frontend/widgets.py` (sai o modal; `format_slot_when` substitui `format_when`), `frontend/app.py`, `frontend/jarvis.tcss` |
+| 3 | Modo de cada mensagem gravado no histórico (coluna `mode`, com migração `PRAGMA`/`ALTER TABLE`); `get_recent_sessions` devolve `mode` e `last_reply` | `backend/core/database.py`, `backend/services/sessions.py`, `frontend/app.py` |
+| 4 | `/skills`: cartucho retrô com aba na cor da categoria, etiqueta com ícone + INTENT, linha `■ categoria  ON/OFF` e contatos dourados; desligado fica apagado e 1 linha abaixo. Setas navegam a grade e Enter também alterna | `frontend/screens/skills.py`, `frontend/jarvis.tcss` (`$j-contact`) |
+| 5 | Ícones dos cartuchos iguais ao canvas e cobrindo os INTENTs reais: SPOTIFY `♫`, KEYBOARD `⌨`, MACRO `⚙`, REPORT `≡`, CLEANUP `✕`, SECURITY `⛨` (antes SPOTIFY/CLEANUP/REPORT caíam no `◆`) | `frontend/screens/skills.py` |
+| 6 | Telas cheias: `esc Voltar` passa para o fim do rodapé, como no canvas | `frontend/screens/base.py` |
+
+**Decisões:** o picker deixou de ser modal para ter a barra do topo e a linha de status das outras telas cheias (o `dismiss(id)` segue igual para o `app`). A busca saiu do topo e foi para baixo da grade (`/` foca), porque `p` e `Del` são atalhos dos cartões. Sessões antigas sem modo gravado aparecem como `chat`.
+
+**Testes novos:** `test_tui_commands.py` (tabela do `/help` com 2 células e `\|` preservado, `format_slot_when`, ícones dos INTENTs reais e glifos de 1 célula); `test_sessions_service.py` (`mode`/`last_reply`, migração da coluna `mode`); `test_tui_app.py` (save slots: selo, contagem, foco na sessão atual, setas, busca, meta `· chat`, prévia, ★, apagar; cartucho com ícone, nome, ON/OFF e contatos). Observação: `test_work_macros_spotify.py` já falhava antes desta mudança (11 testes; funções que não existem em `work_macros.py`).
+
+---
+
 **Data:** 2026-11-05
 **Escopo:** Boot verifica o servidor Ollama e o inicia (`ollama serve`) se estiver offline, antes de carregar a TUI.
 

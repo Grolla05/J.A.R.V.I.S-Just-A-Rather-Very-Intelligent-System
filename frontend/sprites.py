@@ -53,6 +53,25 @@ _ART = {
         "..DDOOOODD..",
         "....DDDD....",
     ),
+    # Núcleo do dashboard /status (16×16, mesma paleta da mini-orb)
+    "core_orb": (
+        ".....DDDDDD.....",
+        "...DDOOOOOODD...",
+        "..DOOONNNNOOOD..",
+        ".DOONNNNNNNNOOD.",
+        ".DONNNPPPPNNNOD.",
+        "DOONNPPPPPPNNOOD",
+        "DONNPPPPPPPPNNOD",
+        "DONNPPPPPPPPNNOD",
+        "DONNPPPPPPPPNNOD",
+        "DONNPPPPPPPPNNOD",
+        "DOONNPPPPPPNNOOD",
+        ".DONNNPPPPNNNOD.",
+        ".DOONNNNNNNNOOD.",
+        "..DOOONNNNOOOD..",
+        "...DDOOOOOODD...",
+        ".....DDDDDD.....",
+    ),
     # Rosto do JARVIS nas caixas de diálogo (Configurações)
     "face": (
         "..DDDD..",
@@ -178,6 +197,23 @@ def bar_chart(values, width, height, top=100.0):
             line.append(" " if fill <= 0 else "█" if fill >= 8 else SPARK[fill - 1])
         lines.append("".join(line))
     return lines
+
+
+def bar_slots(width, gap=1):
+    """Quantas barras de 1 coluna cabem em `width` com `gap` colunas entre elas."""
+    return max(1, (max(width, 1) + gap) // (1 + gap))
+
+
+def spaced_bar_chart(values, width, height, top=100.0, gap=1):
+    """Como bar_chart, mas com `gap` colunas vazias entre as barras (visual do
+    canvas). Retorna (linhas, valores_mostrados) — os valores alinhados às
+    barras (None = barra vazia à esquerda), p/ quem colore barra a barra."""
+    slots = bar_slots(width, gap)
+    shown = list(values)[-slots:]
+    padded = [None] * (slots - len(shown)) + shown
+    lines = bar_chart([0 if v is None else v for v in padded], slots, height, top)
+    spacer = " " * gap
+    return [spacer.join(line) for line in lines], padded
 
 
 def load_level(value):

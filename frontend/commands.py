@@ -52,6 +52,8 @@ def unescape(text):
 
 
 def help_markdown():
+    # `|` dentro do uso (ex.: [chat|copilot]) quebraria a coluna da tabela:
+    # escapado como `\|`, o markdown-it tira a barra e mantém o `|` no código.
     lines = ["| comando | ação |", "|---|---|"]
-    lines += [f"| `{usage}` | {desc} |" for usage, desc in COMMANDS.values()]
+    lines += [f"| `{usage.replace('|', chr(92) + '|')}` | {desc} |" for usage, desc in COMMANDS.values()]
     return "\n".join(lines)

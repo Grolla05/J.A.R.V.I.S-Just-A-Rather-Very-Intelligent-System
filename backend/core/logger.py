@@ -12,11 +12,28 @@ init(autoreset=True)
 
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 _TAG = re.compile(r"^\[(DEBUG|INFO|WARN|ERROR|CRITICAL)\]\s*")
+_PACKAGE_ROOTS = ("backend",)  # raiz dos pacotes do backend (core, services, skills…)
+
+
+def dotted_module(pathname, fallback=""):
+    """'…/backend/services/listen.py' → 'services.listen';
+    '…/frontend/app.py' → 'frontend.app'. Sem raiz conhecida → `fallback`."""
+    parts = re.split(r"[\\/]+", str(pathname or ""))
+    if not parts or not parts[-1].endswith(".py"):
+        return fallback
+    parts[-1] = parts[-1][:-3]
+    for i in range(len(parts) - 2, -1, -1):
+        if parts[i] in _PACKAGE_ROOTS:
+            return ".".join(parts[i + 1:]) or fallback
+        if parts[i] == "frontend":
+            return ".".join(parts[i:])
+    return fallback
 
 
 class RingBufferHandler(logging.Handler):
     """Guarda os últimos `capacity` registros em memória (tela /log da TUI).
-    Cada item: {'time': 'HH:MM:SS', 'level': 'INFO', 'module': 'brain', 'message': '...'}."""
+    Cada item: {'time': 'HH:MM:SS.mmm', 'level': 'INFO', 'module': 'services.brain',
+    'message': '...'}."""
 
     def __init__(self, capacity=500):
         super().__init__(level=logging.DEBUG)
@@ -29,9 +46,9 @@ class RingBufferHandler(logging.Handler):
             level = "WARN" if record.levelname == "WARNING" else record.levelname
             from datetime import datetime
             item = {
-                "time": datetime.fromtimestamp(record.created).strftime("%H:%M:%S"),
+                "time": datetime.fromtimestamp(record.created).strftime("%H:%M:%S.%f")[:12],
                 "level": level,
-                "module": record.module,
+                "module": dotted_module(record.pathname, record.module),
                 "message": message,
             }
             with self._lock_buf:
@@ -56,6 +73,7 @@ class JarvisLogger:
     def _setup_logger(self):
         self.logger = logging.getLogger("JARVIS_CORE")
         self.logger.setLevel(logging.DEBUG if settings.DEBUG else logging.INFO)
+        self.file_path = None  # arquivo do dia (mostrado no topo do /log)
         
         if self.logger.handlers:
             return
@@ -89,6 +107,7 @@ class JarvisLogger:
             # Gera o nome do arquivo com a data de HOJE para o início do sistema
             datestr = datetime.now().strftime("%Y-%m-%d")
             log_filename = settings.DIR_LOGS / f"jarvis_{datestr}.log"
+            self.file_path = log_filename  # mostrado no topo do /log
             
             # Usamos o FileHandler simples para o arquivo do dia
             # A rotação pode ser tratada reiniciando o sistema ou via TimedRotating
