@@ -59,22 +59,45 @@ jobs:
           Write-Host "Versao: $v"
           "versao=$v" >> $env:GITHUB_OUTPUT
 
+      # O ISCC não aceita caminhos acima de 260 caracteres (MAX_PATH). A pasta
+      # do runner já tem ~105, e há arquivos do onnxruntime com ~156 dentro de
+      # dist\runtime: "Compile aborted / The system cannot find the path
+      # specified". Mapeando a raiz em J:\ os caminhos ficam curtos.
+      - name: Encurtar caminho da raiz (J:\)
+        run: |
+          subst J: "$env:GITHUB_WORKSPACE"
+          if ($LASTEXITCODE -ne 0) { throw "subst falhou ($LASTEXITCODE)" }
+
       - name: Runtime Python + código (dist/runtime, dist/app)
+        working-directory: 'J:\'
         run: ./installer/build_runtime.ps1 -Versao ${{ steps.versao.outputs.versao }}
 
       - name: Instalar Inno Setup 6
         run: choco install innosetup -y --no-progress
 
       - name: Gerar JARVIS-Setup.exe
+        working-directory: 'J:\'
         run: |
           $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
           & $iscc /Q "/DVersao=${{ steps.versao.outputs.versao }}" installer\jarvis.iss
           if ($LASTEXITCODE -ne 0) { throw "iscc falhou ($LASTEXITCODE)" }
 
       - name: Testar instalar / rodar / desinstalar
+        working-directory: 'J:\'
         run: ./installer/test_setup.ps1
 
+      # Fora da main (workflow_dispatch em outra branch) é um ensaio: gera e
+      # testa o setup, guarda como artifact, mas não cria tag nem Release
+      - name: Guardar setup do ensaio (artifact)
+        if: github.ref != 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: JARVIS-Setup-ensaio
+          path: dist/JARVIS-Setup.exe
+          retention-days: 7
+
       - name: Publicar Release
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.versao.outputs.versao }}

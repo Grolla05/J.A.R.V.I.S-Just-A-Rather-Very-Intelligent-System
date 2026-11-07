@@ -98,5 +98,15 @@ Passo 'Smoke test das libs'
 $env:PYGAME_HIDE_SUPPORT_PROMPT = '1'
 Roda $py @('-c', 'import textual, ollama, faster_whisper, PIL, dotenv, speech_recognition, pyaudio, edge_tts, pyttsx3, pygame, pyautogui, comtypes, pycaw, psutil, GPUtil, requests, mcp, colorama; print(''libs OK'')')
 
+# --- 6. MAX_PATH ---------------------------------------------------------------
+# O ISCC (Inno Setup) nao aceita caminhos com mais de 260 caracteres e falha so
+# com "The system cannot find the path specified". Clone numa pasta curta ou
+# mapeie com "subst J: <pasta>" (o release.yml faz isso).
+$longo = Get-ChildItem $runtime, $app -Recurse -File | Sort-Object { $_.FullName.Length } -Descending | Select-Object -First 1
+if ($longo.FullName.Length -ge 260) {
+    throw "caminho com $($longo.FullName.Length) caracteres (limite do ISCC: 259): $($longo.FullName). Use uma pasta mais curta ou 'subst J: $raiz'."
+}
+Write-Host "Maior caminho: $($longo.FullName.Length) caracteres"
+
 $mb = [math]::Round(((Get-ChildItem $dist -Recurse -File -Exclude *.zip | Where-Object { $_.FullName -notlike "$cache*" } | Measure-Object Length -Sum).Sum / 1MB))
 Write-Host "RUNTIME OK ($mb MB em dist\runtime + dist\app)"

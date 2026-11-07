@@ -42,8 +42,7 @@ class BootScreen(Screen):
         self._boot_fn = boot_fn
         self._total = max(1, total_steps)
         self._events = deque()   # chegam da thread, saem 1 por quadro
-        self._rows = {}          # etapa -> Horizontal da linha
-        self._latest = {}        # etapa -> (status, detalhe) mais recente
+        self._rows = {}          # etapa -> (Label do selo, Label do detalhe)
         self._done_steps = 0
         self._finished = False
         self._logo_rows = 0
@@ -94,37 +93,31 @@ class BootScreen(Screen):
             self._finished = True
             self._set_progress(1.0)
             return
-        checks = self.query_one("#boot-checks", Vertical)
-        self._latest[step] = (status, detail)
-        row = self._rows.get(step)
-        if row is None:
+        labels = self._rows.get(step)
+        if labels is None:
+            # A linha já nasce com o estado: pintar depois da montagem dependia
+            # do momento em que ela terminava (num PC lento o selo nunca aparecia).
             # markup=False: o Textual leria "[  OK  ]" como tag e apagaria o selo
-            row = Horizontal(Label("", classes="boot-tag", markup=False),
-                             Label(step, classes="boot-step", markup=False),
-                             Label("", classes="boot-detail", markup=False), classes="boot-row")
-            self._rows[step] = row
-            checks.mount(row)
-            self.call_after_refresh(self._paint_latest, step)
+            tag = Label(TAGS.get(status, TAGS["wait"]), classes=f"boot-tag -{status}", markup=False)
+            info = Label(detail, classes="boot-detail", markup=False)
+            self._rows[step] = (tag, info)
+            self.query_one("#boot-checks", Vertical).mount(
+                Horizontal(tag, Label(step, classes="boot-step", markup=False), info, classes="boot-row"))
         else:
-            self._paint_latest(step)
+            self._paint_row(*labels, status, detail)
         if status != "wait":
             self._done_steps += 1
             self._set_progress(self._done_steps / self._total)
 
-    def _paint_latest(self, step):
-        """Pinta o estado MAIS RECENTE da etapa: a linha pode receber o 'ok'
-        antes de terminar de montar, e a pintura atrasada não pode voltar a 'wait'."""
-        row = self._rows.get(step)
-        if row is not None and row.is_mounted:
-            self._paint_row(row, *self._latest[step])
-
-    def _paint_row(self, row, status, detail):
-        tag = row.query_one(".boot-tag", Label)
+    @staticmethod
+    def _paint_row(tag, info, status, detail):
+        """Atualiza pelos widgets guardados (sem query): vale mesmo antes de a
+        linha terminar de montar."""
         tag.update(TAGS.get(status, TAGS["wait"]))
         for s in TAGS:
             tag.remove_class(f"-{s}")
         tag.add_class(f"-{status}")
-        row.query_one(".boot-detail", Label).update(detail)
+        info.update(detail)
 
     def _set_progress(self, fraction):
         pct = int(round(min(1.0, fraction) * 100))
