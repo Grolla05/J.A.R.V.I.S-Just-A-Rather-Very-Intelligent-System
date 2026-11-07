@@ -216,6 +216,23 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
             self.assertIn("[  OK  ]", tags())
             await self._wait(pilot, lambda: app.screen is app.main_screen)
 
+    async def test_boot_row_has_status_without_waiting_for_mount(self):
+        # Regressão do CI: a linha era pintada depois de montar e, num runner
+        # lento, o selo ficava vazio para sempre
+        app = self._app(boot_fn=lambda report: None)
+        async with app.run_test(size=(140, 45)) as pilot:
+            await pilot.pause(0.2)
+            screen = app.screen
+            screen._apply("services.listen", "fail", "microfone 1 ausente")
+            tag, info = screen._rows["services.listen"]
+            self.assertEqual(str(tag.render()), "[ FAIL ]")   # sem pause: ainda montando
+            self.assertTrue(tag.has_class("-fail"))
+            screen._apply("services.listen", "ok", "microfone 1")
+            self.assertEqual(str(tag.render()), "[  OK  ]")
+            self.assertFalse(tag.has_class("-fail"))
+            await pilot.pause()
+            self.assertEqual(str(info.render()), "microfone 1")
+
     async def test_quit_plays_crt_then_exits(self):
         app = self._app()
         async with app.run_test(size=(80, 24)) as pilot:

@@ -3,6 +3,20 @@
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
 **Data:** 2026-11-07
+**Escopo:** Selo da tela de boot que podia nunca aparecer (2ª falha do gate do Release) e ensaio do Release fora da `main`.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | Boot: cada linha de checagem era criada vazia e pintada por `call_after_refresh` uma única vez; se a montagem ainda não tinha terminado nesse refresh (PC/runner lento), `is_mounted` era falso e o selo `[ FAIL ]`/`[  OK  ]` nunca aparecia. Agora a linha já nasce com o estado e as atualizações usam os labels guardados, sem depender do momento da montagem | `frontend/screens/boot.py` |
+| 2 | `release.yml` rodado por `workflow_dispatch` fora da `main` vira ensaio: gera e testa o setup e guarda como artifact (`JARVIS-Setup-ensaio`, 7 dias), sem criar tag nem Release | `.github/workflows/release.yml` |
+
+**Contexto:** o Release do merge do PR #37 parou de novo no gate: `test_boot_screen_shows_checks_then_closes` esperou 10 s por um `[ FAIL ]` que nunca foi pintado no runner do GitHub.
+
+**Testes novos:** `test_tui_phase34.py` (`test_boot_row_has_status_without_waiting_for_mount`: selo e classe corretos logo ao criar/atualizar a linha, antes de montar — falha com o código antigo). Gate local: 237 passam.
+
+---
+
+**Data:** 2026-11-07
 **Escopo:** Ordem das sessões nos save slots com empate de horário — destrava o 1º Release automático.
 
 | # | Mudança | Arquivos |

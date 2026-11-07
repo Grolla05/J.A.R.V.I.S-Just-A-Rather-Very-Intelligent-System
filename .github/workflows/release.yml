@@ -74,7 +74,18 @@ jobs:
       - name: Testar instalar / rodar / desinstalar
         run: ./installer/test_setup.ps1
 
+      # Fora da main (workflow_dispatch em outra branch) é um ensaio: gera e
+      # testa o setup, guarda como artifact, mas não cria tag nem Release
+      - name: Guardar setup do ensaio (artifact)
+        if: github.ref != 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: JARVIS-Setup-ensaio
+          path: dist/JARVIS-Setup.exe
+          retention-days: 7
+
       - name: Publicar Release
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.versao.outputs.versao }}
