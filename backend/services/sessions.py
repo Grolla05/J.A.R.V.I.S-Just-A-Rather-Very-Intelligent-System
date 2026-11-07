@@ -142,7 +142,9 @@ def get_recent_sessions(limit=12):
             FROM history
             WHERE session_id NOT LIKE 'voice_%'
             GROUP BY session_id
-            ORDER BY last_active DESC
+            -- timestamp só tem segundos: sessões no mesmo segundo desempatam
+            -- pela mensagem mais nova (id autoincremento)
+            ORDER BY last_active DESC, MAX(id) DESC
             LIMIT ?
         ''', (limit,))
         session_rows = cursor.fetchall()

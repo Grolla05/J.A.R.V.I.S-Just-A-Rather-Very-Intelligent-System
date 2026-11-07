@@ -86,6 +86,20 @@ class TestSessionsService(unittest.TestCase):
         self.assertTrue(recent[0]["is_pinned"])
         self.assertEqual(recent[0]["title"], "velha")
 
+    def test_recent_sessions_same_second_newest_first(self):
+        # timestamp do SQLite só tem segundos: empate desempata pela mensagem mais nova
+        self._chat("s_a", ("primeira", "x"))
+        self._chat("s_b", ("segunda", "y"))
+        self._chat("s_c", ("terceira", "z"))
+        conn = self.db._get_connection()
+        try:
+            conn.execute("UPDATE history SET timestamp = '2026-11-06 19:40:00'")
+            conn.commit()
+        finally:
+            conn.close()
+        ids = [s["id"] for s in sessions.get_recent_sessions()]
+        self.assertEqual(ids, ["s_c", "s_b", "s_a"])
+
     def test_recent_sessions_bring_count_and_last_message(self):
         self._chat("s1", ("oi", "olá"), ("tudo bem?", "tudo certo, Senhor"))
         recent = sessions.get_recent_sessions()
