@@ -2,6 +2,19 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+**Data:** 2026-11-07
+**Escopo:** Ordem das sessões nos save slots com empate de horário — destrava o 1º Release automático.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `get_recent_sessions` ordenava só por `MAX(timestamp)`, que no SQLite tem resolução de segundo: duas conversas no mesmo segundo apareciam em ordem aleatória nos save slots. Agora desempata pela mensagem mais nova (`MAX(id) DESC`) | `backend/services/sessions.py` |
+
+**Contexto:** o workflow de Release do merge do PR #36 parou no gate de testes — `test_session_picker_focuses_current_slot_card` falhava no runner do GitHub (rápido o bastante para gravar as duas sessões do teste no mesmo segundo). Nenhuma tag/Release foi criada; o próximo merge na `main` gera a `v1.0.0`.
+
+**Testes novos:** `test_sessions_service.py` (`test_recent_sessions_same_second_newest_first`: três sessões com o mesmo timestamp saem da mais nova para a mais velha — falha sem a correção).
+
+---
+
 **Data:** 2026-11-06
 **Escopo:** Instalador completo `JARVIS-Setup.exe` (mesmo processo do OhmFlow: Inno Setup + teste do setup) e Release automático a cada merge na `main`, com o instalador como único asset.
 
