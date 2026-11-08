@@ -18,7 +18,8 @@ from frontend.screens.base import JarvisScreen
 # a 1ª palavra encontrada no INTENT vence.
 _GLYPHS = (("SPOTIFY", "♫"), ("APP", "▣"), ("AUDIO", "♪"), ("KEYBOARD", "⌨"),
            ("SCREEN", "▦"), ("MACRO", "⚙"), ("STATUS", "≡"), ("REPORT", "≡"),
-           ("CLEAN", "✕"), ("CLEAR", "✕"), ("SECURITY", "⛨"))
+           ("CLEAN", "✕"), ("CLEAR", "✕"), ("SECURITY", "⛨"), ("WEB", "⌕"),
+           ("GITHUB", "⎇"), ("BRIEFING", "☀"), ("CLIPBOARD", "⎘"))
 FALLBACK_GLYPH = "◆"
 TAB = "▄" * 12  # aba de encaixe no topo do cartucho
 

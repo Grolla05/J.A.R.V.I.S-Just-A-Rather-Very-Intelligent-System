@@ -39,6 +39,9 @@ GPUtil                      # Monitoramento de GPUs NVIDIA (temperatura, carga, 
 # --- REQUISIÇÕES HTTP ---
 requests                    # Cliente HTTP para APIs externas e comunicação
 
+# --- WEB ---
+ddgs                        # Busca no DuckDuckGo sem chave de API (skill WEB_SEARCH / /web)
+
 # --- MODEL CONTEXT PROTOCOL ---
 mcp                         # SDK oficial MCP (cliente para Obsidian MCP server)
 

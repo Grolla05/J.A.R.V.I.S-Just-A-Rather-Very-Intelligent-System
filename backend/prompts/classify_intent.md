@@ -23,6 +23,7 @@ $skills_prompts
 - "proteger estação" -> {"intent": "SYSTEM_SECURITY", "entity": null, "confidence": 1.0}
 - "quem sou eu?" -> {"intent": "MEMORY_READ", "entity": null, "confidence": 1.0}
 - "meu nome é felipe" -> {"intent": "MEMORY_WRITE", "entity": "felipe", "confidence": 1.0}
+- "pesquisa a última versão do python" -> {"intent": "WEB_SEARCH", "entity": "última versão do python", "confidence": 1.0}
 
 Comando do Usuário: "$text"
 Schema de Resposta: 

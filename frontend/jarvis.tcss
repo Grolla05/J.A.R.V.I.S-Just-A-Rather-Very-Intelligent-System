@@ -362,6 +362,8 @@ ProcessList > .procs--size { color: $j-muted; }
 #skills-legend .legend { width: auto; margin-right: 3; color: $j-text-soft; }
 #skills-legend .legend.-cat-automation { color: $j-neon; }
 #skills-legend .legend.-cat-system { color: $j-warn; }
+#skills-legend .legend.-cat-web { color: $j-ok; }
+#skills-legend .legend.-cat-productivity { color: $j-user; }
 
 #skills-grid {
     grid-size: 4;
@@ -403,6 +405,14 @@ ProcessList > .procs--size { color: $j-muted; }
 .cartridge.-cat-system .cart-tab,
 .cartridge.-cat-system .cart-dot,
 .cartridge.-cat-system .cart-state { color: $j-warn; }
+.cartridge.-on.-cat-web { border: round $j-ok; }
+.cartridge.-cat-web .cart-tab,
+.cartridge.-cat-web .cart-dot,
+.cartridge.-cat-web .cart-state { color: $j-ok; }
+.cartridge.-on.-cat-productivity { border: round $j-user; }
+.cartridge.-cat-productivity .cart-tab,
+.cartridge.-cat-productivity .cart-dot,
+.cartridge.-cat-productivity .cart-state { color: $j-user; }
 
 .cartridge.-off { offset-y: 1; background: $j-bg; border: round $j-line; }
 .cartridge.-off .cart-tab,

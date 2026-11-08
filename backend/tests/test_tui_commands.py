@@ -91,5 +91,17 @@ class TestSkillGlyphs(unittest.TestCase):
         self.assertEqual(cell_len(TAB), len(TAB))
 
 
+class TestToolCommands(unittest.TestCase):
+    def test_tool_commands_parse(self):
+        self.assertEqual(parse("/web python 3.14"), parse("/web  python 3.14"))
+        cmd = parse("/web python 3.14")
+        self.assertEqual((cmd.name, cmd.arg, cmd.known), ("web", "python 3.14", True))
+
+    def test_new_skills_have_icons(self):
+        from frontend.screens.skills import FALLBACK_GLYPH, glyph_for
+        for intent in ("WEB_SEARCH", "GITHUB", "DAILY_BRIEFING", "CLIPBOARD"):
+            self.assertNotEqual(glyph_for(intent), FALLBACK_GLYPH, intent)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -446,12 +446,39 @@ class JarvisApp(App, inherit_bindings=False):
             self.push_screen(LogScreen())
         elif name == "vault":
             self.push_screen(VaultScreen(arg), self._use_note)
+        elif name == "web":
+            self._web(arg)
         elif name == "config":
             self.push_screen(SettingsScreen())
         elif name == "clear":
             self.action_clear()
         elif name == "quit":
             self.shutdown_jarvis()
+
+    # ------------------------------------------------------- ferramentas (/web…)
+    def tool_reply(self, meta, fn, *args, speak=False):
+        """Bolha do JARVIS preenchida por `fn(*args)` rodando num worker de thread."""
+        view = self.add_message("assistant", "_Processando…_", meta=meta)
+        self._tool_worker(view, fn, args, speak)
+        return view
+
+    @work(thread=True, group="tools")
+    def _tool_worker(self, view, fn, args, speak):
+        try:
+            text = fn(*args) or "Nada a relatar, Senhor."
+        except Exception as e:
+            log.error(f"Ferramenta '{getattr(fn, '__name__', fn)}' falhou: {e}")
+            text = f"**Erro:** `{e}`"
+        self.call_from_thread(view.set_text, text)
+        if speak and state.voice_enabled:
+            self.voice.speak(text)
+
+    def _web(self, query):
+        if not query:
+            self.notify("Uso: /web <pergunta>", severity="warning")
+            return
+        from core import web
+        self.tool_reply(f"web · {query[:40]}", web.research, query)
 
     # ------------------------------------------------------------ attachments
     def _attach(self, path):

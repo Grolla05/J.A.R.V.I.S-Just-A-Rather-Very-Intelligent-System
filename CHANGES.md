@@ -2,6 +2,23 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+**Data:** 2026-11-08
+**Escopo:** Pesquisa web com sumarização local — skill `WEB_SEARCH` e `/web` (pasta `skills/web/` deixa de estar vazia).
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `core/web.py`: busca no DuckDuckGo (`ddgs`, sem chave), leitura das 3 primeiras páginas em paralelo com extração por `html.parser` (sem lxml), resumo no Ollama com citações `[n]` e lista de fontes; cache de 10 min por pergunta; sem LLM devolve os trechos | `backend/core/web.py`, `backend/prompts/web_summarize.md` |
+| 2 | Skill `WEB_SEARCH` | `backend/skills/web/web_search.py`, `backend/prompts/skills/web_search.md`, `backend/prompts/classify_intent.md` |
+| 3 | TUI: `/web <pergunta>` e `tool_reply()` — bolha do JARVIS preenchida por um worker de thread (reusada por `/gh`, `/briefing` e `/clip`) | `frontend/app.py`, `frontend/commands.py` |
+| 4 | `/skills`: cores das categorias `web` e `productivity` e ícones das 4 skills novas | `frontend/jarvis.tcss`, `frontend/screens/skills.py` |
+| 5 | `ddgs` no `requirements.txt` e no smoke do setup | `backend/requirements.txt`, `installer/build_runtime.ps1` |
+
+**Testes novos:** `test_web.py` (extração de HTML, busca mockada, erros de rede, fluxo completo com cache, fallback sem LLM, skill) e `test_tui_tools.py::TestWebCommand`.
+
+**Gate local (4 entregas juntas):** 307 passam; `ruff check .` limpo em `backend/` e `frontend/`. **Pré-existente:** os 11 testes de `test_work_macros_spotify.py` já falham no `HEAD` (`_sanitize_spotify_uri` / `_is_playing_title` não existem em `work_macros.py`; nenhum dos dois arquivos foi tocado aqui).
+
+---
+
 **Data:** 2026-11-07
 **Escopo:** Selo da tela de boot que podia nunca aparecer (2ª falha do gate do Release) e ensaio do Release fora da `main`.
 
