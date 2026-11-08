@@ -3,6 +3,17 @@
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
 **Data:** 2026-11-08
+**Escopo:** Voz online (edge-tts) recusada com 403.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `edge-tts` fixado em `>=7.3.1`: a 7.2.8 recebe `403 Invalid response status` no handshake com `speech.platform.bing.com` (a Microsoft passou a recusar a versão do Edge que a lib antiga anuncia) e a voz caía no fallback offline. A 7.3.1 gera o áudio normalmente | `backend/requirements.txt` |
+
+**Contexto:** teste da voz no Copilot exibiu `Falha na voz online (403, ...)`. Reproduzido com a 7.2.8 e resolvido com a 7.3.1 (síntese de teste OK).
+
+---
+
+**Data:** 2026-11-08
 **Escopo:** Clipboard inteligente — monitor opt-in que sugere e skill `CLIPBOARD` (explicar / traduzir / resumir).
 
 | # | Mudança | Arquivos |

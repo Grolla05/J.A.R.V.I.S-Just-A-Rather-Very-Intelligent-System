@@ -20,7 +20,7 @@ SpeechRecognition           # Biblioteca para reconhecimento de voz via Google S
 PyAudio                     # Interface para captura de áudio do microfone
 
 # --- TEXT-TO-SPEECH (Síntese de Voz) ---
-edge-tts                    # Voz neural da Microsoft Edge (online, alta qualidade)
+edge-tts>=7.3.1             # Voz neural da Microsoft Edge (online). <7.3.1 leva 403 do serviço da Microsoft
 pyttsx3                     # Motor de TTS offline (backup)
 pygame-ce                   # Reprodução de arquivos de áudio MP3 (usando a Community Edition para suporte ao Python 3.14+)
 
