@@ -96,7 +96,7 @@ class TestToolCommands(unittest.TestCase):
         self.assertEqual(parse("/web python 3.14"), parse("/web  python 3.14"))
         cmd = parse("/web python 3.14")
         self.assertEqual((cmd.name, cmd.arg, cmd.known), ("web", "python 3.14", True))
-        for name in ("gh",):
+        for name in ("gh", "briefing"):
             self.assertIn(name, COMMANDS)
 
     def test_new_skills_have_icons(self):

@@ -10,6 +10,13 @@ from core.database import db
 # Vozes neurais pt-BR do edge-tts
 VOICES = ("pt-BR-AntonioNeural", "pt-BR-FranciscaNeural", "pt-BR-ThalitaNeural")
 
+_ONOFF = (False, True)  # ◀ desliga · ▶ liga
+
+
+def _onoff_label(value):
+    return "ligado" if value else "desligado"
+
+
 # chave -> (rótulo, opções, padrão, formatação p/ exibir)
 PREFS = {
     "tts_voice": ("Voz", VOICES, VOICES[0], lambda v: v.replace("pt-BR-", "").replace("Neural", "")),
@@ -18,12 +25,15 @@ PREFS = {
     "mic_threshold": ("Sensibilidade do mic", (0, 150, 300, 450, 600, 900, 1200),
                       None, lambda v: "automática" if v <= 0 else f"limiar {v}"),
     "attention_window": ("Janela de atenção", (15, 30, 60, 90, 120), 60, lambda v: f"{v} s"),
+    "briefing_auto": ("Briefing no 1º boot do dia", _ONOFF, True, _onoff_label),
+    "briefing_news": ("Manchetes no briefing", _ONOFF, False, _onoff_label),
 }
 
 # Grupos do menu lateral (estilo RPG) -> chaves editáveis
 GROUPS = {
     "VOZ": ("tts_voice", "tts_rate", "tts_volume"),
     "MICROFONE": ("mic_threshold", "attention_window"),
+    "ROTINAS": ("briefing_auto", "briefing_news"),
 }
 
 

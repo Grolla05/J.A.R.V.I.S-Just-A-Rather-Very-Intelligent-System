@@ -25,6 +25,7 @@ $skills_prompts
 - "meu nome é felipe" -> {"intent": "MEMORY_WRITE", "entity": "felipe", "confidence": 1.0}
 - "pesquisa a última versão do python" -> {"intent": "WEB_SEARCH", "entity": "última versão do python", "confidence": 1.0}
 - "quantos PRs abertos eu tenho?" -> {"intent": "GITHUB", "entity": null, "confidence": 1.0}
+- "bom dia, jarvis, qual o resumo do dia?" -> {"intent": "DAILY_BRIEFING", "entity": null, "confidence": 1.0}
 
 Comando do Usuário: "$text"
 Schema de Resposta: 

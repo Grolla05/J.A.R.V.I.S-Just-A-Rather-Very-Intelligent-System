@@ -115,6 +115,10 @@ class Settings:
     # --- GitHub (PyGithub) — token pessoal; vazio = integração desligada ---
     GITHUB_TOKEN: str = os.getenv("GITHUB_TOKEN", "").strip()
     GITHUB_DEFAULT_REPO: str = os.getenv("GITHUB_DEFAULT_REPO", "").strip()
+
+    # --- Briefing diário — pastas vigiadas p/ "arquivos recentes" (separadas por ';').
+    # Vazio = Desktop, Documentos e Downloads do usuário.
+    BRIEFING_DIRS: str = os.getenv("BRIEFING_DIRS", "").strip()
     SPOTIFY_SCOPES: str = (
         "user-read-playback-state "
         "user-modify-playback-state "

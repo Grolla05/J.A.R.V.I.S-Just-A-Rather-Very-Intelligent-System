@@ -3,6 +3,21 @@
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
 **Data:** 2026-11-08
+**Escopo:** Briefing diário automático (1º boot do dia) e sob pedido — skill `DAILY_BRIEFING` e `/briefing`.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `core/briefing.py`: `collect()` junta saudação, clima, CPU/RAM/bateria, arquivos modificados nas últimas 24 h (Desktop/Documentos/Downloads ou `BRIEFING_DIRS`, profundidade 2, teto de 4000 itens), resumo do GitHub e manchetes opcionais — cada fonte isolada em `try`. `build()` pede o texto ao Ollama (`prompts/briefing.md`) e cai numa lista Markdown sem LLM. `should_run_today()/mark_ran()` usam a chave `briefing_last_date` da tabela `config` | `backend/core/briefing.py`, `backend/prompts/briefing.md` |
+| 2 | Clima e saudação saíram da skill `SYSTEM_REPORT` para `core/weather.py` (reuso no briefing, sem uma skill importar outra) | `backend/core/weather.py`, `backend/skills/system/status_report.py` |
+| 3 | Skill `DAILY_BRIEFING` ("bom dia, Jarvis", "resumo do dia") | `backend/skills/productivity/daily_briefing.py`, `backend/prompts/skills/daily_briefing.md` |
+| 4 | TUI: briefing sozinho no 1º boot do dia (falado se a voz estiver ligada), `/briefing` força; prefs **Briefing no 1º boot do dia** (ligado) e **Manchetes no briefing** (desligado) no grupo `ROTINAS` | `frontend/app.py`, `frontend/commands.py`, `frontend/screens/settings.py`, `backend/services/user_prefs.py` |
+| 5 | `.env`: `BRIEFING_DIRS` (default vazio) | `backend/core/config.py`, `env.example` |
+
+**Testes novos:** `test_briefing.py` (1× por dia, arquivos recentes em pasta temporária, fonte com erro isolada, manchetes só quando pedidas, fallback sem LLM, skill) e `test_tui_tools.py::TestBriefingCommand` (sem serviços nada roda sozinho; automático respeita pref e data).
+
+---
+
+**Data:** 2026-11-08
 **Escopo:** Integração com o GitHub (PyGithub) — skill `GITHUB` e `/gh`; confirmação genérica de ação crítica.
 
 | # | Mudança | Arquivos |

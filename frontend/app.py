@@ -450,6 +450,8 @@ class JarvisApp(App, inherit_bindings=False):
             self._web(arg)
         elif name == "gh":
             self._gh(arg)
+        elif name == "briefing":
+            self.tool_reply("briefing", self._make_briefing)
         elif name == "config":
             self.push_screen(SettingsScreen())
         elif name == "clear":
@@ -494,6 +496,21 @@ class JarvisApp(App, inherit_bindings=False):
             return
         repo = parts[1] if len(parts) > 1 else None
         self.tool_reply(f"github · {parts[0] if parts else 'prs'}", github_client.run_read, action, repo)
+
+    @staticmethod
+    def _make_briefing():
+        from core import briefing
+        from services import user_prefs
+        text = briefing.generate(include_news=user_prefs.get("briefing_news"))
+        briefing.mark_ran()
+        return text
+
+    def _maybe_daily_briefing(self):
+        """1º boot do dia (pref `briefing_auto`): briefing sozinho, falado se a voz estiver ligada."""
+        from core import briefing
+        from services import user_prefs
+        if user_prefs.get("briefing_auto") and briefing.should_run_today():
+            self._call_ui(lambda: self.tool_reply("briefing · automático", self._make_briefing, speak=True))
 
     # ------------------------------------------------------------ attachments
     def _attach(self, path):
@@ -835,6 +852,10 @@ class JarvisApp(App, inherit_bindings=False):
         except Exception:
             name = "Senhor"
         self.call_from_thread(self.add_system, f"`[  OK  ]` Sistemas online. Bem-vindo de volta, {name}.")
+        try:
+            self._maybe_daily_briefing()
+        except Exception as e:
+            log.warning(f"Briefing automático falhou: {e}")
 
     def shutdown_jarvis(self):
         """Encerra com o desligamento CRT; chamado de novo (Ctrl+Q duas vezes) sai na hora."""

@@ -98,3 +98,43 @@ class TestGitHubCommand(ToolsAppCase):
                 await self._send(pilot, "/gh")
                 await self._send(pilot, "/gh deploy")
         run_read.assert_called_once_with("open_prs", None)
+
+
+class TestBriefingCommand(ToolsAppCase):
+    async def test_briefing_command_generates_and_marks(self):
+        from core import briefing
+        app = self._app()
+        with patch.object(briefing, "generate", return_value="**Bom dia.**") as gen, \
+             patch.object(briefing, "mark_ran") as mark:
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/briefing")
+                self.assertEqual(self._last_reply(app).text, "**Bom dia.**")
+        gen.assert_called_once()
+        mark.assert_called_once()
+
+    async def test_no_auto_briefing_without_services(self):
+        from core import briefing
+        app = self._app()
+        with patch.object(briefing, "generate") as gen:
+            async with app.run_test() as pilot:
+                await pilot.app.workers.wait_for_complete()
+        gen.assert_not_called()
+
+    async def test_auto_briefing_respects_pref_and_date(self):
+        from core import briefing
+        from services import user_prefs
+        app = self._app()
+        with patch.object(briefing, "generate", return_value="auto!") as gen, \
+             patch.object(briefing, "mark_ran"), \
+             patch.object(briefing, "should_run_today", return_value=True), \
+             patch.object(user_prefs, "get", side_effect=lambda k: k == "briefing_auto"):
+            async with app.run_test() as pilot:
+                app._maybe_daily_briefing()
+                await pilot.app.workers.wait_for_complete()
+                await pilot.pause()
+                self.assertEqual(self._last_reply(app).text, "auto!")
+            with patch.object(briefing, "should_run_today", return_value=False):
+                async with self._app().run_test() as pilot:
+                    pilot.app._maybe_daily_briefing()
+                    await pilot.app.workers.wait_for_complete()
+        gen.assert_called_once()
