@@ -2,6 +2,105 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+**Data:** 2026-11-08
+**Escopo:** GitHub com listas vazias — `/gh prs` e `/gh issues` quebravam com `list index out of range`.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | No PyGithub 2.x fatiar uma `PaginatedList` vazia (`[:8]`) lança `IndexError`: sem PR aberto ou issue atribuída, a resposta era "O GitHub não colaborou". `_take()` usa `itertools.islice`; `last_commit` trata repositório sem commits e mensagem vazia | `backend/core/github_client.py` |
+
+**Contexto:** achado no 1º teste real com o token do `.env` (PyGithub 2.10.0): último commit e CI funcionavam, PRs e issues (ambos vazios) falhavam. Os testes usavam listas Python, que aceitam o fatiamento.
+
+**Testes novos:** `test_github.py` (`_Paginated` imita a lista do PyGithub: `test_empty_paginated_lists_do_not_break`, `test_paginated_list_is_limited`).
+
+---
+
+**Data:** 2026-11-08
+**Escopo:** Busca no vault (RAG) quebrada — `Erro ao processar resultado: Expecting value`.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | O `mcp-obsidian` usa HTTPS quando `OBSIDIAN_PROTOCOL` não vem no ambiente, mas a porta 27123 do plugin Local REST API é HTTP: toda busca falhava com `SSL WRONG_VERSION_NUMBER` e voltava como texto, que o `json.loads` não entende. `mcp_endpoint()` tira protocolo, host e porta do `OBSIDIAN_HOST` (sem esquema, 27124 = HTTPS e o resto = HTTP) e o cliente MCP passa `OBSIDIAN_PROTOCOL` | `backend/core/obsidian.py` |
+| 2 | Resposta não-JSON da busca vira aviso "Busca indisponível: …" com o motivo real, uma vez por sessão (depois só no arquivo de log), em vez de ERROR a cada mensagem | `backend/core/obsidian.py` |
+
+**Contexto:** apareceu ao testar a voz (Copilot), mas valia para todo turno do Chat/Copilot que consulta o vault: o contexto do Obsidian nunca era injetado.
+
+**Testes novos:** `test_obsidian_endpoint.py` (protocolo por esquema/porta, padrões, texto de erro avisa 1× e devolve vazio sem ERROR).
+
+---
+
+**Data:** 2026-11-08
+**Escopo:** Voz online (edge-tts) recusada com 403.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `edge-tts` fixado em `>=7.3.1`: a 7.2.8 recebe `403 Invalid response status` no handshake com `speech.platform.bing.com` (a Microsoft passou a recusar a versão do Edge que a lib antiga anuncia) e a voz caía no fallback offline. A 7.3.1 gera o áudio normalmente | `backend/requirements.txt` |
+
+**Contexto:** teste da voz no Copilot exibiu `Falha na voz online (403, ...)`. Reproduzido com a 7.2.8 e resolvido com a 7.3.1 (síntese de teste OK).
+
+---
+
+**Data:** 2026-11-08
+**Escopo:** Clipboard inteligente — monitor opt-in que sugere e skill `CLIPBOARD` (explicar / traduzir / resumir).
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `core/clipboard.py`: `read()` (PowerShell `Get-Clipboard -Raw`, sem janela), `classify()` heurístico (`url` / `code` / `english` / nada), `act()` com prompts próprios (link → `web.fetch_text` + `web.summarize`) e `ClipboardMonitor` (thread daemon, polling 1,5 s, hash do último conteúdo, histórico de 20). O que já estava copiado ao ligar não gera aviso; o conteúdo copiado nunca vai para o log | `backend/core/clipboard.py`, `backend/prompts/clipboard_*.md` |
+| 2 | Skill `CLIPBOARD` ("explica/traduz/resume o que eu copiei") | `backend/skills/automation/clipboard_assistant.py`, `backend/prompts/skills/clipboard.md`, `backend/prompts/classify_intent.md` |
+| 3 | TUI: preferência **Monitor de clipboard** (desligada por padrão) no grupo novo `ROTINAS` do `/config`, que liga/desliga o monitor na hora (`on_pref_changed`); aviso discreto na conversa no máximo a cada 30 s; `/clip [explicar\|traduzir\|resumir\|hist]` | `frontend/app.py`, `frontend/commands.py`, `frontend/screens/settings.py`, `backend/services/user_prefs.py` |
+| 4 | `KEYBOARD_CONTROL` passa a ler o clipboard por `core.clipboard.read` | `backend/skills/automation/keyboard_control.py` |
+
+**Testes novos:** `test_clipboard.py` (classificação, monitor 1× por conteúdo novo, start/stop idempotente com thread daemon, ações com LLM mockado, skill) e `test_tui_tools.py::TestClipCommand`.
+
+---
+
+**Data:** 2026-11-08
+**Escopo:** Briefing diário automático (1º boot do dia) e sob pedido — skill `DAILY_BRIEFING` e `/briefing`.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `core/briefing.py`: `collect()` junta saudação, clima, CPU/RAM/bateria, arquivos modificados nas últimas 24 h (Desktop/Documentos/Downloads ou `BRIEFING_DIRS`, profundidade 2, teto de 4000 itens), resumo do GitHub e manchetes opcionais — cada fonte isolada em `try`. `build()` pede o texto ao Ollama (`prompts/briefing.md`) e cai numa lista Markdown sem LLM. `should_run_today()/mark_ran()` usam a chave `briefing_last_date` da tabela `config` | `backend/core/briefing.py`, `backend/prompts/briefing.md` |
+| 2 | Clima e saudação saíram da skill `SYSTEM_REPORT` para `core/weather.py` (reuso no briefing, sem uma skill importar outra) | `backend/core/weather.py`, `backend/skills/system/status_report.py` |
+| 3 | Skill `DAILY_BRIEFING` ("bom dia, Jarvis", "resumo do dia") | `backend/skills/productivity/daily_briefing.py`, `backend/prompts/skills/daily_briefing.md` |
+| 4 | TUI: briefing sozinho no 1º boot do dia (falado se a voz estiver ligada), `/briefing` força; prefs **Briefing no 1º boot do dia** (ligado) e **Manchetes no briefing** (desligado) no grupo `ROTINAS` | `frontend/app.py`, `frontend/commands.py`, `frontend/screens/settings.py`, `backend/services/user_prefs.py` |
+| 5 | `.env`: `BRIEFING_DIRS` (default vazio) | `backend/core/config.py`, `env.example` |
+
+**Testes novos:** `test_briefing.py` (1× por dia, arquivos recentes em pasta temporária, fonte com erro isolada, manchetes só quando pedidas, fallback sem LLM, skill) e `test_tui_tools.py::TestBriefingCommand` (sem serviços nada roda sozinho; automático respeita pref e data).
+
+---
+
+**Data:** 2026-11-08
+**Escopo:** Integração com o GitHub (PyGithub) — skill `GITHUB` e `/gh`; confirmação genérica de ação crítica.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `core/github_client.py`: PRs abertos, issues atribuídas, último commit, CI (Actions), `summary()` para o briefing e `create_issue`. Import tardio do `github`, erros 401/404 viram mensagem amigável | `backend/core/github_client.py` |
+| 2 | Skill `GITHUB`: frases óbvias sem LLM (`parse_fast`), o resto via `skills/github_decision.md` (JSON). Criar issue nunca executa direto: pergunta e espera o "sim" (voz) ou o `ConfirmScreen` (30 s) | `backend/skills/productivity/github_control.py`, `backend/prompts/skills/github*.md` |
+| 3 | `confirm_pending_action` aceita `pending['on_confirm']` (callable) — qualquer skill pode pedir confirmação; sem ele segue encerrando o processo (APP_CONTROL). A TUI abre o `ConfirmScreen` ao fim do turno quando a skill deixou uma ação pendente | `backend/services/brain.py`, `frontend/app.py` |
+| 4 | `/gh [prs\|issues\|commit\|ci] [dono/repo]` (só leitura) | `frontend/app.py`, `frontend/commands.py` |
+| 5 | `.env`: `GITHUB_TOKEN`, `GITHUB_DEFAULT_REPO` (default vazio = desligado). `PyGithub` no `requirements.txt` e no smoke do setup | `backend/core/config.py`, `env.example`, `backend/requirements.txt`, `installer/build_runtime.ps1` |
+
+**Testes novos:** `test_github.py` (sem token, resolução do repo, listagens, erro 401, criação, `parse_fast`, fallback do LLM, issue só após confirmação / negada / sem título) e `test_tui_tools.py::TestGitHubCommand`.
+
+---
+
+**Data:** 2026-11-08
+**Escopo:** Pesquisa web com sumarização local — skill `WEB_SEARCH` e `/web` (pasta `skills/web/` deixa de estar vazia).
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `core/web.py`: busca no DuckDuckGo (`ddgs`, sem chave), leitura das 3 primeiras páginas em paralelo com extração por `html.parser` (sem lxml), resumo no Ollama com citações `[n]` e lista de fontes; cache de 10 min por pergunta; sem LLM devolve os trechos | `backend/core/web.py`, `backend/prompts/web_summarize.md` |
+| 2 | Skill `WEB_SEARCH` | `backend/skills/web/web_search.py`, `backend/prompts/skills/web_search.md`, `backend/prompts/classify_intent.md` |
+| 3 | TUI: `/web <pergunta>` e `tool_reply()` — bolha do JARVIS preenchida por um worker de thread (reusada por `/gh`, `/briefing` e `/clip`) | `frontend/app.py`, `frontend/commands.py` |
+| 4 | `/skills`: cores das categorias `web` e `productivity` e ícones das 4 skills novas | `frontend/jarvis.tcss`, `frontend/screens/skills.py` |
+| 5 | `ddgs` no `requirements.txt` e no smoke do setup | `backend/requirements.txt`, `installer/build_runtime.ps1` |
+
+**Testes novos:** `test_web.py` (extração de HTML, busca mockada, erros de rede, fluxo completo com cache, fallback sem LLM, skill) e `test_tui_tools.py::TestWebCommand`.
+
+**Gate local (4 entregas juntas):** 307 passam; `ruff check .` limpo em `backend/` e `frontend/`. **Pré-existente:** os 11 testes de `test_work_macros_spotify.py` já falham no `HEAD` (`_sanitize_spotify_uri` / `_is_playing_title` não existem em `work_macros.py`; nenhum dos dois arquivos foi tocado aqui).
+
+---
+
 **Data:** 2026-11-07
 **Escopo:** Selo da tela de boot que podia nunca aparecer (2ª falha do gate do Release) e ensaio do Release fora da `main`.
 

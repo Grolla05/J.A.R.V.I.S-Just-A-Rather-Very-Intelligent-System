@@ -96,7 +96,7 @@ Roda $py @('-m', 'compileall', '-q', '-j', '0', $app, $site)
 # --- 5. Smoke test -----------------------------------------------------------
 Passo 'Smoke test das libs'
 $env:PYGAME_HIDE_SUPPORT_PROMPT = '1'
-Roda $py @('-c', 'import textual, ollama, faster_whisper, PIL, dotenv, speech_recognition, pyaudio, edge_tts, pyttsx3, pygame, pyautogui, comtypes, pycaw, psutil, GPUtil, requests, mcp, colorama; print(''libs OK'')')
+Roda $py @('-c', 'import textual, ollama, faster_whisper, PIL, dotenv, speech_recognition, pyaudio, edge_tts, pyttsx3, pygame, pyautogui, comtypes, pycaw, psutil, GPUtil, requests, ddgs, github, mcp, colorama; print(''libs OK'')')
 
 # --- 6. MAX_PATH ---------------------------------------------------------------
 # O ISCC (Inno Setup) nao aceita caminhos com mais de 260 caracteres e falha so

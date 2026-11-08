@@ -112,6 +112,30 @@ class ObsidianClient:
 obsidian = ObsidianClient()
 
 
+_HTTP_PORT, _HTTPS_PORT = "27123", "27124"  # portas padrão do plugin Local REST API
+
+
+def mcp_endpoint(raw_host):
+    """OBSIDIAN_HOST → (protocolo, host, porta) para o servidor mcp-obsidian.
+
+    O mcp-obsidian assume HTTPS quando OBSIDIAN_PROTOCOL não é passado. A porta
+    27123 do plugin é HTTP puro: falar HTTPS com ela dá SSL WRONG_VERSION_NUMBER
+    e toda busca volta como texto de erro. O protocolo vem do esquema da URL; sem
+    esquema, a porta decide (27124 = HTTPS, o resto = HTTP).
+    """
+    raw = (raw_host or "").strip().rstrip("/")
+    scheme, sep, rest = raw.partition("://")
+    if not sep:
+        scheme, rest = "", raw
+    host, _, port = rest.partition(":")
+    host = host or "127.0.0.1"
+    scheme = scheme.lower()
+    if scheme not in ("http", "https"):
+        scheme = "https" if port == _HTTPS_PORT else "http"
+    port = port or (_HTTPS_PORT if scheme == "https" else _HTTP_PORT)
+    return scheme, host, port
+
+
 class ObsidianMCPClient:
     """Acesso completo ao vault via MCP usando stdio e uvx."""
 
@@ -124,13 +148,8 @@ class ObsidianMCPClient:
         env = os.environ.copy()
         env["OBSIDIAN_API_KEY"] = settings.OBSIDIAN_API_KEY
         
-        # Prepara host e port a partir da string (ex: http://127.0.0.1:27123 ou 127.0.0.1)
-        host_str = settings.OBSIDIAN_HOST.replace("http://", "").replace("https://", "").strip()
-        if ":" in host_str:
-            host, port = host_str.split(":", 1)
-        else:
-            host = host_str
-            port = "27123" # Porta padrao do Local REST API se não fornecida
+        protocol, host, port = mcp_endpoint(settings.OBSIDIAN_HOST)
+        env["OBSIDIAN_PROTOCOL"] = protocol
         env["OBSIDIAN_HOST"] = host
         env["OBSIDIAN_PORT"] = port
 
@@ -284,6 +303,9 @@ def extract_relevant_section(content: str, query: str) -> str:
     return content[:2000]
 
 
+_search_warned = False
+
+
 def get_vault_context(command: str) -> tuple[str, str]:
     """
     Retorna (filename, content) do arquivo mais relevante no vault.
@@ -314,6 +336,14 @@ def get_vault_context(command: str) -> tuple[str, str]:
     if search_result_str:
         try:
             results = json.loads(search_result_str)
+        except ValueError:
+            # O mcp-obsidian devolve o erro como texto (ex.: Obsidian fechado, porta errada)
+            msg = f"⚠️ [VAULT] Busca indisponível: {search_result_str[:160]}"
+            # Avisa uma vez por sessão (WARNING vira notificação na TUI); depois só no arquivo
+            (log.debug if _search_warned else log.warning)(msg)
+            globals()["_search_warned"] = True
+            return ("", "")
+        try:
             if results and isinstance(results, list):
                 valid = [r for r in results if not r.get("filename", "").startswith("_templates")]
                 if not valid:

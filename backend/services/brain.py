@@ -20,12 +20,19 @@ _AFFIRMATION_WORDS = ["sim", "pode", "feche", "encerre", "faça", "ok", "confirm
 
 
 def confirm_pending_action(approved):
-    """Resolve a ação crítica pendente (ex: encerrar processo pesado).
-    Retorna a resposta da skill, ou None se não havia ação válida/aprovada."""
+    """Resolve a ação crítica pendente (ex: encerrar processo pesado, criar issue).
+    Retorna a resposta da skill, ou None se não havia ação válida/aprovada.
+
+    Uma skill pode deixar a ação pronta em `pending['on_confirm']` (callable sem
+    argumentos); sem ela, o padrão é encerrar `pending['target']` (APP_CONTROL)."""
     pending = state.pending_critical_action
     state.pending_critical_action = None
     if not pending or time.time() > pending['timeout'] or not approved:
         return None
+    on_confirm = pending.get('on_confirm')
+    if callable(on_confirm):
+        log.info(f"✅ Autorização recebida: {pending.get('type', 'ação')}")
+        return on_confirm()
     target = pending['target']
     log.info(f"✅ Autorização recebida para encerrar {target}")
     if "APP_CONTROL" in manager.skills:
