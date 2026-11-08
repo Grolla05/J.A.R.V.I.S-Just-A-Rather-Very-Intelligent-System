@@ -3,6 +3,19 @@
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
 **Data:** 2026-11-08
+**Escopo:** GitHub com listas vazias — `/gh prs` e `/gh issues` quebravam com `list index out of range`.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | No PyGithub 2.x fatiar uma `PaginatedList` vazia (`[:8]`) lança `IndexError`: sem PR aberto ou issue atribuída, a resposta era "O GitHub não colaborou". `_take()` usa `itertools.islice`; `last_commit` trata repositório sem commits e mensagem vazia | `backend/core/github_client.py` |
+
+**Contexto:** achado no 1º teste real com o token do `.env` (PyGithub 2.10.0): último commit e CI funcionavam, PRs e issues (ambos vazios) falhavam. Os testes usavam listas Python, que aceitam o fatiamento.
+
+**Testes novos:** `test_github.py` (`_Paginated` imita a lista do PyGithub: `test_empty_paginated_lists_do_not_break`, `test_paginated_list_is_limited`).
+
+---
+
+**Data:** 2026-11-08
 **Escopo:** Busca no vault (RAG) quebrada — `Erro ao processar resultado: Expecting value`.
 
 | # | Mudança | Arquivos |

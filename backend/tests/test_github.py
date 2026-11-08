@@ -20,6 +20,21 @@ _SKILL = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))
                       "skills", "productivity", "github_control.py")
 
 
+class _Paginated:
+    """Imita a PaginatedList do PyGithub 2.x: iterável, mas fatiar vazia quebra."""
+
+    def __init__(self, items):
+        self._items = items
+
+    def __iter__(self):
+        return iter(self._items)
+
+    def __getitem__(self, index):
+        if not self._items:
+            raise IndexError("list index out of range")
+        return self._items[index]
+
+
 def _load_skill():
     spec = importlib.util.spec_from_file_location("github_control", _SKILL)
     mod = importlib.util.module_from_spec(spec)
@@ -71,6 +86,25 @@ class TestClient(GitHubCase):
     def test_open_prs_empty(self):
         self.gh.get_repo.return_value.get_pulls.return_value = []
         self.assertIn("Nenhum PR aberto", github_client.open_prs())
+
+    def test_empty_paginated_lists_do_not_break(self):
+        # PyGithub 2.x: fatiar PaginatedList vazia lança IndexError (bug visto no uso real)
+        repo = self.gh.get_repo.return_value
+        repo.full_name = "dono/repo"
+        repo.get_pulls.return_value = _Paginated([])
+        repo.get_commits.return_value = _Paginated([])
+        repo.get_workflow_runs.return_value = _Paginated([])
+        self.gh.get_user.return_value.get_issues.return_value = _Paginated([])
+        self.assertIn("Nenhum PR aberto", github_client.open_prs())
+        self.assertIn("ainda não tem commits", github_client.last_commit())
+        self.assertIn("Nenhuma execução", github_client.ci_status())
+        self.assertIn("Nenhuma issue", github_client.my_issues())
+
+    def test_paginated_list_is_limited(self):
+        prs = [SimpleNamespace(number=i, html_url="u", title=f"PR {i}",
+                               user=SimpleNamespace(login="a"), draft=False) for i in range(20)]
+        self.gh.get_repo.return_value.get_pulls.return_value = _Paginated(prs)
+        self.assertIn(f"{github_client.LIST_LIMIT} PR(s)", github_client.open_prs())
 
     def test_last_commit(self):
         author = SimpleNamespace(name="Felipe", date=datetime(2026, 11, 8, 9, 30))

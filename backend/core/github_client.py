@@ -7,6 +7,8 @@ responsável por pedir confirmação antes.
 Funções devolvem Markdown pronto para a TUI; erros viram mensagem amigável +
 log, nunca exceção para cima. `github` é importado tardiamente (custo de boot).
 """
+from itertools import islice
+
 from core.config import settings
 from core.logger import log
 
@@ -16,6 +18,12 @@ NO_REPO = "Qual repositório, Senhor? Diga `dono/repo` ou defina `GITHUB_DEFAULT
 LIST_LIMIT = 8
 
 _client = {"gh": None, "token": None}
+
+
+def _take(paginated, limit):
+    """Primeiros `limit` itens de uma PaginatedList. Não use `[:n]`: no PyGithub
+    2.x fatiar uma lista vazia lança IndexError."""
+    return list(islice(paginated, limit))
 
 
 class GitHubError(Exception):
@@ -74,7 +82,7 @@ def _safe(fn):
 def open_prs(repo=None):
     """PRs abertos do repositório."""
     r = _repo(repo)
-    pulls = list(r.get_pulls(state="open", sort="updated", direction="desc")[:LIST_LIMIT])
+    pulls = _take(r.get_pulls(state="open", sort="updated", direction="desc"), LIST_LIMIT)
     if not pulls:
         return f"Nenhum PR aberto em **{r.full_name}**. Paz rara, Senhor."
     lines = [f"**{len(pulls)} PR(s) aberto(s) em {r.full_name}:**", ""]
@@ -87,7 +95,7 @@ def open_prs(repo=None):
 @_safe
 def my_issues():
     """Issues abertas atribuídas ao dono do token (todos os repositórios)."""
-    issues = list(get_client().get_user().get_issues(state="open", filter="assigned")[:LIST_LIMIT])
+    issues = _take(get_client().get_user().get_issues(state="open", filter="assigned"), LIST_LIMIT)
     if not issues:
         return "Nenhuma issue aberta atribuída ao Senhor. Suspeito, mas aceito."
     lines = [f"**{len(issues)} issue(s) atribuída(s):**", ""]
@@ -100,9 +108,12 @@ def my_issues():
 def last_commit(repo=None):
     """Último commit do branch padrão."""
     r = _repo(repo)
-    commit = r.get_commits()[0]
+    commits = _take(r.get_commits(), 1)
+    if not commits:
+        return f"**{r.full_name}** ainda não tem commits, Senhor."
+    commit = commits[0]
     info = commit.commit
-    title = (info.message or "").splitlines()[0]
+    title = ((info.message or "").splitlines() or ["(sem mensagem)"])[0]
     when = info.author.date.strftime("%d/%m %H:%M") if info.author and info.author.date else "?"
     author = info.author.name if info.author else "?"
     return (f"Último commit em **{r.full_name}** (`{r.default_branch}`):\n\n"
@@ -113,7 +124,7 @@ def last_commit(repo=None):
 def ci_status(repo=None):
     """Situação das últimas execuções do GitHub Actions."""
     r = _repo(repo)
-    runs = list(r.get_workflow_runs()[:5])
+    runs = _take(r.get_workflow_runs(), 5)
     if not runs:
         return f"Nenhuma execução de CI em **{r.full_name}**."
     icon = {"success": "✓", "failure": "✗", "cancelled": "■", None: "…"}
