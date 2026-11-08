@@ -26,6 +26,7 @@ QUIPS = {
     "attention_window": "Fico atento por esse tempo depois de cada pedido.",
     "briefing_auto": "Briefing matinal ajustado. Prometo ser breve. Quase sempre.",
     "briefing_news": "Manchetes ajustadas. Filtrar o drama fica por sua conta.",
+    "clipboard_monitor": "De olho no clipboard. Só sugiro — não leio seus segredos em voz alta.",
 }
 IDLE = "Escolha uma opção com ↑↓ e ajuste com ←→, Senhor."
 
@@ -114,7 +115,8 @@ class SettingsScreen(JarvisScreen):
         if self.group == "MICROFONE":
             return "Mudanças no microfone valem na próxima vez que a voz for ligada."
         if self.group == "ROTINAS":
-            return "Briefing: /briefing força a qualquer hora. Manchetes usam a busca web."
+            return ("Briefing: /briefing força a qualquer hora. Manchetes usam a busca web.\n"
+                    "Clipboard: só sugere (/clip); nada copiado vai para o log.")
         return ""
 
     # -------------------------------------------------------------- eventos
@@ -140,5 +142,8 @@ class SettingsScreen(JarvisScreen):
             return
         key = options.get_option_at_index(options.highlighted).id
         self._prefs().step(key, direction)
+        hook = getattr(self.app, "on_pref_changed", None)
+        if callable(hook):
+            hook(key)
         self._render_group()
         self.query_one("#cfg-quip", Label).update(QUIPS.get(key, IDLE) + " ▼")

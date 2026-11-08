@@ -3,6 +3,20 @@
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
 **Data:** 2026-11-08
+**Escopo:** Clipboard inteligente — monitor opt-in que sugere e skill `CLIPBOARD` (explicar / traduzir / resumir).
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `core/clipboard.py`: `read()` (PowerShell `Get-Clipboard -Raw`, sem janela), `classify()` heurístico (`url` / `code` / `english` / nada), `act()` com prompts próprios (link → `web.fetch_text` + `web.summarize`) e `ClipboardMonitor` (thread daemon, polling 1,5 s, hash do último conteúdo, histórico de 20). O que já estava copiado ao ligar não gera aviso; o conteúdo copiado nunca vai para o log | `backend/core/clipboard.py`, `backend/prompts/clipboard_*.md` |
+| 2 | Skill `CLIPBOARD` ("explica/traduz/resume o que eu copiei") | `backend/skills/automation/clipboard_assistant.py`, `backend/prompts/skills/clipboard.md`, `backend/prompts/classify_intent.md` |
+| 3 | TUI: preferência **Monitor de clipboard** (desligada por padrão) no grupo novo `ROTINAS` do `/config`, que liga/desliga o monitor na hora (`on_pref_changed`); aviso discreto na conversa no máximo a cada 30 s; `/clip [explicar\|traduzir\|resumir\|hist]` | `frontend/app.py`, `frontend/commands.py`, `frontend/screens/settings.py`, `backend/services/user_prefs.py` |
+| 4 | `KEYBOARD_CONTROL` passa a ler o clipboard por `core.clipboard.read` | `backend/skills/automation/keyboard_control.py` |
+
+**Testes novos:** `test_clipboard.py` (classificação, monitor 1× por conteúdo novo, start/stop idempotente com thread daemon, ações com LLM mockado, skill) e `test_tui_tools.py::TestClipCommand`.
+
+---
+
+**Data:** 2026-11-08
 **Escopo:** Briefing diário automático (1º boot do dia) e sob pedido — skill `DAILY_BRIEFING` e `/briefing`.
 
 | # | Mudança | Arquivos |

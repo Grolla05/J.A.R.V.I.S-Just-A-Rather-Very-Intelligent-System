@@ -1,6 +1,5 @@
 import ctypes
 import json
-import subprocess
 import time
 
 import pyautogui
@@ -36,14 +35,8 @@ def get_active_window_title():
 
 def get_clipboard_text():
     """Lê o conteúdo atual da área de transferência via PowerShell."""
-    try:
-        # Usa PowerShell para evitar dependências extras e lidar bem com encoding
-        cmd = ["powershell", "-NoProfile", "-Command", "Get-Clipboard"]
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
-        return result.stdout.strip()
-    except Exception as e:
-        log.error(f"❌ [KEYBOARD] Erro ao ler clipboard: {e}")
-        return None
+    from core.clipboard import read
+    return read() or None
 
 def _ask_ollama_keyboard_expert(user_text):
     """Consulta o LLM para determinar a combinação de teclas."""

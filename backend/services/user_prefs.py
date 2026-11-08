@@ -27,13 +27,14 @@ PREFS = {
     "attention_window": ("Janela de atenção", (15, 30, 60, 90, 120), 60, lambda v: f"{v} s"),
     "briefing_auto": ("Briefing no 1º boot do dia", _ONOFF, True, _onoff_label),
     "briefing_news": ("Manchetes no briefing", _ONOFF, False, _onoff_label),
+    "clipboard_monitor": ("Monitor de clipboard", _ONOFF, False, _onoff_label),
 }
 
 # Grupos do menu lateral (estilo RPG) -> chaves editáveis
 GROUPS = {
     "VOZ": ("tts_voice", "tts_rate", "tts_volume"),
     "MICROFONE": ("mic_threshold", "attention_window"),
-    "ROTINAS": ("briefing_auto", "briefing_news"),
+    "ROTINAS": ("briefing_auto", "briefing_news", "clipboard_monitor"),
 }
 
 

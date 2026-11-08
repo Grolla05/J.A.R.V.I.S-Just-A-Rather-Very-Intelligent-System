@@ -138,3 +138,48 @@ class TestBriefingCommand(ToolsAppCase):
                     pilot.app._maybe_daily_briefing()
                     await pilot.app.workers.wait_for_complete()
         gen.assert_called_once()
+
+
+class TestClipCommand(ToolsAppCase):
+    async def test_clip_acts_on_clipboard(self):
+        from core import clipboard
+        app = self._app()
+        code = "def f():\n    return {1: (2)}"
+        with patch.object(clipboard, "read", return_value=code), \
+             patch.object(clipboard, "act", return_value="explicado") as act:
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/clip")
+                self.assertEqual(self._last_reply(app).text, "explicado")
+                await self._send(pilot, "/clip traduzir")
+        self.assertEqual([c.args[0] for c in act.call_args_list], ["explain", "translate"])
+
+    async def test_clip_bad_action_and_empty_history(self):
+        from core import clipboard
+        app = self._app()
+        with patch.object(clipboard, "act") as act:
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/clip dançar")
+                await self._send(pilot, "/clip hist")
+                self.assertIn("Monitor de clipboard", self._last_reply(app).text)
+        act.assert_not_called()
+
+    async def test_pref_toggles_monitor_and_suggestion_cooldown(self):
+        from services import user_prefs
+        app = self._app()
+        async with app.run_test() as pilot:
+            with patch.object(user_prefs, "get", return_value=True), \
+                 patch("core.clipboard.read", return_value=""):
+                app.on_pref_changed("clipboard_monitor")
+                self.assertTrue(app._clip_monitor.running)
+            with patch.object(user_prefs, "get", return_value=False):
+                app.on_pref_changed("clipboard_monitor")
+            self.assertFalse(app._clip_monitor.running)
+            before = len(app.query(tui_app.MessageView))
+            app._on_clip_suggest("code", "x")
+            app._on_clip_suggest("url", "y")  # dentro do cooldown: ignorado
+            await pilot.pause()
+            self.assertEqual(len(app.query(tui_app.MessageView)), before + 1)
+
+
+if __name__ == "__main__":
+    unittest.main()

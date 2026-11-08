@@ -119,6 +119,8 @@ class JarvisApp(App, inherit_bindings=False):
         self._boot_fn = boot_fn
         self._shutting_down = False
         self.voice = voice or _DefaultVoice()
+        self._clip_monitor = None
+        self._clip_last_suggest = -1e9
         self.session_id = sessions.new_session_id()
         self.session_title = sessions.DEFAULT_TITLE
         self.pending_image = None   # anexo aguardando a próxima mensagem
@@ -171,6 +173,7 @@ class JarvisApp(App, inherit_bindings=False):
             self.set_interval(settings.TELEMETRY_INTERVAL, self._poll_telemetry)
             self._poll_telemetry()
             self._boot_greeting()
+            self._sync_clipboard_monitor()
         else:
             self.add_system("`[  OK  ]` Sistemas online.")
         if self._boot_fn:
@@ -452,6 +455,8 @@ class JarvisApp(App, inherit_bindings=False):
             self._gh(arg)
         elif name == "briefing":
             self.tool_reply("briefing", self._make_briefing)
+        elif name == "clip":
+            self._clip(arg)
         elif name == "config":
             self.push_screen(SettingsScreen())
         elif name == "clear":
@@ -511,6 +516,61 @@ class JarvisApp(App, inherit_bindings=False):
         from services import user_prefs
         if user_prefs.get("briefing_auto") and briefing.should_run_today():
             self._call_ui(lambda: self.tool_reply("briefing · automático", self._make_briefing, speak=True))
+
+    # -------------------------------------------------------------- clipboard
+    CLIP_SUGGEST_COOLDOWN = 30  # s entre avisos do monitor
+
+    def on_pref_changed(self, key):
+        """Chamado pelo /config ao mudar uma preferência."""
+        if key == "clipboard_monitor":
+            self._sync_clipboard_monitor()
+
+    def _sync_clipboard_monitor(self):
+        from services import user_prefs
+        if user_prefs.get("clipboard_monitor"):
+            if self._clip_monitor is None:
+                from core.clipboard import ClipboardMonitor
+                self._clip_monitor = ClipboardMonitor(self._on_clip_suggest)
+            self._clip_monitor.start()
+        elif self._clip_monitor is not None:
+            self._clip_monitor.stop()
+
+    def _on_clip_suggest(self, kind, _text):
+        """Thread do monitor: aviso discreto, no máximo 1 a cada CLIP_SUGGEST_COOLDOWN."""
+        from core.clipboard import SUGGESTION
+        now = time.monotonic()
+        if now - self._clip_last_suggest < self.CLIP_SUGGEST_COOLDOWN:
+            return
+        self._clip_last_suggest = now
+        self._call_ui(self.add_system, SUGGESTION[kind])
+
+    def _clip(self, arg):
+        from core import clipboard
+        arg = arg.strip().lower()
+        if arg in ("hist", "historico", "histórico"):
+            self.add_message("assistant", self._clip_history_markdown())
+            return
+        if arg and clipboard.resolve_action(None, arg) is None:
+            self.notify("Uso: /clip [explicar|traduzir|resumir|hist]", severity="warning")
+            return
+        self.tool_reply(f"clipboard{' · ' + arg if arg else ''}", self._clip_act, arg)
+
+    @staticmethod
+    def _clip_act(arg):
+        from core import clipboard
+        text = clipboard.read()
+        return clipboard.act(clipboard.resolve_action(clipboard.classify(text), arg), text)
+
+    def _clip_history_markdown(self):
+        history = list(self._clip_monitor.history) if self._clip_monitor else []
+        if not history:
+            return "Nada no histórico. Ligue o **Monitor de clipboard** no `/config`."
+        names = {"code": "código", "english": "inglês", "url": "link"}
+        lines = ["**Últimas cópias detectadas:**", ""]
+        for kind, text in reversed(history):
+            preview = " ".join(text.split())[:70].replace("`", "'")
+            lines.append(f"- *{names[kind]}* · `{preview}`")
+        return "\n".join(lines)
 
     # ------------------------------------------------------------ attachments
     def _attach(self, path):
@@ -842,6 +902,8 @@ class JarvisApp(App, inherit_bindings=False):
 
     def on_unmount(self):
         self._voice_stop.set()
+        if self._clip_monitor is not None:
+            self._clip_monitor.stop()
 
     # ------------------------------------------------------------------- boot
     @work(thread=True, group="boot")
