@@ -19,6 +19,7 @@ COMMANDS = {
     "log":      ("/log", "log de atividade com filtros e o último turno do Copilot"),
     "vault":    ("/vault [termo]", "memória no Obsidian: árvore, busca e nota no chat"),
     "web":      ("/web <pergunta>", "pesquisa na internet e resume com fontes"),
+    "gh":       ("/gh [prs|issues|commit|ci] [dono/repo]", "GitHub: PRs, issues, último commit e CI"),
     "config":   ("/config", "ajustes de voz e microfone (menu estilo RPG)"),
     "clear":    ("/clear", "limpa a tela (não apaga o histórico)"),
     "quit":     ("/quit", "encerra o J.A.R.V.I.S (Ctrl+Q)"),

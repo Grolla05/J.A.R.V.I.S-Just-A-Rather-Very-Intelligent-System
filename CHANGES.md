@@ -3,6 +3,21 @@
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
 **Data:** 2026-11-08
+**Escopo:** Integração com o GitHub (PyGithub) — skill `GITHUB` e `/gh`; confirmação genérica de ação crítica.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `core/github_client.py`: PRs abertos, issues atribuídas, último commit, CI (Actions), `summary()` para o briefing e `create_issue`. Import tardio do `github`, erros 401/404 viram mensagem amigável | `backend/core/github_client.py` |
+| 2 | Skill `GITHUB`: frases óbvias sem LLM (`parse_fast`), o resto via `skills/github_decision.md` (JSON). Criar issue nunca executa direto: pergunta e espera o "sim" (voz) ou o `ConfirmScreen` (30 s) | `backend/skills/productivity/github_control.py`, `backend/prompts/skills/github*.md` |
+| 3 | `confirm_pending_action` aceita `pending['on_confirm']` (callable) — qualquer skill pode pedir confirmação; sem ele segue encerrando o processo (APP_CONTROL). A TUI abre o `ConfirmScreen` ao fim do turno quando a skill deixou uma ação pendente | `backend/services/brain.py`, `frontend/app.py` |
+| 4 | `/gh [prs\|issues\|commit\|ci] [dono/repo]` (só leitura) | `frontend/app.py`, `frontend/commands.py` |
+| 5 | `.env`: `GITHUB_TOKEN`, `GITHUB_DEFAULT_REPO` (default vazio = desligado). `PyGithub` no `requirements.txt` e no smoke do setup | `backend/core/config.py`, `env.example`, `backend/requirements.txt`, `installer/build_runtime.ps1` |
+
+**Testes novos:** `test_github.py` (sem token, resolução do repo, listagens, erro 401, criação, `parse_fast`, fallback do LLM, issue só após confirmação / negada / sem título) e `test_tui_tools.py::TestGitHubCommand`.
+
+---
+
+**Data:** 2026-11-08
 **Escopo:** Pesquisa web com sumarização local — skill `WEB_SEARCH` e `/web` (pasta `skills/web/` deixa de estar vazia).
 
 | # | Mudança | Arquivos |

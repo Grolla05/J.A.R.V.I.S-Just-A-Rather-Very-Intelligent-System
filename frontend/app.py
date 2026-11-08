@@ -448,6 +448,8 @@ class JarvisApp(App, inherit_bindings=False):
             self.push_screen(VaultScreen(arg), self._use_note)
         elif name == "web":
             self._web(arg)
+        elif name == "gh":
+            self._gh(arg)
         elif name == "config":
             self.push_screen(SettingsScreen())
         elif name == "clear":
@@ -479,6 +481,19 @@ class JarvisApp(App, inherit_bindings=False):
             return
         from core import web
         self.tool_reply(f"web · {query[:40]}", web.research, query)
+
+    _GH_ALIASES = {"prs": "open_prs", "pr": "open_prs", "issues": "issues", "issue": "issues",
+                   "commit": "last_commit", "ci": "ci", "actions": "ci"}
+
+    def _gh(self, arg):
+        from core import github_client
+        parts = arg.split()
+        action = self._GH_ALIASES.get(parts[0].lower(), None) if parts else "open_prs"
+        if action is None:
+            self.notify("Uso: /gh [prs|issues|commit|ci] [dono/repo]", severity="warning")
+            return
+        repo = parts[1] if len(parts) > 1 else None
+        self.tool_reply(f"github · {parts[0] if parts else 'prs'}", github_client.run_read, action, repo)
 
     # ------------------------------------------------------------ attachments
     def _attach(self, path):
@@ -663,6 +678,10 @@ class JarvisApp(App, inherit_bindings=False):
 
     def _stream_done(self, session_id):
         self.busy = False
+        pending = state.pending_critical_action
+        if pending and pending.get("on_confirm"):
+            # Skill do Copilot pediu confirmação (ex.: criar issue no GitHub)
+            self._ask_pending_confirmation(pending.get("question", "Confirma a ação?"))
         if session_id == self.session_id:
             if self.session_title == sessions.DEFAULT_TITLE:
                 self.session_title = sessions.get_session_title(session_id)
@@ -676,6 +695,10 @@ class JarvisApp(App, inherit_bindings=False):
 
     def _show_announcement(self, text):
         self.add_system(text)
+        self._ask_pending_confirmation(text)
+
+    def _ask_pending_confirmation(self, text):
+        """Abre o ConfirmScreen (30 s) se há ação crítica pendente e nenhum aberto."""
         pending = state.pending_critical_action
         if pending and not isinstance(self.screen, ConfirmScreen):
             self.main_screen.query_one("#voicebar", VoiceBar).set_awaiting(True)

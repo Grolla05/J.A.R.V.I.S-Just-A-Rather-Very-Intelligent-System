@@ -78,3 +78,23 @@ class TestWebCommand(ToolsAppCase):
             async with app.run_test() as pilot:
                 await self._send(pilot, "/web algo")
                 self.assertIn("boom", self._last_reply(app).text)
+
+
+class TestGitHubCommand(ToolsAppCase):
+    async def test_gh_routes_action_and_repo(self):
+        from core import github_client
+        app = self._app()
+        with patch.object(github_client, "run_read", return_value="2 PRs") as run_read:
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/gh commit dono/repo")
+                self.assertEqual(self._last_reply(app).text, "2 PRs")
+        run_read.assert_called_once_with("last_commit", "dono/repo")
+
+    async def test_gh_default_is_prs_and_bad_action_warns(self):
+        from core import github_client
+        app = self._app()
+        with patch.object(github_client, "run_read", return_value="ok") as run_read:
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/gh")
+                await self._send(pilot, "/gh deploy")
+        run_read.assert_called_once_with("open_prs", None)

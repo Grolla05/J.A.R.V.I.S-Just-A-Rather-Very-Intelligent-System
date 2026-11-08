@@ -111,6 +111,10 @@ class Settings:
     # idêntico, byte a byte, ao registrado em developer.spotify.com/dashboard.
     SPOTIFY_REDIRECT_URI: str = os.getenv("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8888/callback")
     SPOTIFY_MARKET: str = os.getenv("SPOTIFY_MARKET", "BR")
+
+    # --- GitHub (PyGithub) — token pessoal; vazio = integração desligada ---
+    GITHUB_TOKEN: str = os.getenv("GITHUB_TOKEN", "").strip()
+    GITHUB_DEFAULT_REPO: str = os.getenv("GITHUB_DEFAULT_REPO", "").strip()
     SPOTIFY_SCOPES: str = (
         "user-read-playback-state "
         "user-modify-playback-state "
