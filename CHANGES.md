@@ -3,6 +3,20 @@
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
 **Data:** 2026-11-08
+**Escopo:** Busca no vault (RAG) quebrada — `Erro ao processar resultado: Expecting value`.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | O `mcp-obsidian` usa HTTPS quando `OBSIDIAN_PROTOCOL` não vem no ambiente, mas a porta 27123 do plugin Local REST API é HTTP: toda busca falhava com `SSL WRONG_VERSION_NUMBER` e voltava como texto, que o `json.loads` não entende. `mcp_endpoint()` tira protocolo, host e porta do `OBSIDIAN_HOST` (sem esquema, 27124 = HTTPS e o resto = HTTP) e o cliente MCP passa `OBSIDIAN_PROTOCOL` | `backend/core/obsidian.py` |
+| 2 | Resposta não-JSON da busca vira aviso "Busca indisponível: …" com o motivo real, uma vez por sessão (depois só no arquivo de log), em vez de ERROR a cada mensagem | `backend/core/obsidian.py` |
+
+**Contexto:** apareceu ao testar a voz (Copilot), mas valia para todo turno do Chat/Copilot que consulta o vault: o contexto do Obsidian nunca era injetado.
+
+**Testes novos:** `test_obsidian_endpoint.py` (protocolo por esquema/porta, padrões, texto de erro avisa 1× e devolve vazio sem ERROR).
+
+---
+
+**Data:** 2026-11-08
 **Escopo:** Voz online (edge-tts) recusada com 403.
 
 | # | Mudança | Arquivos |
