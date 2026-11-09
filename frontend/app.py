@@ -8,6 +8,7 @@ direto — main.py do backend põe a raiz no sys.path. Dois modos, alternados co
 """
 import inspect
 import logging
+import os
 import re
 import threading
 import time
@@ -25,7 +26,9 @@ import core.state as state
 from core import db, log, settings
 from frontend.commands import (
     Command,
+    dropped_paths,
     help_markdown,
+    is_image_path,
     palette_entries,
     parse,
     parse_dnd_arg,
@@ -76,9 +79,9 @@ class _DefaultVoice:
         from services.listen import listen
         return listen(on_level=on_level)
 
-    def speak(self, text):
+    def speak(self, text, force=False):
         from services.speak import speak
-        speak(text, show=False)
+        speak(text, show=False, force=force)
 
     def pause(self):
         from services.listen import ear_pause
@@ -484,6 +487,10 @@ class JarvisApp(App, inherit_bindings=False):
         event.input.value = ""
         if not text:
             return
+        dropped = dropped_paths(text)
+        if dropped:  # terminal sem bracketed paste: o caminho chegou como teclas
+            self._attach_dropped(dropped)
+            return
         command = parse(text)
         if command:
             self.run_command(command)
@@ -555,7 +562,7 @@ class JarvisApp(App, inherit_bindings=False):
         elif name == "gh":
             self._gh(arg)
         elif name == "briefing":
-            self.tool_reply("briefing", self._make_briefing)
+            self.tool_reply("briefing", self._make_briefing, speak=True)
         elif name == "clip":
             self._clip(arg)
         elif name == "focus":
@@ -584,8 +591,28 @@ class JarvisApp(App, inherit_bindings=False):
             log.error(f"Ferramenta '{getattr(fn, '__name__', fn)}' falhou: {e}")
             text = f"**Erro:** `{e}`"
         self.call_from_thread(view.set_text, text)
-        if speak and state.voice_enabled:
-            self.voice.speak(text)
+        if speak:
+            self._speak_always(text)
+
+    BRIEFING_INTENT = "DAILY_BRIEFING"
+
+    def _turn_was_briefing(self, command):
+        turn = self.last_skill_turn
+        return bool(turn and turn.get("command") == command and turn.get("intent") == self.BRIEFING_INTENT)
+
+    def _speak_always(self, text):
+        """Fala em qualquer modo (o briefing é sempre falado). Com a voz ligada
+        o ouvido pausa durante a fala para não se escutar (wake word na resposta)."""
+        listening = state.voice_enabled
+        if listening:
+            self.voice.pause()
+        try:
+            self.voice.speak(text, force=True)
+        except Exception as e:
+            log.warning(f"Não consegui falar a resposta: {e}")
+        finally:
+            if listening:
+                self.voice.resume()
 
     def _focus_action(self, parsed, usage):
         """Pomodoro/Não Perturbe (services.focus) num worker: mexe em registro e banco."""
@@ -639,7 +666,7 @@ class JarvisApp(App, inherit_bindings=False):
         return text
 
     def _maybe_daily_briefing(self):
-        """1º boot do dia (pref `briefing_auto`): briefing sozinho, falado se a voz estiver ligada."""
+        """1º boot do dia (pref `briefing_auto`): briefing sozinho, sempre falado (qualquer modo)."""
         from core import briefing
         from services import user_prefs
         if user_prefs.get("briefing_auto") and briefing.should_run_today():
@@ -716,6 +743,22 @@ class JarvisApp(App, inherit_bindings=False):
         else:
             self.notify(f"Transcrevendo {upload['name']}…")
             self._transcribe(upload)
+
+    def on_prompt_input_files_dropped(self, event: PromptInput.FilesDropped):
+        self._attach_dropped(event.paths)
+
+    def _attach_dropped(self, paths):
+        """Arquivos soltos no terminal = /attach. Uma imagem por mensagem
+        (fica a primeira); áudios são todos transcritos."""
+        images = [p for p in paths if is_image_path(p)]
+        audios = [p for p in paths if not is_image_path(p)]
+        if images:
+            self._attach(images[0])
+            if len(images) > 1:
+                name = os.path.basename(images[0])
+                self.notify(f"Só uma imagem por mensagem — anexei {name}.", severity="warning")
+        for path in audios:
+            self._attach(path)
 
     def _set_pending_image(self, upload):
         self.pending_image = upload
@@ -1036,7 +1079,8 @@ class JarvisApp(App, inherit_bindings=False):
                         self._call_ui(self.shutdown_jarvis)
                         return
                     if full:
-                        self.voice.speak(full)
+                        # Briefing (skill DAILY_BRIEFING) fala até se o modo mudou no meio do turno
+                        self.voice.speak(full, force=self._turn_was_briefing(command))
                 finally:
                     self.voice.resume()
             except Exception as e:

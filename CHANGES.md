@@ -2,6 +2,22 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+**Data:** 2026-11-09
+**Escopo:** Pendências de 08/11 (ícone, testes do WORK_MACRO), arrastar arquivo para a TUI e briefing sempre falado.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | Arrastar imagem/áudio para o Windows Terminal = `/attach`: `dropped_paths()` (pura) aceita o texto colado só quando **todo** pedaço é arquivo existente de imagem/áudio (com/sem aspas, vários arquivos); `PromptInput` intercepta o `Paste` e emite `FilesDropped`; sem bracketed paste, enviar só o caminho também anexa. Uma imagem por mensagem (fica a primeira, com aviso); áudios são todos transcritos. Dica no `/help` | `frontend/commands.py`, `frontend/widgets.py`, `frontend/app.py` |
+| 2 | Ícone `installer/assets/jarvis.ico` (16–256 px) gerado do `frontend/assets/Logo.jpg` (orb do `/status` em 8 bits): instalador, atalhos e bandeja do agente passam a usá-lo — nenhum código mudou, os `#if FileExists` e o `_tray_image()` já o procuravam | `installer/assets/jarvis.ico`, `frontend/assets/Logo.jpg` |
+| 3 | `test_work_macros_spotify.py` → `test_work_macros.py`: saem os casos de `_sanitize_spotify_uri`/`_is_playing_title` (moraram para `core/spotify.py`, já cobertos por `test_spotify_client.py`); ficam os das cenas e entra `TestStartPlaylist` (Web API autorizada, fallback para o app local quando a API falha ou sem autorização). Fim das 11 falhas antigas | `backend/tests/test_work_macros.py` |
+| 4 | Briefing sempre falado, em qualquer modo: automático (1º boot do dia), `/briefing` e skill `DAILY_BRIEFING`. `speak(..., force=True)` fala só pelo TTS mesmo com a voz desligada (microfone segue fechado); com a voz ligada o ouvido pausa durante a fala. No Copilot, a skill fala mesmo se o modo mudar no meio do turno. As outras ferramentas (`/web`, `/gh`…) seguem caladas | `backend/services/speak.py`, `frontend/app.py` |
+
+**Testes novos:** `test_tui_drop.py` (parse dos caminhos + colar/enviar na TUI com Pilot) e `test_tui_tools.py::TestBriefingIsSpoken` (/briefing e automático falam com a voz desligada, skill no Copilot força a fala, /web segue calado).
+
+**Pendente (manual):** Win+J com a TUI real, toasts somindo pelo registro, build do instalador com o ícone, arrastar PNG do Explorer para o Windows Terminal.
+
+---
+
 **Data:** 2026-11-08
 **Escopo:** Atalho global (Win+J), agente residente na bandeja e início com o Windows.
 

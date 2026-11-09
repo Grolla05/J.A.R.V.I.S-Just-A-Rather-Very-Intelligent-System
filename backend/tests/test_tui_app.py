@@ -34,6 +34,7 @@ class FakeVoice:
     def __init__(self, *phrases):
         self.queue = list(phrases)
         self.spoken = []
+        self.forced = []  # force= de cada fala (briefing fala com a voz desligada)
         self.orb_while_speaking = []
         self.app = None
         self.lock = threading.Lock()
@@ -45,7 +46,8 @@ class FakeVoice:
         time.sleep(0.05)
         return None
 
-    def speak(self, text):
+    def speak(self, text, force=False):
+        self.forced.append(force)
         if self.app is not None:
             self.orb_while_speaking.append(self.app.query_one("#copilot-hero").state)
         self.spoken.append(text)

@@ -140,6 +140,67 @@ class TestBriefingCommand(ToolsAppCase):
         gen.assert_called_once()
 
 
+class TestBriefingIsSpoken(ToolsAppCase):
+    """O briefing é sempre falado — automático, /briefing ou skill — em qualquer modo."""
+
+    async def _wait_spoken(self, pilot, voice):
+        for _ in range(100):
+            if voice.spoken:
+                return
+            await pilot.pause(0.05)
+        self.fail("briefing não foi falado")
+
+    async def test_briefing_command_speaks_in_chat_with_voice_off(self):
+        from core import briefing
+        app = self._app()
+        with patch.object(briefing, "generate", return_value="Bom dia."), \
+             patch.object(briefing, "mark_ran"):
+            async with app.run_test() as pilot:
+                self.assertEqual(app.mode, "chat")
+                self.assertFalse(state.voice_enabled)
+                await self._send(pilot, "/briefing")
+                await self._wait_spoken(pilot, app.voice)
+        self.assertEqual(app.voice.spoken, ["Bom dia."])
+        self.assertEqual(app.voice.forced, [True])
+
+    async def test_auto_briefing_speaks_with_voice_off(self):
+        from core import briefing
+        from services import user_prefs
+        app = self._app()
+        with patch.object(briefing, "generate", return_value="auto!"), \
+             patch.object(briefing, "mark_ran"), \
+             patch.object(briefing, "should_run_today", return_value=True), \
+             patch.object(user_prefs, "get", side_effect=lambda k: k == "briefing_auto"):
+            async with app.run_test() as pilot:
+                app._maybe_daily_briefing()
+                await pilot.app.workers.wait_for_complete()
+                await self._wait_spoken(pilot, app.voice)
+        self.assertEqual(app.voice.spoken, ["auto!"])
+
+    async def test_other_tools_stay_silent(self):
+        from core import web
+        app = self._app()
+        with patch.object(web, "research", return_value="resumo"):
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/web algo")
+        self.assertEqual(app.voice.spoken, [])
+
+    async def test_briefing_skill_in_copilot_is_forced(self):
+        def stream(text, session_id, images, mode, on_route=None):
+            if on_route:
+                on_route("DAILY_BRIEFING")
+            yield "Bom dia, Senhor."
+
+        voice = FakeVoice("bom dia jarvis")
+        app = tui_app.JarvisApp(stream_fn=stream, start_services=False, voice=voice)
+        voice.app = app
+        async with app.run_test() as pilot:
+            await pilot.press("shift+tab")
+            await self._wait_spoken(pilot, voice)
+        self.assertEqual(voice.spoken, ["Bom dia, Senhor."])
+        self.assertEqual(voice.forced, [True])
+
+
 class TestClipCommand(ToolsAppCase):
     async def test_clip_acts_on_clipboard(self):
         from core import clipboard

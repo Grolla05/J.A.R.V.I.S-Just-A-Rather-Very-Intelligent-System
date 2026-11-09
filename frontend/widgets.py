@@ -6,10 +6,12 @@ from datetime import date, datetime
 
 from rich.style import Style as RichStyle
 from rich.text import Text
+from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.content import Content
+from textual.message import Message
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.style import Style
@@ -18,6 +20,7 @@ from textual.widgets import Button, Footer, Input, Label, Markdown, Static
 from textual.widgets.markdown import MarkdownFence
 
 from frontend import orb, sprites
+from frontend.commands import dropped_paths
 
 ROLE_LABEL = {"user": "você ›", "assistant": "jarvis ›", "system": "sistema ›"}
 ORB_FPS = 8  # quadros/s do orb — só roda enquanto pensa ou responde
@@ -158,6 +161,23 @@ class PromptInput(Input):
     """Input principal. ↑ com o campo vazio pede para editar a última mensagem."""
 
     BINDINGS = [Binding("up", "edit_last", "Editar última", show=False)]
+
+    class FilesDropped(Message):
+        """Arquivos soltos no terminal (o caminho chegou como colagem)."""
+
+        def __init__(self, paths):
+            super().__init__()
+            self.paths = paths
+
+    def _on_paste(self, event: events.Paste):
+        # O Textual chama o _on_paste de cada classe do MRO: sem prevent_default
+        # o do Input cola o texto normalmente (não chamar super, colaria 2×).
+        paths = dropped_paths(event.text)
+        if not paths:
+            return
+        event.prevent_default()
+        event.stop()
+        self.post_message(self.FilesDropped(paths))
 
     def action_edit_last(self):
         if not self.value:

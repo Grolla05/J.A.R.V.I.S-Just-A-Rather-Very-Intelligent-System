@@ -133,15 +133,17 @@ def speak_offline(text):
     engine.say(_treat_text(text))
     engine.runAndWait()
 
-def speak(text, play_callback=None, show=True):
+def speak(text, play_callback=None, show=True, force=False):
     """
     Função Thread-Safe com Callback de início de reprodução.
     Com a voz desligada (state.voice_enabled=False) só exibe o texto.
     show=False quando quem chama já exibe a resposta (ex: loop de voz da TUI).
+    force=True fala mesmo com a voz desligada (ex: briefing) — só o TTS; o
+    microfone continua fechado.
     """
     if show:
         _show(text)
-    if not state.voice_enabled:
+    if not (state.voice_enabled or force):
         if play_callback: play_callback()
         return
     with speech_lock:
