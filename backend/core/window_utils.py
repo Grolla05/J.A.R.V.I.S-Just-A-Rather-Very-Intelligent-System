@@ -120,3 +120,20 @@ def force_foreground(hwnd):
         log.warning(f"⚠️ [WINDOW_UTILS] SetForegroundWindow recusado pelo Windows para hwnd={hwnd} (foreground-lock).")
 
     return result
+
+
+GA_ROOTOWNER = 3
+
+
+def find_terminal_window(fallback=None):
+    """HWND da janela do terminal que hospeda este processo.
+
+    No conhost é o próprio GetConsoleWindow(). No Windows Terminal ele devolve
+    uma pseudo-janela oculta cujo dono-raiz é a janela do WT (versões novas);
+    quando nem isso é visível, usa `fallback` (o GetForegroundWindow() lido no
+    boot, quando o terminal recém-aberto está em foco)."""
+    console = kernel32.GetConsoleWindow()
+    for hwnd in (console, user32.GetAncestor(console, GA_ROOTOWNER) if console else 0):
+        if hwnd and user32.IsWindowVisible(hwnd):
+            return hwnd
+    return fallback or user32.GetForegroundWindow() or 0

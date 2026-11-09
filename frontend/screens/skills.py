@@ -19,7 +19,7 @@ from frontend.screens.base import JarvisScreen
 _GLYPHS = (("SPOTIFY", "♫"), ("APP", "▣"), ("AUDIO", "♪"), ("KEYBOARD", "⌨"),
            ("SCREEN", "▦"), ("MACRO", "⚙"), ("STATUS", "≡"), ("REPORT", "≡"),
            ("CLEAN", "✕"), ("CLEAR", "✕"), ("SECURITY", "⛨"), ("WEB", "⌕"),
-           ("GITHUB", "⎇"), ("BRIEFING", "☀"), ("CLIPBOARD", "⎘"))
+           ("GITHUB", "⎇"), ("BRIEFING", "☀"), ("CLIPBOARD", "⎘"), ("FOCUS", "◷"))
 FALLBACK_GLYPH = "◆"
 TAB = "▄" * 12  # aba de encaixe no topo do cartucho
 

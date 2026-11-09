@@ -7,6 +7,11 @@ pending_critical_action = None
 # speak() vira no-op e o microfone nem é aberto enquanto for False.
 voice_enabled = False
 
+# Não Perturbe (services/focus.py): com ele ligado, alertas proativos não falam
+# nem notificam — vão para o backlog e são resumidos quando o foco termina.
+dnd_active = False
+dnd_backlog = []
+
 # Callback opcional (str) -> None que a interface registra para exibir
 # falas/alertas do JARVIS em texto (ex: TUI). None = só log.
 announce = None

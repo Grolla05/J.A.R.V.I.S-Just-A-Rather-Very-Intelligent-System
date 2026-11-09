@@ -131,8 +131,10 @@ class StatusLine(Widget):
     """Lado esquerdo da linha de status. As barras de bloco (▰▱) ganham a cor
     da component class status--bar (ciano; vermelho no protocolo crítico)."""
 
-    COMPONENT_CLASSES = {"status--bar"}
+    COMPONENT_CLASSES = {"status--bar", "status--ok", "status--warn", "status--fail"}
     DEFAULT_CSS = "StatusLine { width: auto; height: 1; }"
+    # Glifos de saúde (core.health.GLYPHS) -> component class da cor
+    _HEALTH = {"●": "status--ok", "◐": "status--warn", "○": "status--fail"}
 
     text = reactive("", layout=True)
 
@@ -142,8 +144,13 @@ class StatusLine(Widget):
     def render(self):
         bar = self.get_component_rich_style("status--bar", partial=True)
         out = Text(no_wrap=True, end="")
-        for chunk in re.split(r"([▰▱]+)", self.text):
-            out.append(chunk, bar if chunk and chunk[0] in "▰▱" else None)
+        for chunk in re.split(r"([▰▱]+|[●◐○])", self.text):
+            if chunk and chunk[0] in "▰▱":
+                out.append(chunk, bar)
+            elif chunk in self._HEALTH:
+                out.append(chunk, self.get_component_rich_style(self._HEALTH[chunk], partial=True))
+            else:
+                out.append(chunk)
         return out
 
 

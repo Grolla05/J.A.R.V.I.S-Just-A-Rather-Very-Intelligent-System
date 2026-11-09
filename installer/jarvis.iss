@@ -59,9 +59,11 @@ Name: "ptbr"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
 [CustomMessages]
 ptbr.TarefaPath=Adicionar o JARVIS ao PATH (rodar "jarvis" em qualquer terminal)
 ptbr.GrupoOutras=Outras opções:
+ptbr.TarefaAutostart=Iniciar o J.A.R.V.I.S com o Windows (agente na bandeja, Win+J abre)
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+Name: "autostart"; Description: "{cm:TarefaAutostart}"; GroupDescription: "{cm:GrupoOutras}"
 Name: "path"; Description: "{cm:TarefaPath}"; GroupDescription: "{cm:GrupoOutras}"; Flags: unchecked
 
 [InstallDelete]
@@ -91,8 +93,18 @@ Name: "{autodesktop}\J.A.R.V.I.S"; Filename: "{app}\jarvis.cmd"; WorkingDir: "{a
 Name: "{group}\Configuração (.env)"; Filename: "{userappdata}\JARVIS\.env"
 Name: "{group}\{cm:UninstallProgram,J.A.R.V.I.S}"; Filename: "{uninstallexe}"
 
+[Registry]
+; Agente residente (pythonw, sem janela) no logon: segura o Win+J e reabre a TUI.
+; O /config e o ícone da bandeja ligam/desligam este mesmo valor depois.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "JARVIS"; ValueData: """{app}\runtime\pythonw.exe"" ""{app}\app\backend\agent.py"""; Tasks: autostart; Flags: uninsdeletevalue
+
 [Run]
+Filename: "{app}\runtime\pythonw.exe"; Parameters: """{app}\app\backend\agent.py"""; WorkingDir: "{app}\app\backend"; Tasks: autostart; Flags: nowait skipifsilent
 Filename: "{app}\jarvis.cmd"; Description: "{cm:LaunchProgram,J.A.R.V.I.S}"; WorkingDir: "{app}"; Flags: postinstall nowait skipifsilent shellexec
+
+[UninstallRun]
+; Fecha o agente antes de apagar os arquivos (o pythonw.exe dele trava o runtime)
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""Get-Process pythonw -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '{app}\runtime\*' } | Stop-Process -Force"""; Flags: runhidden waituntilterminated; RunOnceId: "FechaAgente"
 
 [UninstallDelete]
 ; __pycache__ e afins criados depois da instalação
@@ -540,6 +552,18 @@ begin
   Result := True;
   if CurPageID = PaginaOllama.ID then
     Result := OllamaInstalado;
+end;
+
+// Atualização por cima: o agente residente (pythonw do runtime antigo) trava os
+// arquivos que o [InstallDelete] apaga. Fecha só os pythonw desta instalação.
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  Codigo: Integer;
+begin
+  Result := '';
+  Exec('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "Get-Process pythonw -ErrorAction SilentlyContinue | ' +
+       'Where-Object { $_.Path -like ''' + ExpandConstant('{app}') + '\runtime\*'' } | Stop-Process -Force"',
+       '', SW_HIDE, ewWaitUntilTerminated, Codigo);
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);

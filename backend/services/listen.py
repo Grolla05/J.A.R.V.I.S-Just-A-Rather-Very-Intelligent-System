@@ -23,6 +23,25 @@ def rms_level(chunk):
     return min(1.0, rms / LEVEL_FULL_SCALE)
 
 
+def clean_phrase(text):
+    """Minúsculas, pontuação vira espaço e espaços colapsam:
+    'Sexta-Feira, abre!' -> 'sexta feira abre'."""
+    return " ".join(re.sub(r"[^\w\s]", " ", (text or "").lower()).split())
+
+
+def find_wake_word(phrase, words):
+    """1ª wake word presente em `phrase` (já limpa) como palavra inteira, ou None.
+
+    Cada palavra passa pela mesma limpeza da frase ('sexta-feira' do .env casa
+    com 'sexta feira' do STT) e as mais longas são testadas antes ('jair vis'
+    vence 'jair'). Retorna a forma limpa, que é a que aparece na frase."""
+    cleaned = {clean_phrase(w) for w in words} - {""}
+    for word in sorted(cleaned, key=len, reverse=True):
+        if re.search(rf"\b{re.escape(word)}\b", phrase):
+            return word
+    return None
+
+
 class _LevelTap:
     """Envolve o stream do microfone: cada read() devolve o áudio intacto ao
     recognizer e, de quebra, avisa o nível (RMS) para o visualizador da TUI."""
@@ -68,7 +87,7 @@ class Ear:
         self.recognizer.pause_threshold = 1.5
 
         # Configurações de Estado
-        self.WAKE_WORDS = ['jarvis', 'jar', 'jair', 'javis', 'davis', 'gervis', 'jarbas', 'garvis', 'jefferson', 'jorge', 'jair vis']
+        self.WAKE_WORDS = settings.WAKE_WORDS  # WAKE_WORDS no .env
         self.last_interaction_time = 0
         self.conversation_timeout = user_prefs.get("attention_window")  # janela de atenção (s)
         
@@ -95,7 +114,7 @@ class Ear:
         self.last_interaction_time = time.time()
 
     def _clean_text(self, text):
-        return re.sub(r'[^\w\s]', '', text).strip()
+        return clean_phrase(text)
 
     def listen(self):
         while True:
@@ -120,16 +139,9 @@ class Ear:
                     phrase = self.recognizer.recognize_google(audio, language=settings.DEFAULT_LANGUAGE).lower()
                     phrase = self._clean_text(phrase)
                     command = None
-                    trigger_found = None
-                    
-                    # Verifica se falou o nome (Wake Word)
-                    for trigger in self.WAKE_WORDS:
-                        # TRUQUE DE REGEX: \b garante que é a palavra inteira
-                        # Ex: aceita "jarvis" mas ignora "viajar"
-                        if re.search(rf"\b{trigger}\b", phrase):
-                            trigger_found = trigger
-                            break
-                    
+                    # Wake word como palavra inteira: aceita "jarvis", ignora "viajar"
+                    trigger_found = find_wake_word(phrase, self.WAKE_WORDS)
+
                     if trigger_found:
                         # Substitui APENAS A PRIMEIRA ocorrência do nome
                         # Isso evita bugar frases como "Jarvis, fale sobre o Jarvis"

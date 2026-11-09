@@ -145,6 +145,10 @@ MessageView > .msg--run { color: $j-warn; text-style: bold; }
 StatusLine > .status--bar { color: $j-neon; }
 Screen.-critical StatusLine > .status--bar,
 ConfirmScreen StatusLine > .status--bar { color: $j-danger; }
+/* Saúde dos subsistemas (OLL● OBS◐ MIC○ DB●): verde / âmbar / vermelho */
+StatusLine > .status--ok { color: $j-ok; }
+StatusLine > .status--warn { color: $j-warn; }
+StatusLine > .status--fail { color: $j-danger; }
 
 /* --- Anexo pendente, input, status --- */
 #attachbar {
@@ -247,7 +251,7 @@ Screen.-critical #voice-mic, Screen.-critical #voice-wave { color: $j-danger-sof
 ConfirmScreen .statusbar Footer FooterKey .footer-key--key { color: $j-danger-soft; }
 
 /* --- Modais (o fundo escurece a conversa) --- */
-SessionPicker, ConfirmScreen {
+SessionPicker, ConfirmScreen, CommandPalette {
     align: center middle;
     background: rgba(0, 0, 0, 0.55);
 }
@@ -353,6 +357,8 @@ BarChart > .chart--alta { color: $j-danger-soft; }
 #status-level { margin: 1 0 2 0; text-style: bold; color: $j-neon; content-align: center middle; }
 #status-level.-alta { color: $j-danger-soft; }
 #status-procs-title { margin-bottom: 1; }
+#status-health-title { margin-top: 1; }
+#status-health { width: 1fr; height: auto; color: $j-text-soft; }
 ProcessList > .procs--name { color: $j-white; }
 ProcessList > .procs--size { color: $j-muted; }
 #status-gap { height: 1fr; }
@@ -635,3 +641,20 @@ HousePartyScreen { background: $j-bg; align: center middle; }
     padding: 0 1;
     width: auto;
 }
+
+/* --- Ctrl+K: paleta "▶ SELECT" (seletor de cartucho) --- */
+#palette {
+    width: 84;
+    max-width: 95%;
+    height: auto;
+    max-height: 80%;
+    border: double $j-neon;
+    background: $j-panel;
+    padding: 0 1;
+}
+#palette-title { width: 1fr; color: $j-ink; background: $j-neon; text-style: bold; padding: 0 1; }
+#palette-filter { margin: 1 0 0 0; border: tall $j-line; background: $j-bg; }
+#palette-filter:focus { border: tall $j-neon; }
+#palette-list { height: auto; max-height: 20; background: $j-panel; border: none; margin-top: 1; }
+#palette-list > .option-list--option-highlighted { background: $j-ocean; color: $j-white; }
+#palette-hint { margin-top: 1; }
