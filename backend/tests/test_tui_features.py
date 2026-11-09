@@ -18,12 +18,14 @@ for _name in [n for n in dir(base.TestJarvisApp) if n.startswith("test_")]:
 
 
 class TestHealthStatus(_Base):
-    async def test_health_glyphs_in_status_line(self):
+    async def test_health_glyphs_not_in_status_line(self):
         app = self._app()
         async with app.run_test() as pilot:
             app._set_health({"OLL": ("ok", ""), "OBS": ("warn", ""), "MIC": ("fail", ""), "DB": ("ok", "")})
             await pilot.pause()
-            self.assertIn("OLL● OBS◐ MIC○ DB●", app.status_text())
+            text = app.status_text()
+            for label in ("OLL", "OBS", "MIC", "DB"):
+                self.assertNotIn(label, text)
 
     async def test_transition_to_fail_notifies(self):
         app = self._app()

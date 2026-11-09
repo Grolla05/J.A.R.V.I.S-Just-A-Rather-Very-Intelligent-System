@@ -22,7 +22,7 @@ Ou `boot.bat` na raiz (sobe o Ollama antes). Prefira o Windows Terminal.
 | `app.py` | `JarvisApp`: modos chat/copilot, atalhos, stream, sessões, anexos, voz, alertas, telemetria |
 | `widgets.py` | `MessageView`, `PromptInput`, `JarvisOrb`, `CopilotHero`, `VoiceBar`, `ConfirmScreen` (expira em 30 s), `format_slot_when` |
 | `orb.py` | Orb pixel-art 16×16 do Copilot: quadros de cada estado e conversão para meio-bloco (lógica pura) |
-| `commands.py` | Parser puro dos `/comandos` e o `/help` |
+| `commands.py` | Parser puro dos `/comandos` e entradas da paleta Ctrl+K |
 | `jarvis.tcss` | Tema. Todas as cores ficam aqui como variáveis `$j-*` |
 | `pyproject.toml` | Herda as regras do ruff de `backend/pyproject.toml` |
 

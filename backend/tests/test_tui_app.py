@@ -383,6 +383,35 @@ class TestJarvisApp(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(str(app.screen.query_one(".cart-state").render()), "OFF")
                 self.assertIn("0 de 1", str(app.screen.query_one("#session-title").render()))
 
+    async def test_skills_screen_groups_by_category_and_scrolls(self):
+        from services import skill_settings
+
+        def fake_list():
+            def skills(prefix, n):
+                return [{"id": f"{prefix}_{i}", "enabled": True} for i in range(n)]
+            return [{"id": "automation", "enabled": True, "skills": skills("AUTO", 6)},
+                    {"id": "vazia", "enabled": True, "skills": []},
+                    {"id": "system", "enabled": True, "skills": skills("SYS", 3)},
+                    {"id": "productivity", "enabled": True, "skills": skills("PROD", 5)}]
+
+        with patch.object(skill_settings, "list_skills", fake_list):
+            app = self._app()
+            async with app.run_test(size=(140, 45)) as pilot:
+                await self._send(pilot, "/skills")
+                await pilot.pause(0.3)
+                screen = app.screen
+                titles = [str(t.render()) for t in screen.query(".skills-cat-title")]
+                self.assertEqual(titles, ["AUTOMATION", "SYSTEM", "PRODUCTIVITY"])  # vazia some
+                self.assertEqual(len(screen.query(".skills-rule")), 2)  # linha entre categorias
+                grids = list(screen.query(".skills-grid"))
+                self.assertEqual([len(g.query(".cartridge")) for g in grids], [6, 3, 5])
+                self.assertTrue(all(c.category == "system" for c in grids[1].query(".cartridge")))
+                scroll = screen.query_one("#skills-scroll")
+                self.assertGreater(scroll.max_scroll_y, 0)  # 14 cartuchos não cabem: rola
+                screen.query(".cartridge").last().focus()
+                await pilot.pause(0.3)
+                self.assertGreater(scroll.scroll_y, 0)  # foco leva a rolagem junto
+
     async def test_log_screen_filters_buffer_and_shows_timeline(self):
         from core.logger import log
         app = self._app(FakeVoice("abre o spotify"))

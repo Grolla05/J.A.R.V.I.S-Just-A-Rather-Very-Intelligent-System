@@ -54,9 +54,44 @@ class TestChecks(unittest.TestCase):
         fake_sr.Microphone.list_microphone_names.return_value = ["Mic A", "Mic B"]
         with patch.dict(sys.modules, {"speech_recognition": fake_sr}):
             with patch.object(settings, "MIC_INDEX", 1):
-                self.assertEqual(health.check_microphone(), (health.OK, "mic 1: Mic B"))
+                self.assertEqual(health.check_microphone(refresh=True), (health.OK, "mic 1: Mic B"))
             with patch.object(settings, "MIC_INDEX", 5):
-                self.assertEqual(health.check_microphone()[0], health.FAIL)
+                self.assertEqual(health.check_microphone(refresh=True)[0], health.FAIL)
+
+    def test_microphone_probe_is_cached(self):
+        """PortAudio só é tocado uma vez: o poll de saúde reaproveita o resultado."""
+        fake_sr = MagicMock()
+        fake_sr.Microphone.list_microphone_names.return_value = ["Mic A"]
+        with patch.dict(sys.modules, {"speech_recognition": fake_sr}), \
+                patch.object(settings, "MIC_INDEX", 0):
+            health.check_microphone(refresh=True)
+            health.check_microphone()
+            health.check_microphone()
+        self.assertEqual(fake_sr.Microphone.list_microphone_names.call_count, 1)
+
+    def test_microphone_probe_is_serialized(self):
+        """Duas threads (boot + poll) nunca enumeram o áudio ao mesmo tempo."""
+        import threading
+        import time
+        active, peak = [0], [0]
+
+        def names():
+            active[0] += 1
+            peak[0] = max(peak[0], active[0])
+            time.sleep(0.05)
+            active[0] -= 1
+            return ["Mic A"]
+
+        fake_sr = MagicMock()
+        fake_sr.Microphone.list_microphone_names.side_effect = names
+        with patch.dict(sys.modules, {"speech_recognition": fake_sr}), \
+                patch.object(settings, "MIC_INDEX", 0):
+            threads = [threading.Thread(target=health.check_microphone, kwargs={"refresh": True}) for _ in range(4)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+        self.assertEqual(peak[0], 1)
 
 
 class TestAggregation(unittest.TestCase):

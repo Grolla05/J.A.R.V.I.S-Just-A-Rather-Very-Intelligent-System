@@ -54,7 +54,7 @@ def _check_obsidian():
 
 def _check_microphone():
     from .health import check_microphone
-    return check_microphone()
+    return check_microphone(refresh=True)
 
 
 STEPS = (

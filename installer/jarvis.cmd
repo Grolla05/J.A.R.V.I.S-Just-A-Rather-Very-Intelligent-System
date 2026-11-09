@@ -25,7 +25,10 @@ if /i "%~1"=="--here" goto run
 if defined WT_SESSION goto run
 where wt.exe >nul 2>&1
 if errorlevel 1 goto run
-start "" wt.exe -w new --title "JARVIS" cmd.exe /c "%~f0" --here %*
+:: Perfil JARVIS (fragment gravado pelo main.py) poe a logo do JARVIS na aba
+set "JARVIS_WT_PROFILE="
+if exist "%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\JARVIS\jarvis.json" set "JARVIS_WT_PROFILE=-p JARVIS"
+start "" wt.exe -w new %JARVIS_WT_PROFILE% --title "JARVIS" cmd.exe /c "%~f0" --here %*
 exit /b 0
 
 :run
@@ -37,5 +40,10 @@ if not exist "%JARVIS_PY%" (
 cd /d "%JARVIS_HOME%app\backend"
 :: %* repassa --copilot (Win+J do agente abre a TUI direto no modo voz)
 "%JARVIS_PY%" main.py %*
-if errorlevel 1 pause
-exit /b %errorlevel%
+set "JARVIS_RC=%errorlevel%"
+:: Crash nativo nao deixa a TUI restaurar o terminal: desliga rastreio de mouse,
+:: tela alternativa e cursor oculto para o prompt nao virar lixo ([555;89;14M...).
+for /f %%a in ('echo prompt $E^| cmd') do set "ESC=%%a"
+<nul set /p "=%ESC%[?1000l%ESC%[?1002l%ESC%[?1003l%ESC%[?1006l%ESC%[?1015l%ESC%[?1049l%ESC%[?25h"
+if not "%JARVIS_RC%"=="0" pause
+exit /b %JARVIS_RC%

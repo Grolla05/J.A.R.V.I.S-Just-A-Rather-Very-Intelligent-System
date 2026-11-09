@@ -325,9 +325,6 @@ class CopilotHero(Horizontal):
         self.query_one("#hero-state", Label).update(f"▶ {orb.STATE_LABEL.get(state, state)}")
 
 
-VOICE_WAVE = "▂▄█▅▇▃▁▁"
-
-
 class VoiceBar(Horizontal):
     """Substitui o campo de texto no Copilot (que é só por voz)."""
 
@@ -336,14 +333,16 @@ class VoiceBar(Horizontal):
 
     WAVE_WIDTH = 24  # amostras do espectro (8 por segundo → ~3 s de histórico)
     VU_WIDTH = 15
+    RELEASE = 0.6    # queda por quadro: sobe na hora, desce suave (não pisca entre sílabas)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.levels = deque([0.0] * self.WAVE_WIDTH, maxlen=self.WAVE_WIDTH)
+        self.shown = 0.0  # nível exibido no VU (com release)
 
     def compose(self) -> ComposeResult:
         yield Static("●", id="voice-mic")
-        yield Static(VOICE_WAVE, id="voice-wave")
+        yield Static(sprites.sparkline(self.levels, width=self.WAVE_WIDTH), id="voice-wave")
         yield Static(self.LISTENING, id="voice-text", markup=False)
         yield Static(sprites.block_bar(0, self.VU_WIDTH, "█", "░"), id="voice-vu")
         yield Static("Esc interrompe", id="voice-hint")
@@ -353,14 +352,15 @@ class VoiceBar(Horizontal):
         zera tudo (fora do estado 'ouvindo' as barras ficam paradas em zero)."""
         if level is None:
             self.levels.extend([0.0] * self.WAVE_WIDTH)
-            level = 0.0
+            self.shown = 0.0
         else:
             level = max(0.0, min(1.0, float(level)))
-            self.levels.append(level)
+            self.shown = max(level, self.shown * self.RELEASE)
+            self.levels.append(self.shown)
         self.query_one("#voice-wave", Static).update(
             sprites.sparkline([v * 100 for v in self.levels], width=self.WAVE_WIDTH))
         self.query_one("#voice-vu", Static).update(
-            sprites.block_bar(level * 100, self.VU_WIDTH, "█", "░"))
+            sprites.block_bar(self.shown * 100, self.VU_WIDTH, "█", "░"))
 
     def set_awaiting(self, awaiting):
         self.query_one("#voice-text", Static).update(self.AWAITING if awaiting else self.LISTENING)

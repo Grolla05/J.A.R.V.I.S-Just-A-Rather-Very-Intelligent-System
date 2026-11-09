@@ -3,9 +3,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-# nome -> (uso, descrição). Ordem = ordem do /help.
+# nome -> (uso, descrição). Ordem = ordem da paleta (Ctrl+K).
 COMMANDS = {
-    "help":     ("/help", "lista os comandos"),
     "menu":     ("/menu", "paleta de comandos, skills e foco (Ctrl+K)"),
     "new":      ("/new", "nova sessão (Ctrl+N)"),
     "sessions": ("/sessions", "trocar de sessão (Ctrl+O)"),
@@ -32,7 +31,8 @@ COMMANDS = {
     "quit":     ("/quit", "encerra o J.A.R.V.I.S (Ctrl+Q)"),
 }
 
-ALIASES = {"q": "quit", "exit": "quit", "h": "help", "?": "help", "s": "sessions", "n": "new"}
+# /help saiu (a paleta Ctrl+K lista tudo); quem digitar por hábito cai na paleta.
+ALIASES = {"q": "quit", "exit": "quit", "help": "menu", "h": "menu", "?": "menu", "s": "sessions", "n": "new"}
 
 
 @dataclass(frozen=True)
@@ -49,7 +49,7 @@ def parse(text):
         return None
     body = text[1:].strip()
     if not body:
-        return Command("help")
+        return Command("menu")
     name, _, arg = body.partition(" ")
     name = ALIASES.get(name.lower(), name.lower())
     return Command(name, arg.strip(), name in COMMANDS)
@@ -87,15 +87,6 @@ def parse_dnd_arg(arg):
 def unescape(text):
     """'//texto' → '/texto' (mensagem que começa com barra)."""
     return text[1:] if text.startswith("//") else text
-
-
-def help_markdown():
-    # `|` dentro do uso (ex.: [chat|copilot]) quebraria a coluna da tabela:
-    # escapado como `\|`, o markdown-it tira a barra e mantém o `|` no código.
-    lines = ["| comando | ação |", "|---|---|"]
-    lines += [f"| `{usage.replace('|', chr(92) + '|')}` | {desc} |" for usage, desc in COMMANDS.values()]
-    lines += ["", "Dica: arraste uma imagem ou áudio para o terminal — o caminho colado vira `/attach`."]
-    return "\n".join(lines)
 
 
 # ------------------------------------------------------- arrastar arquivo

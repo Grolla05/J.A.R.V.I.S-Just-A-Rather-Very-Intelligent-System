@@ -27,7 +27,6 @@ from core import db, log, settings
 from frontend.commands import (
     Command,
     dropped_paths,
-    help_markdown,
     is_image_path,
     palette_entries,
     parse,
@@ -168,7 +167,7 @@ class JarvisApp(App, inherit_bindings=False):
         yield CopilotHero(model=settings.OLLAMA_MODEL, id="copilot-hero")
         yield VerticalScroll(id="log")
         yield Static(id="attachbar")
-        yield PromptInput(id="prompt", placeholder="Fale com o JARVIS…  (/help)")
+        yield PromptInput(id="prompt", placeholder="Fale com o JARVIS…  (Ctrl+K menu)")
         yield VoiceBar(id="voicebar")
         # Telemetria e atalhos dividem UMA linha (canvas "JARVIS TUI")
         with Horizontal(id="statusbar", classes="statusbar"):
@@ -191,8 +190,11 @@ class JarvisApp(App, inherit_bindings=False):
             state.sys_monitor.start_proactive_monitor(interval=5)
             self.set_interval(settings.TELEMETRY_INTERVAL, self._poll_telemetry)
             self._poll_telemetry()
+            # Saúde só depois do boot: a tela de boot já checa tudo, e duas
+            # threads mexendo no PortAudio ao mesmo tempo derrubavam o processo.
             self.set_interval(settings.HEALTH_INTERVAL, self._poll_health)
-            self._poll_health()
+            if not self._boot_fn:
+                self._poll_health()
             self._boot_greeting()
             self._sync_clipboard_monitor()
             self._register_presence()
@@ -206,6 +208,8 @@ class JarvisApp(App, inherit_bindings=False):
 
     def _boot_closed(self, _result=None):
         self.main_screen.query_one("#prompt").focus()
+        if self._start_services:
+            self._poll_health()
         self._apply_start_mode()
 
     def _apply_start_mode(self):
@@ -299,12 +303,12 @@ class JarvisApp(App, inherit_bindings=False):
         self.main_screen.query_one("#topbar-info", Static).update(info)
 
     def status_text(self):
-        """Lado esquerdo da linha de status: telemetria · saúde · voz · modelo · ocupado."""
-        from core.health import status_line
+        """Lado esquerdo da linha de status: telemetria · foco · voz · modelo · ocupado.
+        A saúde dos subsistemas fica no /status (falhas novas viram notificação)."""
         voice = "voz on" if state.voice_enabled else "voz off"
         busy = "   ▚ pensando…" if self.busy else ""
         model = settings.OLLAMA_MODEL or "?"
-        parts = [p for p in (self._telemetry, status_line(self.health), self._focus_badge(), voice, model) if p]
+        parts = [p for p in (self._telemetry, self._focus_badge(), voice, model) if p]
         return "   ".join(parts) + busy
 
     def _refresh_status(self):
@@ -511,9 +515,7 @@ class JarvisApp(App, inherit_bindings=False):
     def run_command(self, cmd):
         name, arg = cmd.name, cmd.arg
         if not cmd.known:
-            self.notify(f"Comando desconhecido: /{name}. Veja /help.", severity="warning")
-        elif name == "help":
-            self.add_message("assistant", help_markdown())
+            self.notify(f"Comando desconhecido: /{name}. Ctrl+K lista todos.", severity="warning")
         elif name == "menu":
             self.action_palette()
         elif name == "new":
