@@ -23,8 +23,9 @@ def python_exe():
     return candidate if candidate.exists() else exe
 
 
-def tui_command(copilot=True, wt=None):
-    """(argv, cwd) para abrir a TUI. `wt` = caminho do wt.exe ou None."""
+def tui_command(copilot=True, wt=None, profile=None):
+    """(argv, cwd) para abrir a TUI. `wt` = caminho do wt.exe ou None;
+    `profile` = perfil do WT (core.wt_profile, dá a logo na aba) ou None."""
     extra = ["--copilot"] if copilot else []
     launcher = settings.DIR_ROOT.parent / "jarvis.cmd"
     if settings.IS_INSTALLED and launcher.exists():
@@ -34,14 +35,19 @@ def tui_command(copilot=True, wt=None):
         inner = [str(python_exe()), "main.py", *extra]
         cwd = settings.DIR_BACKEND
     if wt:
-        return [wt, "-w", "new", "--title", WINDOW_TITLE, "-d", str(cwd), *inner], cwd
+        prof = ["-p", profile] if profile else []
+        return [wt, "-w", "new", *prof, "--title", WINDOW_TITLE, "-d", str(cwd), *inner], cwd
     return inner, cwd
 
 
 def launch_tui(copilot=True):
     """Abre a TUI. Retorna o Popen (ou None se falhou)."""
     wt = shutil.which("wt.exe") or shutil.which("wt")
-    argv, cwd = tui_command(copilot, wt)
+    profile = None
+    if wt:
+        from .wt_profile import PROFILE_NAME, ensure_profile
+        profile = PROFILE_NAME if ensure_profile() else None
+    argv, cwd = tui_command(copilot, wt, profile)
     try:
         flags = 0 if wt else CREATE_NEW_CONSOLE
         proc = subprocess.Popen(argv, cwd=str(cwd), creationflags=flags)

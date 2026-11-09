@@ -7,20 +7,44 @@ import speech_recognition as sr
 
 from core import log, settings
 
-LEVEL_FULL_SCALE = 6000.0  # RMS (int16) que já conta como "voz cheia" (nível 1.0)
 LEVEL_MAX_HZ = 8           # no máx. 8 avisos de nível por segundo (= fps da orb)
+# Escala em dBFS (o ouvido é logarítmico): na linear, fala normal mal mexia a barra.
+LEVEL_FLOOR_DB = -50.0     # piso padrão (sem calibração): abaixo disso = silêncio
+LEVEL_CEIL_DB = -12.0      # fala alta já enche a barra
+_FULL_SCALE = 32768.0      # int16
 
 
-def rms_level(chunk):
-    """Nível 0..1 de um bloco PCM 16-bit little-endian (sem audioop, removido no 3.13)."""
+def chunk_rms(chunk):
+    """RMS de um bloco PCM 16-bit little-endian (sem audioop, removido no 3.13)."""
     if not chunk:
         return 0.0
     samples = array("h")
     samples.frombytes(chunk[: len(chunk) - (len(chunk) % 2)])
     if not samples:
         return 0.0
-    rms = math.sqrt(sum(s * s for s in samples) / len(samples))
-    return min(1.0, rms / LEVEL_FULL_SCALE)
+    return math.sqrt(sum(s * s for s in samples) / len(samples))
+
+
+def _db(rms):
+    return 20 * math.log10(rms / _FULL_SCALE) if rms > 0 else float("-inf")
+
+
+def level_from_rms(rms, floor_rms=None):
+    """Nível 0..1 em dBFS. `floor_rms` = limiar de energia do recognizer (mesma
+    unidade, RMS int16): abaixo dele o reconhecedor não considera fala, então a
+    barra fica zerada — ela sobe exatamente quando o JARVIS está te ouvindo."""
+    floor = LEVEL_FLOOR_DB
+    if floor_rms and floor_rms > 0:
+        floor = min(max(floor, _db(floor_rms)), LEVEL_CEIL_DB - 6)
+    db = _db(rms)
+    if db <= floor:
+        return 0.0
+    return min(1.0, (db - floor) / (LEVEL_CEIL_DB - floor))
+
+
+def rms_level(chunk, floor_rms=None):
+    """Nível 0..1 de um bloco PCM 16-bit."""
+    return level_from_rms(chunk_rms(chunk), floor_rms)
 
 
 def clean_phrase(text):
@@ -44,23 +68,32 @@ def find_wake_word(phrase, words):
 
 class _LevelTap:
     """Envolve o stream do microfone: cada read() devolve o áudio intacto ao
-    recognizer e, de quebra, avisa o nível (RMS) para o visualizador da TUI."""
+    recognizer e mede o RMS de TODOS os blocos; a cada 1/LEVEL_MAX_HZ avisa o
+    pico da janela (antes só 1 bloco a cada 125 ms era medido e o resto,
+    descartado — sílabas inteiras sumiam da barra). `floor()` devolve o limiar
+    de energia atual do recognizer."""
 
-    def __init__(self, stream, on_level, clock=time.monotonic):
+    def __init__(self, stream, on_level, clock=time.monotonic, floor=None):
         self._stream = stream
         self._on_level = on_level
         self._clock = clock
+        self._floor = floor
+        self._peak = 0.0
         self._last = float("-inf")  # 1º bloco sempre avisa
 
     def read(self, size):
         data = self._stream.read(size)
-        now = self._clock()
-        if self._on_level and now - self._last >= 1 / LEVEL_MAX_HZ:
-            self._last = now
-            try:
-                self._on_level(rms_level(data))
-            except Exception as e:
-                log.debug(f"on_level falhou: {e}")
+        if self._on_level:
+            self._peak = max(self._peak, chunk_rms(data))
+            now = self._clock()
+            if now - self._last >= 1 / LEVEL_MAX_HZ:
+                self._last = now
+                try:
+                    floor = self._floor() if self._floor else None
+                    self._on_level(level_from_rms(self._peak, floor))
+                except Exception as e:
+                    log.debug(f"on_level falhou: {e}")
+                self._peak = 0.0
         return data
 
     def __getattr__(self, name):
@@ -127,7 +160,8 @@ class Ear:
                 is_active_mode = time_since_last < self.conversation_timeout
 
                 if self.on_level and not isinstance(source.stream, _LevelTap):
-                    source.stream = _LevelTap(source.stream, self.on_level)
+                    source.stream = _LevelTap(source.stream, self.on_level,
+                                               floor=lambda: self.recognizer.energy_threshold)
                 try:
                     audio = self.recognizer.listen(source, timeout=None)
                     if self.on_level:

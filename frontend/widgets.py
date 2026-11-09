@@ -6,10 +6,12 @@ from datetime import date, datetime
 
 from rich.style import Style as RichStyle
 from rich.text import Text
+from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.content import Content
+from textual.message import Message
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.style import Style
@@ -18,6 +20,7 @@ from textual.widgets import Button, Footer, Input, Label, Markdown, Static
 from textual.widgets.markdown import MarkdownFence
 
 from frontend import orb, sprites
+from frontend.commands import dropped_paths
 
 ROLE_LABEL = {"user": "você ›", "assistant": "jarvis ›", "system": "sistema ›"}
 ORB_FPS = 8  # quadros/s do orb — só roda enquanto pensa ou responde
@@ -158,6 +161,23 @@ class PromptInput(Input):
     """Input principal. ↑ com o campo vazio pede para editar a última mensagem."""
 
     BINDINGS = [Binding("up", "edit_last", "Editar última", show=False)]
+
+    class FilesDropped(Message):
+        """Arquivos soltos no terminal (o caminho chegou como colagem)."""
+
+        def __init__(self, paths):
+            super().__init__()
+            self.paths = paths
+
+    def _on_paste(self, event: events.Paste):
+        # O Textual chama o _on_paste de cada classe do MRO: sem prevent_default
+        # o do Input cola o texto normalmente (não chamar super, colaria 2×).
+        paths = dropped_paths(event.text)
+        if not paths:
+            return
+        event.prevent_default()
+        event.stop()
+        self.post_message(self.FilesDropped(paths))
 
     def action_edit_last(self):
         if not self.value:
@@ -305,9 +325,6 @@ class CopilotHero(Horizontal):
         self.query_one("#hero-state", Label).update(f"▶ {orb.STATE_LABEL.get(state, state)}")
 
 
-VOICE_WAVE = "▂▄█▅▇▃▁▁"
-
-
 class VoiceBar(Horizontal):
     """Substitui o campo de texto no Copilot (que é só por voz)."""
 
@@ -316,14 +333,16 @@ class VoiceBar(Horizontal):
 
     WAVE_WIDTH = 24  # amostras do espectro (8 por segundo → ~3 s de histórico)
     VU_WIDTH = 15
+    RELEASE = 0.6    # queda por quadro: sobe na hora, desce suave (não pisca entre sílabas)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.levels = deque([0.0] * self.WAVE_WIDTH, maxlen=self.WAVE_WIDTH)
+        self.shown = 0.0  # nível exibido no VU (com release)
 
     def compose(self) -> ComposeResult:
         yield Static("●", id="voice-mic")
-        yield Static(VOICE_WAVE, id="voice-wave")
+        yield Static(sprites.sparkline(self.levels, width=self.WAVE_WIDTH), id="voice-wave")
         yield Static(self.LISTENING, id="voice-text", markup=False)
         yield Static(sprites.block_bar(0, self.VU_WIDTH, "█", "░"), id="voice-vu")
         yield Static("Esc interrompe", id="voice-hint")
@@ -333,14 +352,15 @@ class VoiceBar(Horizontal):
         zera tudo (fora do estado 'ouvindo' as barras ficam paradas em zero)."""
         if level is None:
             self.levels.extend([0.0] * self.WAVE_WIDTH)
-            level = 0.0
+            self.shown = 0.0
         else:
             level = max(0.0, min(1.0, float(level)))
-            self.levels.append(level)
+            self.shown = max(level, self.shown * self.RELEASE)
+            self.levels.append(self.shown)
         self.query_one("#voice-wave", Static).update(
             sprites.sparkline([v * 100 for v in self.levels], width=self.WAVE_WIDTH))
         self.query_one("#voice-vu", Static).update(
-            sprites.block_bar(level * 100, self.VU_WIDTH, "█", "░"))
+            sprites.block_bar(self.shown * 100, self.VU_WIDTH, "█", "░"))
 
     def set_awaiting(self, awaiting):
         self.query_one("#voice-text", Static).update(self.AWAITING if awaiting else self.LISTENING)

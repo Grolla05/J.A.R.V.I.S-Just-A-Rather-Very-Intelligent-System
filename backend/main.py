@@ -1,11 +1,30 @@
+import faulthandler
 import os
 import sys
 
 from core import log, settings
 
 
+def _enable_crash_log():
+    """Crash nativo (0xC0000005 em PortAudio, CUDA...) não passa pelo logger:
+    o faulthandler grava o stack de todas as threads em logs/crash.log."""
+    try:
+        settings.DIR_LOGS.mkdir(parents=True, exist_ok=True)
+        # Fica aberto até o fim do processo (o faulthandler escreve nele no crash).
+        crash_file = open(settings.DIR_LOGS / "crash.log", "a", encoding="utf-8")  # noqa: SIM115
+        faulthandler.enable(file=crash_file, all_threads=True)
+        return crash_file
+    except OSError as e:
+        log.warning(f"crash.log indisponível: {e}")
+        return None
+
+
 def start_jarvis():
     settings.perform_sanity_check()
+    _enable_crash_log()
+    # Perfil do Windows Terminal com a logo do JARVIS (vale na próxima aba aberta).
+    from core.wt_profile import ensure_profile
+    ensure_profile()
     log.info(f"Inicializando {settings.PROJECT_NAME} v{settings.VERSION} (TUI)")
 
     # Antes de carregar a TUI: Ollama no ar (sobe `ollama serve` se estiver offline).

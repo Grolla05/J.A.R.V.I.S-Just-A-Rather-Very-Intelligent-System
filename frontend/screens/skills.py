@@ -2,14 +2,16 @@
 
 Um cartucho retrô por skill: aba na cor da categoria, etiqueta com ícone e
 INTENT, linha "■ categoria … ON" e os contatos dourados no rodapé.
+Os cartuchos ficam agrupados por categoria (título + grade, com uma linha
+separando uma categoria da outra) dentro de uma área rolável.
 Enter/espaço/clique liga ou desliga a skill em foco; `c` liga/desliga a
 categoria inteira. Ligado = encaixado (cor da categoria); desligado = "fora do
 slot" (desce 1 linha, apagado).
 """
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Grid, Horizontal, Vertical
-from textual.widgets import Label, Static
+from textual.containers import Grid, Horizontal, Vertical, VerticalScroll
+from textual.widgets import Label, Rule, Static
 
 from core import log
 from frontend.screens.base import JarvisScreen
@@ -91,7 +93,7 @@ class SkillsScreen(JarvisScreen):
 
     def body(self) -> ComposeResult:
         yield Horizontal(id="skills-legend")
-        yield Grid(id="skills-grid")
+        yield VerticalScroll(id="skills-scroll")
 
     def status_hint(self):
         return "skills só rodam no Copilot (voz)"
@@ -114,12 +116,29 @@ class SkillsScreen(JarvisScreen):
             log.error(f"Falha ao listar skills: {e}")
             return []
 
+    def _section_grid(self, category):
+        """Grade da categoria; cria título + grade (e o separador antes, se não
+        for a 1ª) no fim da área rolável quando ainda não existe."""
+        grids = {g.category: g for g in self.query(".skills-grid")}
+        if category in grids:
+            return grids[category]
+        scroll = self.query_one("#skills-scroll", VerticalScroll)
+        if grids:
+            scroll.mount(Rule(line_style="heavy", classes="skills-rule"))
+        scroll.mount(Label(category.upper(), classes=f"skills-cat-title -cat-{category}", markup=False))
+        grid = Grid(classes="skills-grid")
+        grid.category = category
+        scroll.mount(grid)
+        return grid
+
     def reload(self):
         cats = self._list()
-        grid = self.query_one("#skills-grid", Grid)
         existing = {c.intent: c for c in self.query(Cartridge)}
         total = on = 0
         for cat in cats:
+            if not cat["skills"]:
+                continue
+            grid = None
             for skill in cat["skills"]:
                 total += 1
                 on += bool(skill["enabled"] and cat["enabled"])
@@ -127,6 +146,7 @@ class SkillsScreen(JarvisScreen):
                 if cart:
                     cart.set_state(skill["enabled"], cat["enabled"])
                 else:
+                    grid = grid or self._section_grid(cat["id"])
                     grid.mount(Cartridge(skill["id"], cat["id"], skill["enabled"], cat["enabled"]))
         legend = self.query_one("#skills-legend", Horizontal)
         legend.remove_children()
@@ -137,8 +157,9 @@ class SkillsScreen(JarvisScreen):
             mark = "■" if cat["enabled"] else "□"
             legend.mount(Label(f"{mark} {cat['id']} · {count}", classes=f"legend -cat-{cat['id']}"))
         self.query_one("#session-title").update(f"Cartuchos instalados · {on} de {total} ligados")
-        if not total:
-            grid.mount(Label("Nenhuma skill carregada.", classes="hint"))
+        if not total and not self.query(".skills-empty"):
+            self.query_one("#skills-scroll", VerticalScroll).mount(
+                Label("Nenhuma skill carregada.", classes="hint skills-empty"))
 
     def _focused_cart(self):
         return self.focused if isinstance(self.focused, Cartridge) else None

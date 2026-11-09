@@ -118,6 +118,11 @@ class TestLauncher(unittest.TestCase):
         self.assertEqual(argv[-2:], ["main.py", "--copilot"])
         self.assertEqual(cwd, settings.DIR_BACKEND)
 
+    def test_dev_command_with_profile(self):
+        with patch.object(settings, "IS_INSTALLED", False):
+            argv, _cwd = launcher.tui_command(copilot=False, wt="wt.exe", profile="JARVIS")
+        self.assertEqual(argv[:7], ["wt.exe", "-w", "new", "-p", "JARVIS", "--title", "JARVIS"])
+
     def test_installed_command_without_wt(self):
         with tempfile.TemporaryDirectory() as tmp:
             app = Path(tmp)

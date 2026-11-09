@@ -371,12 +371,18 @@ ProcessList > .procs--size { color: $j-muted; }
 #skills-legend .legend.-cat-web { color: $j-ok; }
 #skills-legend .legend.-cat-productivity { color: $j-user; }
 
-#skills-grid {
+#skills-scroll { height: 1fr; padding: 0 2; scrollbar-size-vertical: 1; }
+.skills-cat-title { margin-top: 1; color: $j-neon; text-style: bold; }
+.skills-cat-title.-cat-system { color: $j-warn; }
+.skills-cat-title.-cat-web { color: $j-ok; }
+.skills-cat-title.-cat-productivity { color: $j-user; }
+.skills-rule { color: $j-line; margin: 1 0 0 0; }
+.skills-grid {
     grid-size: 4;
     grid-gutter: 1 2;
     grid-rows: 12;
-    padding: 1 2;
-    height: 1fr;
+    padding: 1 0 0 0;
+    height: auto;
 }
 
 /* Cartucho retrô: aba · etiqueta (ícone + nome) · ■ categoria  ON · contatos */

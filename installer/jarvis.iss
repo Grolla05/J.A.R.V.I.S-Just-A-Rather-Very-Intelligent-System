@@ -110,6 +110,8 @@ Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Com
 ; __pycache__ e afins criados depois da instalação
 Type: filesandordirs; Name: "{app}\app"
 Type: filesandordirs; Name: "{app}\runtime"
+; Perfil "JARVIS" do Windows Terminal (logo na aba), gravado pelo app no 1º boot
+Type: filesandordirs; Name: "{localappdata}\Microsoft\Windows Terminal\Fragments\JARVIS"
 
 [Code]
 const

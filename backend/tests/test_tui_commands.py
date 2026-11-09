@@ -2,7 +2,7 @@
 import unittest
 from datetime import date
 
-from frontend.commands import COMMANDS, help_markdown, parse, unescape
+from frontend.commands import COMMANDS, parse, unescape
 from frontend.widgets import format_slot_when
 
 
@@ -40,35 +40,19 @@ class TestCommandParser(unittest.TestCase):
     def test_case_insensitive_and_aliases(self):
         self.assertEqual(parse("/NEW").name, "new")
         self.assertEqual(parse("/q").name, "quit")
-        self.assertEqual(parse("/").name, "help")
+        self.assertEqual(parse("/").name, "menu")
+
+    def test_help_removed_falls_to_palette(self):
+        self.assertNotIn("help", COMMANDS)
+        for text in ("/help", "/h", "/?"):
+            cmd = parse(text)
+            self.assertEqual(cmd.name, "menu")
+            self.assertTrue(cmd.known)
 
     def test_unknown_command_flagged(self):
         cmd = parse("/foo bar")
         self.assertFalse(cmd.known)
         self.assertEqual(cmd.name, "foo")
-
-    def test_help_lists_every_command(self):
-        md = help_markdown()
-        for usage, _ in COMMANDS.values():
-            self.assertIn(usage.replace("|", chr(92) + "|"), md)
-
-    def test_help_table_keeps_two_cells_with_pipes(self):
-        from markdown_it import MarkdownIt
-        tokens = MarkdownIt("gfm-like").parse(help_markdown())
-        rows, cells = [], None
-        for tok in tokens:
-            if tok.type == "tr_open":
-                cells = []
-            elif tok.type == "inline" and cells is not None:
-                cells.append(tok.children[0].content if tok.children else tok.content)
-            elif tok.type == "tr_close":
-                rows.append(cells)
-                cells = None
-        self.assertEqual(len(rows), len(COMMANDS) + 1)
-        self.assertTrue(all(len(r) == 2 for r in rows))
-        usages = [r[0] for r in rows[1:]]
-        self.assertIn("/mode [chat|copilot]", usages)
-        self.assertIn("/skills [on|off <skill|categoria>]", usages)
 
 
 class TestSkillGlyphs(unittest.TestCase):

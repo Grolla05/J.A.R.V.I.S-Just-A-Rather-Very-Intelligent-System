@@ -2,6 +2,40 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+**Data:** 2026-11-09 (2)
+**Escopo:** Correções de interface: crash intermitente no boot, rodapé, logo na aba do Windows Terminal, VU de voz, fim do `/help` e `/skills` por categoria.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | **Crash `0xC0000005` no boot.** Causa: o poll de saúde disparava no `on_mount` e enumerava o microfone (`PyAudio()`/`terminate()`) ao mesmo tempo que a etapa `services.listen` do boot — PortAudio não é thread-safe. `check_microphone()` agora roda sob lock e com cache (PortAudio é tocado uma vez; o boot força a releitura); o 1º poll de saúde só sai quando a tela de boot fecha. `faulthandler` grava o stack de crashes nativos em `logs/crash.log`. O `jarvis.cmd` desliga rastreio de mouse/tela alternativa depois que a TUI sai (o lixo `[555;89;14M…` no prompt) | `backend/core/health.py`, `backend/core/boot.py`, `frontend/app.py`, `backend/main.py`, `installer/jarvis.cmd` |
+| 2 | Selos `OLL● OBS● MIC● DB●` saem do rodapé; a saúde segue no `/status` e falha nova vira notificação | `frontend/app.py` |
+| 3 | Logo do JARVIS na aba: `core/wt_profile.py` grava um fragment do Windows Terminal com o perfil `JARVIS` (ícone `jarvis.ico`); launcher do agente e `jarvis.cmd` abrem com `-p JARVIS`; o desinstalador apaga o fragment. O `+`/`⌄` do WT não podem ser escondidos por janela (limitação do WT) | `backend/core/wt_profile.py`, `backend/core/launcher.py`, `backend/main.py`, `installer/jarvis.cmd`, `installer/jarvis.iss` |
+| 4 | VU de voz fiel: o tap mede **todos** os blocos do microfone e avisa o pico de cada janela (antes media 1 bloco a cada 125 ms e descartava o resto); escala em dBFS com piso no limiar de energia do recognizer (barra zerada = JARVIS não está te ouvindo); barra sobe na hora e desce suave; sai a onda falsa inicial | `backend/services/listen.py`, `frontend/widgets.py` |
+| 5 | `/help` removido: `Ctrl+K` lista tudo; `/`, `/help`, `/h` e `/?` abrem a paleta; placeholder vira "(Ctrl+K menu)" | `frontend/commands.py`, `frontend/app.py`, `frontend/README.md`, `CLAUDE.md` |
+| 6 | `/skills`: cartuchos agrupados por categoria (título colorido + grade, linha separando uma categoria da outra) numa área rolável; o foco leva a rolagem junto | `frontend/screens/skills.py`, `frontend/jarvis.tcss` |
+
+**Testes novos:** `test_wt_profile.py`; `test_health.py` (cache e serialização do mic); `test_tui_phase34.py` (dBFS, limiar, pico da janela, release do VU); `test_tui_app.py::test_skills_screen_groups_by_category_and_scrolls`; `test_tui_commands.py` (`/help` → paleta); `test_hotkey_agent.py` (`-p JARVIS`). 401 testes passando, ruff limpo.
+
+**Pendente (manual):** abrir/fechar a TUI várias vezes para confirmar que o crash sumiu; ver a logo na aba (vale a partir da 2ª abertura, depois que o fragment existe); conferir o VU falando baixo/normal/alto.
+
+---
+
+**Data:** 2026-11-09
+**Escopo:** Pendências de 08/11 (ícone, testes do WORK_MACRO), arrastar arquivo para a TUI e briefing sempre falado.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | Arrastar imagem/áudio para o Windows Terminal = `/attach`: `dropped_paths()` (pura) aceita o texto colado só quando **todo** pedaço é arquivo existente de imagem/áudio (com/sem aspas, vários arquivos); `PromptInput` intercepta o `Paste` e emite `FilesDropped`; sem bracketed paste, enviar só o caminho também anexa. Uma imagem por mensagem (fica a primeira, com aviso); áudios são todos transcritos. Dica no `/help` | `frontend/commands.py`, `frontend/widgets.py`, `frontend/app.py` |
+| 2 | Ícone `installer/assets/jarvis.ico` (16–256 px) gerado do `frontend/assets/Logo.jpg` (orb do `/status` em 8 bits): instalador, atalhos e bandeja do agente passam a usá-lo — nenhum código mudou, os `#if FileExists` e o `_tray_image()` já o procuravam | `installer/assets/jarvis.ico`, `frontend/assets/Logo.jpg` |
+| 3 | `test_work_macros_spotify.py` → `test_work_macros.py`: saem os casos de `_sanitize_spotify_uri`/`_is_playing_title` (moraram para `core/spotify.py`, já cobertos por `test_spotify_client.py`); ficam os das cenas e entra `TestStartPlaylist` (Web API autorizada, fallback para o app local quando a API falha ou sem autorização). Fim das 11 falhas antigas | `backend/tests/test_work_macros.py` |
+| 4 | Briefing sempre falado, em qualquer modo: automático (1º boot do dia), `/briefing` e skill `DAILY_BRIEFING`. `speak(..., force=True)` fala só pelo TTS mesmo com a voz desligada (microfone segue fechado); com a voz ligada o ouvido pausa durante a fala. No Copilot, a skill fala mesmo se o modo mudar no meio do turno. As outras ferramentas (`/web`, `/gh`…) seguem caladas | `backend/services/speak.py`, `frontend/app.py` |
+
+**Testes novos:** `test_tui_drop.py` (parse dos caminhos + colar/enviar na TUI com Pilot) e `test_tui_tools.py::TestBriefingIsSpoken` (/briefing e automático falam com a voz desligada, skill no Copilot força a fala, /web segue calado).
+
+**Pendente (manual):** Win+J com a TUI real, toasts somindo pelo registro, build do instalador com o ícone, arrastar PNG do Explorer para o Windows Terminal.
+
+---
+
 **Data:** 2026-11-08
 **Escopo:** Atalho global (Win+J), agente residente na bandeja e início com o Windows.
 

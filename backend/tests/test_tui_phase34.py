@@ -37,8 +37,34 @@ class TestLevelTap(unittest.TestCase):
         self.assertEqual(self.listen.rms_level(b""), 0.0)
         self.assertEqual(self.listen.rms_level(_pcm(0)), 0.0)
         self.assertAlmostEqual(self.listen.rms_level(_pcm(32000)), 1.0)
-        mid = self.listen.rms_level(_pcm(3000))
-        self.assertTrue(0.2 < mid < 0.6, mid)
+        mid = self.listen.rms_level(_pcm(3000))   # fala normal: meio da barra (dBFS)
+        self.assertTrue(0.5 < mid < 0.85, mid)
+
+    def test_level_respects_recognizer_threshold(self):
+        """Abaixo do limiar de energia do recognizer = silêncio (barra zerada)."""
+        self.assertEqual(self.listen.rms_level(_pcm(300), floor_rms=400), 0.0)
+        self.assertGreater(self.listen.rms_level(_pcm(3000), floor_rms=400), 0.0)
+        # quanto mais alto, maior o nível (monotônico)
+        levels = [self.listen.rms_level(_pcm(a), floor_rms=300) for a in (600, 1500, 4000, 12000)]
+        self.assertEqual(levels, sorted(levels))
+
+    def test_tap_reports_peak_of_window(self):
+        """Blocos entre dois avisos não se perdem: o aviso leva o pico da janela."""
+        chunks = iter([_pcm(0, 10), _pcm(20000, 10), _pcm(0, 10)])
+
+        class Stream:
+            def read(self, size):
+                return next(chunks)
+
+        levels, now = [], [0.0]
+        tap = self.listen._LevelTap(Stream(), levels.append, clock=lambda: now[0])
+        tap.read(10)              # 1º aviso: silêncio
+        now[0] = 0.05
+        tap.read(10)              # fala alta, mas ainda dentro da janela
+        now[0] = 0.2
+        tap.read(10)              # bloco atual é silêncio; aviso traz o pico
+        self.assertEqual(levels[0], 0.0)
+        self.assertGreater(levels[1], 0.8)
 
     def test_tap_passes_audio_and_throttles(self):
         class Stream:
@@ -165,6 +191,18 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             self.assertEqual(str(bar.query_one("#voice-vu").render()), "░" * 15)
             self.assertNotIn("█", str(bar.query_one("#voice-wave").render()))
+
+    async def test_voicebar_rises_fast_and_falls_smoothly(self):
+        app = self._app()
+        async with app.run_test(size=(140, 45)) as pilot:
+            bar = app.main_screen.query_one("#voicebar")
+            self.assertNotIn("█", str(bar.query_one("#voice-wave").render()))  # sem onda falsa
+            bar.set_level(1.0)
+            bar.set_level(0.0)
+            await pilot.pause()
+            self.assertAlmostEqual(bar.shown, bar.RELEASE)  # cai suave, não zera de uma vez
+            bar.set_level(0.9)
+            self.assertAlmostEqual(bar.shown, 0.9)          # sobe na hora
 
     async def test_config_adjusts_and_persists(self):
         app = self._app()

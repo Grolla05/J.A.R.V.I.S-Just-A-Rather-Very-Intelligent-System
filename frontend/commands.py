@@ -1,9 +1,10 @@
 """Parser dos /comandos da TUI (puro, sem dependência de Textual)."""
+import re
 from dataclasses import dataclass
+from pathlib import Path
 
-# nome -> (uso, descrição). Ordem = ordem do /help.
+# nome -> (uso, descrição). Ordem = ordem da paleta (Ctrl+K).
 COMMANDS = {
-    "help":     ("/help", "lista os comandos"),
     "menu":     ("/menu", "paleta de comandos, skills e foco (Ctrl+K)"),
     "new":      ("/new", "nova sessão (Ctrl+N)"),
     "sessions": ("/sessions", "trocar de sessão (Ctrl+O)"),
@@ -30,7 +31,8 @@ COMMANDS = {
     "quit":     ("/quit", "encerra o J.A.R.V.I.S (Ctrl+Q)"),
 }
 
-ALIASES = {"q": "quit", "exit": "quit", "h": "help", "?": "help", "s": "sessions", "n": "new"}
+# /help saiu (a paleta Ctrl+K lista tudo); quem digitar por hábito cai na paleta.
+ALIASES = {"q": "quit", "exit": "quit", "help": "menu", "h": "menu", "?": "menu", "s": "sessions", "n": "new"}
 
 
 @dataclass(frozen=True)
@@ -47,7 +49,7 @@ def parse(text):
         return None
     body = text[1:].strip()
     if not body:
-        return Command("help")
+        return Command("menu")
     name, _, arg = body.partition(" ")
     name = ALIASES.get(name.lower(), name.lower())
     return Command(name, arg.strip(), name in COMMANDS)
@@ -87,12 +89,38 @@ def unescape(text):
     return text[1:] if text.startswith("//") else text
 
 
-def help_markdown():
-    # `|` dentro do uso (ex.: [chat|copilot]) quebraria a coluna da tabela:
-    # escapado como `\|`, o markdown-it tira a barra e mantém o `|` no código.
-    lines = ["| comando | ação |", "|---|---|"]
-    lines += [f"| `{usage.replace('|', chr(92) + '|')}` | {desc} |" for usage, desc in COMMANDS.values()]
-    return "\n".join(lines)
+# ------------------------------------------------------- arrastar arquivo
+# O Windows Terminal, ao soltar um arquivo, cola o caminho (entre aspas se tiver
+# espaço; vários arquivos separados por espaço). Extensões espelham os MIME
+# aceitos em core/config.py (ALLOWED_IMAGE_MIME / ALLOWED_AUDIO_MIME).
+IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".mp4", ".webm", ".ogg", ".oga"}
+_PATH_TOKEN = re.compile(r'"([^"]+)"|\'([^\']+)\'|(\S+)')
+
+
+def is_image_path(path):
+    return Path(path).suffix.lower() in IMAGE_EXTS
+
+
+def dropped_paths(text):
+    """Caminhos de arquivos soltos no terminal, ou [] se o texto não for só isso.
+
+    Só aceita quando **todo** pedaço é um arquivo existente de imagem/áudio —
+    assim texto comum colado (mesmo com um caminho no meio) segue para o input.
+    """
+    if not text or not text.strip():
+        return []
+    whole = Path(text.strip().strip('"').strip("'")).expanduser()
+    if whole.suffix.lower() in IMAGE_EXTS | AUDIO_EXTS and whole.is_file():
+        return [str(whole)]  # um caminho com espaço que chegou sem aspas
+    paths = []
+    for match in _PATH_TOKEN.finditer(text.strip()):
+        token = next(g for g in match.groups() if g)
+        path = Path(token).expanduser()
+        if path.suffix.lower() not in IMAGE_EXTS | AUDIO_EXTS or not path.is_file():
+            return []
+        paths.append(str(path))
+    return paths
 
 
 # ------------------------------------------------------------ paleta (Ctrl+K)

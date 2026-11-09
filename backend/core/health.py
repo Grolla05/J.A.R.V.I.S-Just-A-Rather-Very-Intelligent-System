@@ -6,6 +6,7 @@ pela linha de status da TUI (polling a cada HEALTH_INTERVAL). Cada uma retorna
 nem aquece o modelo: isso continua sendo papel do boot.
 """
 import sqlite3
+import threading
 import time
 
 from .config import settings
@@ -16,6 +17,13 @@ OBSIDIAN_SLOW_MS = 500
 
 # Glifo por status: a forma muda junto com a cor, então dá pra ler até com NO_COLOR.
 GLYPHS = {OK: "●", WARN: "◐", FAIL: "○"}
+
+# PortAudio (Pa_Initialize/Pa_Terminate) não é thread-safe: o boot e o poll de
+# saúde enumerando o microfone ao mesmo tempo derrubavam o processo com
+# 0xC0000005. A enumeração roda uma vez só, sob lock, e o resultado fica em cache
+# (reabrir o PyAudio a cada poll também podia atrapalhar o stream do Copilot).
+_AUDIO_LOCK = threading.Lock()
+_mic_cache = None
 
 
 def check_ollama():
@@ -50,7 +58,15 @@ def check_database():
             conn.close()
 
 
-def check_microphone():
+def check_microphone(refresh=False):
+    global _mic_cache
+    with _AUDIO_LOCK:
+        if _mic_cache is None or refresh:
+            _mic_cache = _probe_microphone()
+        return _mic_cache
+
+
+def _probe_microphone():
     try:
         import speech_recognition as sr
         names = sr.Microphone.list_microphone_names()  # não abre o dispositivo
