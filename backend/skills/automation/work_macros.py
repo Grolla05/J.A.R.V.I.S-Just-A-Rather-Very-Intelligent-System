@@ -1,5 +1,4 @@
 import json
-import os
 import subprocess
 import time
 
@@ -99,16 +98,14 @@ def execute_app_action(app_name, action="open"):
     return f"Não consegui acessar o subsistema de controle de apps para {app_name}."
 
 def toggle_notifications(enabled=True):
-    """Ativa ou desativa as notificações do Windows (Foco / DND)."""
-    value = 1 if enabled else 0
-    try:
-        cmd = f'powershell -Command "Set-ItemProperty -Path \'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Notifications\\Settings\' -Name \'NOC_GLOBAL_SETTING_TOASTS_ENABLED\' -Value {value}"'
-        os.system(cmd)
-        log.info(f"🔔 Notificações do sistema {'ativadas' if enabled else 'silenciadas'}.")
-        return True
-    except Exception as e:
-        log.error(f"Erro ao alternar notificações: {e}")
+    """Ativa ou desativa as notificações do Windows (core.notifications).
+    Com o Não Perturbe ligado (services.focus) a cena não mexe: ele é o dono."""
+    import core.state as state
+    from core.notifications import set_toasts_enabled
+    if state.dnd_active:
+        log.debug("Macros: Não Perturbe ativo, notificações ficam como estão.")
         return False
+    return set_toasts_enabled(enabled)
 
 def organize_windows(mode):
     """

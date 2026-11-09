@@ -23,6 +23,13 @@ def _announce(text):
 
 
 def process_system_alert(message, is_proactive=False):
+    if state.dnd_active:
+        # Não Perturbe: nada de fala, notificação ou pedido de confirmação.
+        # O alerta é resumido quando o foco termina (services/focus.py).
+        from services.focus import remember_alert
+        remember_alert(message)
+        log.info(f"🔕 [DND] Alerta guardado: {str(message)[:80]}")
+        return
     if is_proactive:
         try:
             # Intercepta alertas de disco — sem processo culpado para matar

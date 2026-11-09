@@ -6,7 +6,6 @@ No fim manda `report(DONE, "ok", "")`. Nenhuma etapa trava o boot: o warm-up do
 Ollama e o scan de hardware seguem em threads daemon (podem levar dezenas de s).
 """
 import threading
-import time
 
 from .config import settings
 from .logger import log
@@ -33,10 +32,11 @@ def _check_skills():
 
 
 def _check_ollama():
+    from .health import check_ollama
     from .llm import warm_up_ollama
-    from .ollama_server import is_ollama_running
-    if not is_ollama_running():
-        return "fail", "servidor offline · chat indisponível"
+    status, detail = check_ollama()
+    if status != "ok":
+        return status, detail
     threading.Thread(target=warm_up_ollama, daemon=True).start()
     return "ok", f"{settings.OLLAMA_MODEL} aquecendo em segundo plano"
 
@@ -48,27 +48,13 @@ def _check_hardware():
 
 
 def _check_obsidian():
-    from .obsidian import obsidian
-    start = time.monotonic()
-    items = obsidian.list_dir("")
-    ms = (time.monotonic() - start) * 1000
-    if items is None:
-        return "warn", "vault inacessível · RAG desligado"
-    if ms > 500:
-        return "warn", f"vault lento ({ms:.0f} ms) · {len(items)} itens na raiz"
-    return "ok", f"vault em {ms:.0f} ms · {len(items)} itens na raiz"
+    from .health import check_obsidian
+    return check_obsidian()
 
 
 def _check_microphone():
-    try:
-        import speech_recognition as sr
-        names = sr.Microphone.list_microphone_names()  # não abre o dispositivo
-    except Exception as e:
-        return "warn", f"áudio indisponível ({type(e).__name__}) · voz fica off"
-    index = settings.MIC_INDEX
-    if index is None or not (0 <= int(index) < len(names)):
-        return "fail", f"microfone {index} ausente · voz fica off"
-    return "ok", f"mic {index}: {names[int(index)][:40]}"
+    from .health import check_microphone
+    return check_microphone()
 
 
 STEPS = (

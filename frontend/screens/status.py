@@ -203,6 +203,8 @@ class StatusScreen(JarvisScreen):
                 yield Label("—", id="status-level")
                 yield Label("top processos", classes="hint", id="status-procs-title")
                 yield ProcessList(id="status-procs")
+                yield Label("saúde", classes="hint", id="status-health-title")
+                yield Static(health_text(getattr(self.app, "health", {})), id="status-health", markup=False)
                 yield Static(id="status-gap")
                 yield Label(self._threshold_text(), id="status-threshold", classes="hint")
 
@@ -223,6 +225,7 @@ class StatusScreen(JarvisScreen):
 
     def _tick(self):
         if not self.paused:
+            self.query_one("#status-health", Static).update(health_text(getattr(self.app, "health", {})))
             self.refresh_data()
             self._load_details()
 
@@ -278,6 +281,18 @@ class StatusScreen(JarvisScreen):
         uptime = _uptime_text(info.get("uptime"))
         self.set_info(f"uptime {uptime}" if uptime else "")
         self.refresh_data()
+
+
+def health_text(health):
+    """Uma linha por subsistema: '● Ollama   servidor no ar'."""
+    from core.health import CHECKS, GLYPHS
+    if not health:
+        return "aguardando 1ª checagem…"
+    lines = []
+    for key, (status, detail) in health.items():
+        name = CHECKS.get(key, (key,))[0]
+        lines.append(f"{GLYPHS.get(status, '○')} {name:<9} {detail}")
+    return "\n".join(lines)
 
 
 def _number(value):

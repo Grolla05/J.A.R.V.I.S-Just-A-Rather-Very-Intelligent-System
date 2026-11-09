@@ -3,6 +3,77 @@
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
 **Data:** 2026-11-08
+**Escopo:** Atalho global (Win+J), agente residente na bandeja e início com o Windows.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `backend/agent.py`: agente leve (pythonw, ~30 MB, instância única por mutex `Local\JARVIS_AGENT`) que segura o atalho global e fica na bandeja (Abrir · Iniciar com o Windows · Sair). Win+J com a TUI fechada abre a TUI já no Copilot; com a TUI aberta fora de foco, foca a janela e manda ao Copilot; com ela em foco, volta ao Chat. Fechar a TUI não fecha o agente. Carrega só os submódulos de `core` que usa (pacote `core` vazio em `sys.modules`), sem banco, skills nem MCP | `backend/agent.py` |
+| 2 | `core/hotkey.py` (`parse_hotkey` + `GlobalHotkey` com `RegisterHotKey` e laço de mensagens numa thread daemon), `core/presence.py` (`tui.json` com pid/hwnd em `DIR_DATA` + eventos nomeados `Local\JARVIS_SUMMON`/`JARVIS_TO_CHAT`), `core/autostart.py` (valor `JARVIS` em `HKCU\…\Run`, detecção e início do agente), `core/launcher.py` (abre a TUI no Windows Terminal ou num console novo), `window_utils.find_terminal_window()` | `backend/core/` |
+| 3 | TUI: `main.py --copilot` → `JarvisApp(start_mode="copilot")`; a TUI anuncia a presença ao subir e escuta os sinais (SUMMON fecha telas cheias/paleta e entra no Copilot, nunca fecha o `ConfirmScreen`); `/config` ganha o grupo **SISTEMA** (Iniciar com o Windows ◀ ▶ e Agente em 2º plano, que o inicia) | `backend/main.py`, `frontend/app.py`, `frontend/screens/settings.py` |
+| 4 | Instalador: tarefa "Iniciar o J.A.R.V.I.S com o Windows" (marcada), valor Run com `uninsdeletevalue`, sobe o agente no fim da instalação e o fecha antes de atualizar (`PrepareToInstall`) e de desinstalar (`[UninstallRun]`); `jarvis.cmd` repassa os argumentos (`--copilot`); `build_runtime.ps1` exige `pythonw.exe` e importa `pystray` no smoke | `installer/` |
+| 5 | `GLOBAL_HOTKEY=win+j` (vazio desliga) e `pystray` nas dependências | `backend/core/config.py`, `env.example`, `backend/requirements.txt` |
+
+**Contexto:** a TUI vive no terminal e o X do Windows Terminal mata o processo, então o "2º plano" é um processo separado. Ícone da bandeja/instalador (`installer/assets/jarvis.ico`) ainda não existe: a geração via nano-banana falhou (Gemini CLI recusou o cliente) e o agente usa um marcador liso até lá.
+
+**Testes novos:** `test_hotkey_agent.py` (parse do atalho, presença com pid vivo/morto, autostart com winreg falso, comando do launcher dev/instalado, decisão do Win+J) e `test_tui_features.py::TestSummon`.
+
+---
+
+**Data:** 2026-11-08
+**Escopo:** Command palette (Ctrl+K) estilo seletor de cartucho.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `CommandPalette` ("▶ SELECT"): filtro, lista agrupada (COMANDOS, MODO, FOCO, SKILLS) com glifo da skill, ↑↓/Enter/Esc. Comandos que exigem argumento (`/rename`, `/attach`, `/web`) só preenchem o input e somem no Copilot; skills alternam ON/OFF | `frontend/screens/palette.py`, `frontend/jarvis.tcss` |
+| 2 | Lógica pura: `palette_entries()`, `fuzzy_score()` (prefixo > início de palavra > subsequência) e `filter_entries()` | `frontend/commands.py` |
+| 3 | `Ctrl+K` com `priority=True` (o `Input` do Textual usa Ctrl+K para "apagar até o fim") e `/menu` | `frontend/app.py`, `frontend/commands.py` |
+
+**Testes novos:** `test_tui_features.py::TestPaletteLogic` e `TestPaletteScreen` (abre com o prompt focado sem apagar o texto, "sta"+Enter abre o `/status`, prefill do `/rename`, skill alterna, `/menu`).
+
+---
+
+**Data:** 2026-11-08
+**Escopo:** Não Perturbe + Pomodoro (por voz, `/focus` e `/dnd`).
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `services/focus.py` (`FocusManager`): Pomodoro 25/5, pausa longa de 15 depois de 4 focos (POMODORO_* no `.env`); foco liga o Não Perturbe, pausa desliga; trocas de fase anunciadas (texto + voz). DND manual com ou sem prazo. Guarda o valor anterior dos toasts (`dnd_restore` no banco) e restaura ao sair, no X do terminal e no próximo boot se o app cair | `backend/services/focus.py`, `backend/core/config.py`, `env.example` |
+| 2 | `core/notifications.py`: toasts de todos os apps via `winreg` (HKCU, sem admin) no lugar do `os.system(powershell)` do `WORK_MACRO`, que agora não mexe nas notificações com o DND ligado | `backend/core/notifications.py`, `backend/skills/automation/work_macros.py` |
+| 3 | Alertas proativos com DND ligado vão para `state.dnd_backlog` (máx. 20) sem fala, notificação nem pedido de confirmação; são resumidos ao fim do foco | `backend/core/alerts.py`, `backend/core/state.py` |
+| 4 | Skill `FOCUS_MODE` ("inicia um pomodoro", "foco de 50 minutos", "não perturbe por 1 hora", "quanto falta?"): frases óbvias sem LLM, resto via `query_ollama` (JSON) | `backend/skills/productivity/focus_mode.py`, `backend/prompts/skills/focus_mode*.md`, `backend/prompts/classify_intent.md` |
+| 5 | TUI: `/focus [min\|stop\|skip\|status]`, `/dnd [on\|off\|min]` (num worker) e selo na linha de status (`◷ FOCO 24m 1/4`, `☕ PAUSA 4m`, `☾ DND`) em minutos, no polling de 3 s | `frontend/app.py`, `frontend/commands.py`, `frontend/screens/skills.py` |
+
+**Testes novos:** `test_focus.py` (ciclo completo com relógio/timer falsos, restauração dos toasts, backlog, crash, skill) e `test_tui_features.py::TestFocusCommands`.
+
+---
+
+**Data:** 2026-11-08
+**Escopo:** Health check vivo na linha de status (Ollama, Obsidian, microfone, SQLite).
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `core/health.py`: checagens rápidas sem efeito colateral (`ok`/`warn`/`fail`), `run_all()`, `status_line()` e `newly_failed()`; o boot passa a usá-las (sem lógica duplicada) | `backend/core/health.py`, `backend/core/boot.py` |
+| 2 | TUI: worker a cada `HEALTH_INTERVAL` (15 s) e bloco `OLL● OBS◐ MIC○ DB●` na linha de status (forma do glifo legível sem cor; verde/âmbar/vermelho no tema); notificação quando algo que estava de pé cai; painel "saúde" no `/status` | `frontend/app.py`, `frontend/widgets.py`, `frontend/screens/status.py`, `frontend/jarvis.tcss`, `backend/core/config.py` |
+
+**Testes novos:** `test_health.py` e `test_tui_features.py::TestHealthStatus`.
+
+---
+
+**Data:** 2026-11-08
+**Escopo:** Wake word configurável via `.env`.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `WAKE_WORDS` (vírgula separa; vazio = lista padrão) em `Settings`, normalizado por `parse_word_list()` | `backend/core/config.py`, `env.example` |
+| 2 | `find_wake_word()` / `clean_phrase()`: palavra inteira, mais longas primeiro, `re.escape`, pontuação vira espaço (`sexta-feira` do `.env` casa com `sexta feira` do STT) | `backend/services/listen.py` |
+
+**Testes novos:** `test_wake_words.py`.
+
+**Pendência conhecida (anterior a estas mudanças):** `test_work_macros_spotify.py` tem 11 falhas porque chama `_sanitize_spotify_uri`/`_is_playing_title`, que não existem mais em `work_macros.py`.
+
+---
+
+**Data:** 2026-11-08
 **Escopo:** GitHub com listas vazias — `/gh prs` e `/gh issues` quebravam com `list index out of range`.
 
 | # | Mudança | Arquivos |

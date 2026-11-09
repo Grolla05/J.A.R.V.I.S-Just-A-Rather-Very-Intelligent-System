@@ -11,7 +11,8 @@
 :: programa pode ser so leitura (Arquivos de Programas).
 ::
 :: Abre no Windows Terminal quando existir (o conhost antigo renderiza mal a
-:: TUI); "jarvis --here" roda no terminal atual.
+:: TUI); "jarvis --here" roda no terminal atual. "--copilot" abre no modo voz.
+:: O agente residente (Win+J) roda separado: runtime\pythonw.exe app\backend\agent.py
 setlocal
 set "JARVIS_HOME=%~dp0"
 if not defined JARVIS_DATA_DIR set "JARVIS_DATA_DIR=%APPDATA%\JARVIS"
@@ -24,7 +25,7 @@ if /i "%~1"=="--here" goto run
 if defined WT_SESSION goto run
 where wt.exe >nul 2>&1
 if errorlevel 1 goto run
-start "" wt.exe -w new --title "JARVIS" cmd.exe /c "%~f0" --here
+start "" wt.exe -w new --title "JARVIS" cmd.exe /c "%~f0" --here %*
 exit /b 0
 
 :run
@@ -34,6 +35,7 @@ if not exist "%JARVIS_PY%" (
     exit /b 1
 )
 cd /d "%JARVIS_HOME%app\backend"
-"%JARVIS_PY%" main.py
+:: %* repassa --copilot (Win+J do agente abre a TUI direto no modo voz)
+"%JARVIS_PY%" main.py %*
 if errorlevel 1 pause
 exit /b %errorlevel%

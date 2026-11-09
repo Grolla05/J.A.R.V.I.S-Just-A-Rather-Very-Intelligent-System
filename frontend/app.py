@@ -23,9 +23,18 @@ from textual.worker import get_current_worker
 
 import core.state as state
 from core import db, log, settings
-from frontend.commands import help_markdown, parse, unescape
+from frontend.commands import (
+    Command,
+    help_markdown,
+    palette_entries,
+    parse,
+    parse_dnd_arg,
+    parse_focus_arg,
+    unescape,
+)
 from frontend.screens import (
     BootScreen,
+    CommandPalette,
     HousePartyScreen,
     JarvisScreen,
     LogScreen,
@@ -98,6 +107,8 @@ class JarvisApp(App, inherit_bindings=False):
         Binding("ctrl+o", "sessions", "Sessões"),
         Binding("ctrl+r", "regen", "Regenerar"),
         Binding("ctrl+t", "toggle_voice", "Voz"),
+        # priority: o Input do Textual usa Ctrl+K para "apagar até o fim"
+        Binding("ctrl+k", "palette", "Menu", priority=True),
         Binding("escape", "cancel", "Parar", show=False),
         Binding("ctrl+l", "clear", "Limpar", show=False),
         # sem priority: o Footer lista bindings prioritários primeiro, e Sair fica no fim
@@ -110,10 +121,14 @@ class JarvisApp(App, inherit_bindings=False):
     critical = reactive(False, init=False)
     busy = reactive(False, init=False)
 
-    def __init__(self, stream_fn=None, start_services=True, voice=None, boot_fn=None):
+    def __init__(self, stream_fn=None, start_services=True, voice=None, boot_fn=None, start_mode=None):
         """`boot_fn(report)` (core.boot.run_boot) mostra a tela de boot antes da
-        conversa; None (testes, `start_services=False`) pula direto pro chat."""
+        conversa; None (testes, `start_services=False`) pula direto pro chat.
+        `start_mode="copilot"` (main.py --copilot, aberto pelo Win+J) entra no
+        Copilot assim que a conversa aparece."""
         super().__init__()
+        self._start_mode = start_mode if start_mode in MODES else None
+        self._presence_stop = threading.Event()  # encerra a escuta dos sinais do agente
         self._stream_fn = stream_fn or _default_stream
         self._start_services = start_services
         self._boot_fn = boot_fn
@@ -138,6 +153,7 @@ class JarvisApp(App, inherit_bindings=False):
                                   for name in ("CPU", "RAM", "GPU", "REDE")}
         self.last_skill_turn = None
         self.last_net = (0.0, 0.0)
+        self.health = {}  # {"OLL": (status, detalhe), ...} — core.health, a cada HEALTH_INTERVAL
 
     # ------------------------------------------------------------------ layout
     def compose(self) -> ComposeResult:
@@ -172,16 +188,60 @@ class JarvisApp(App, inherit_bindings=False):
             state.sys_monitor.start_proactive_monitor(interval=5)
             self.set_interval(settings.TELEMETRY_INTERVAL, self._poll_telemetry)
             self._poll_telemetry()
+            self.set_interval(settings.HEALTH_INTERVAL, self._poll_health)
+            self._poll_health()
             self._boot_greeting()
             self._sync_clipboard_monitor()
+            self._register_presence()
         else:
             self.add_system("`[  OK  ]` Sistemas online.")
         if self._boot_fn:
             from core.boot import STEPS
             self.push_screen(BootScreen(self._boot_fn, total_steps=len(STEPS)), self._boot_closed)
+        else:
+            self._apply_start_mode()
 
     def _boot_closed(self, _result=None):
         self.main_screen.query_one("#prompt").focus()
+        self._apply_start_mode()
+
+    def _apply_start_mode(self):
+        if self._start_mode and self._start_mode != self.mode:
+            self.mode = self._start_mode
+        self._start_mode = None
+
+    # ------------------------------------------- agente residente (Win+J)
+    def _register_presence(self):
+        """Anuncia esta TUI ao agente (tui.json) e escuta os sinais dele."""
+        try:
+            from core import presence
+            from core.window_utils import find_terminal_window
+            presence.register_tui(find_terminal_window())
+            presence.wait_signals(lambda name: self._call_ui(self._on_summon, name), self._presence_stop)
+        except Exception as e:
+            log.debug(f"Presença para o agente indisponível: {e}")
+
+    def _unregister_presence(self):
+        self._presence_stop.set()
+        if not self._start_services:
+            return
+        try:
+            from core import presence
+            presence.unregister_tui()
+        except Exception as e:
+            log.debug(f"Falha ao remover a presença: {e}")
+
+    def _on_summon(self, name):
+        """Sinal do agente: SUMMON -> Copilot (fecha telas cheias e a paleta);
+        TO_CHAT -> Chat. O ConfirmScreen (ação crítica) nunca é fechado."""
+        if not self.is_running or self._shutting_down:
+            return
+        if name == "SUMMON":
+            while len(self.screen_stack) > 1 and not isinstance(self.screen, (ConfirmScreen, BootScreen)):
+                self.pop_screen()
+            self.mode = "copilot"
+        elif name == "TO_CHAT":
+            self.mode = "chat"
 
     # ---------------------------------------------------------------- helpers
     @property
@@ -236,11 +296,12 @@ class JarvisApp(App, inherit_bindings=False):
         self.main_screen.query_one("#topbar-info", Static).update(info)
 
     def status_text(self):
-        """Lado esquerdo da linha de status: telemetria · voz · modelo · ocupado."""
+        """Lado esquerdo da linha de status: telemetria · saúde · voz · modelo · ocupado."""
+        from core.health import status_line
         voice = "voz on" if state.voice_enabled else "voz off"
         busy = "   ▚ pensando…" if self.busy else ""
         model = settings.OLLAMA_MODEL or "?"
-        parts = [p for p in (self._telemetry, voice, model) if p]
+        parts = [p for p in (self._telemetry, status_line(self.health), self._focus_badge(), voice, model) if p]
         return "   ".join(parts) + busy
 
     def _refresh_status(self):
@@ -266,7 +327,8 @@ class JarvisApp(App, inherit_bindings=False):
         self.refresh_bindings()
 
     # Atalhos da conversa que não valem dentro das telas cheias (/status, /log…)
-    _CONVERSATION_ACTIONS = {"toggle_mode", "new_session", "sessions", "regen", "toggle_voice", "cancel", "clear"}
+    _CONVERSATION_ACTIONS = {"toggle_mode", "new_session", "sessions", "regen", "toggle_voice", "cancel", "clear",
+                             "palette"}
 
     def check_action(self, action, parameters):
         if action in self._CONVERSATION_ACTIONS and isinstance(self.screen, JarvisScreen):
@@ -336,6 +398,43 @@ class JarvisApp(App, inherit_bindings=False):
 
     def action_clear(self):
         self.log_view.remove_children()
+
+    def action_palette(self):
+        """Ctrl+K / /menu: paleta "▶ SELECT" com comandos, modo, foco e skills."""
+        if isinstance(self.screen, (CommandPalette, ConfirmScreen)):
+            return
+        try:
+            from services.skill_settings import list_skills
+            skills = list_skills()
+        except Exception as e:
+            log.debug(f"Skills fora da paleta: {e}")
+            skills = []
+        self.push_screen(CommandPalette(palette_entries(skills, self.mode)), self._palette_chosen)
+
+    def _palette_chosen(self, entry):
+        if entry is None:
+            self._focus_prompt()
+            return
+        if entry.kind == "command":
+            self.run_command(Command(entry.value))
+        elif entry.kind == "prefill":
+            prompt = self.main_screen.query_one("#prompt", PromptInput)
+            prompt.value = entry.value
+            prompt.cursor_position = len(prompt.value)
+            prompt.focus()
+        elif entry.kind == "mode":
+            self.mode = entry.value
+        elif entry.kind == "focus":
+            self._focus_action((entry.value, None), "")
+        elif entry.kind == "skill":
+            intent, enable = entry.value
+            self._skills(f"{'on' if enable else 'off'} {intent}")
+        if entry.kind != "prefill":
+            self._focus_prompt()
+
+    def _focus_prompt(self):
+        if self.mode == "chat" and not isinstance(self.screen, JarvisScreen):
+            self.main_screen.query_one("#prompt", PromptInput).focus()
 
     def action_toggle_voice(self):
         """Voz = Copilot: ^t (ou /voice) entra no Copilot ou volta ao Chat."""
@@ -408,6 +507,8 @@ class JarvisApp(App, inherit_bindings=False):
             self.notify(f"Comando desconhecido: /{name}. Veja /help.", severity="warning")
         elif name == "help":
             self.add_message("assistant", help_markdown())
+        elif name == "menu":
+            self.action_palette()
         elif name == "new":
             self.action_new_session()
         elif name == "sessions":
@@ -457,6 +558,10 @@ class JarvisApp(App, inherit_bindings=False):
             self.tool_reply("briefing", self._make_briefing)
         elif name == "clip":
             self._clip(arg)
+        elif name == "focus":
+            self._focus_action(parse_focus_arg(arg), "Uso: /focus [minutos|stop|skip|status]")
+        elif name == "dnd":
+            self._focus_action(parse_dnd_arg(arg), "Uso: /dnd [on|off|minutos]")
         elif name == "config":
             self.push_screen(SettingsScreen())
         elif name == "clear":
@@ -481,6 +586,29 @@ class JarvisApp(App, inherit_bindings=False):
         self.call_from_thread(view.set_text, text)
         if speak and state.voice_enabled:
             self.voice.speak(text)
+
+    def _focus_action(self, parsed, usage):
+        """Pomodoro/Não Perturbe (services.focus) num worker: mexe em registro e banco."""
+        if parsed is None:
+            self.notify(usage, severity="warning")
+            return
+        action, minutes = parsed
+        self.tool_reply(f"foco · {action}", self._apply_focus, action, minutes)
+
+    def _apply_focus(self, action, minutes):
+        from services.focus import focus
+        text = focus.apply(action, minutes)
+        self._call_ui(self._refresh_status)
+        return text
+
+    @staticmethod
+    def _focus_badge():
+        try:
+            from services.focus import focus
+            return focus.badge()
+        except Exception as e:
+            log.debug(f"Selo de foco indisponível: {e}")
+            return ""
 
     def _web(self, query):
         if not query:
@@ -832,6 +960,23 @@ class JarvisApp(App, inherit_bindings=False):
             self.telemetry_history.setdefault(name, deque(maxlen=TELEMETRY_HISTORY)).append(value)
         self._refresh_status()
 
+    # ----------------------------------------------------------------- health
+    def _poll_health(self):
+        self.run_worker(self._read_health, thread=True, group="health", exclusive=True)
+
+    def _read_health(self):
+        from core import health
+        result = health.run_all()
+        self.call_from_thread(self._set_health, result)
+
+    def _set_health(self, result):
+        from core.health import CHECKS, newly_failed
+        for key in newly_failed(self.health, result):
+            name = CHECKS.get(key, (key,))[0]
+            self.notify(f"{name}: {result[key][1]}", severity="warning")
+        self.health = dict(result)
+        self._refresh_status()
+
     # ------------------------------------------------------------------ voice
     def _ensure_voice_thread(self):
         if self._voice_thread and self._voice_thread.is_alive():
@@ -904,10 +1049,17 @@ class JarvisApp(App, inherit_bindings=False):
         self._voice_stop.set()
         if self._clip_monitor is not None:
             self._clip_monitor.stop()
+        self._stop_focus()  # X do terminal/erro: notificações do Windows voltam
+        self._unregister_presence()
 
     # ------------------------------------------------------------------- boot
     @work(thread=True, group="boot")
     def _boot_greeting(self):
+        try:
+            from services.focus import focus
+            focus.restore_after_crash()  # caiu com o Não Perturbe ligado na última vez?
+        except Exception as e:
+            log.debug(f"Restauração do Não Perturbe falhou: {e}")
         try:
             from core import obsidian
             name = obsidian.get_memory("nome") or "Senhor"
@@ -926,9 +1078,21 @@ class JarvisApp(App, inherit_bindings=False):
             return
         self._shutting_down = True
         log.info("Aplicação encerrada pela TUI.")
+        self._stop_focus()
+        self._unregister_presence()
         self._voice_stop.set()
         state.announce = None
         self.push_screen(ShutdownScreen(self._exit_now))
+
+    def _stop_focus(self):
+        """Fecha o Pomodoro e devolve as notificações do Windows ao sair."""
+        if not self._start_services:
+            return
+        try:
+            from services.focus import focus
+            focus.stop()
+        except Exception as e:
+            log.debug(f"Falha ao encerrar o foco: {e}")
 
     def _exit_now(self):
         self._shutting_down = True

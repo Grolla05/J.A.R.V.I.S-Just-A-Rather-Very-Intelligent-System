@@ -1,6 +1,6 @@
 """/config — painel de ajustes estilo RPG (canvas: "10 · Configurações").
 
-Menu lateral com cursor ▶ (VOZ, MICROFONE, ROTINAS, MODELO, SOBRE), opções ◀ ▶ com
+Menu lateral com cursor ▶ (VOZ, MICROFONE, ROTINAS, SISTEMA, MODELO, SOBRE), opções ◀ ▶ com
 barra de blocos e uma caixa de diálogo com o rosto pixel-art do JARVIS
 comentando a escolha. Valores persistem em services.user_prefs (tabela config).
 """
@@ -15,7 +15,10 @@ from frontend import sprites
 from frontend.screens.base import JarvisScreen
 from frontend.widgets import PixelSprite
 
-MENU = ("VOZ", "MICROFONE", "ROTINAS", "MODELO", "SOBRE")
+MENU = ("VOZ", "MICROFONE", "ROTINAS", "SISTEMA", "MODELO", "SOBRE")
+
+# SISTEMA não mora no user_prefs: o estado vive no registro (Run) e no mutex do agente.
+SYSTEM_KEYS = ("autostart", "agent")
 
 # Fala do JARVIS ao mexer em cada preferência (texto de UI, não prompt do LLM)
 QUIPS = {
@@ -27,6 +30,9 @@ QUIPS = {
     "briefing_auto": "Briefing matinal ajustado. Prometo ser breve. Quase sempre.",
     "briefing_news": "Manchetes ajustadas. Filtrar o drama fica por sua conta.",
     "clipboard_monitor": "De olho no clipboard. Só sugiro — não leio seus segredos em voz alta.",
+    "autostart": "Anotado. Eu acordo junto com o Windows — café por sua conta.",
+    "agent": "Agente em 2º plano. Win+J me chama de qualquer lugar.",
+    "agent_running": "Já estou de plantão. Para me dispensar, use o ícone da bandeja.",
 }
 IDLE = "Escolha uma opção com ↑↓ e ajuste com ←→, Senhor."
 
@@ -76,9 +82,24 @@ class SettingsScreen(JarvisScreen):
         return user_prefs
 
     def _keys(self):
+        if self.group == "SISTEMA":
+            return SYSTEM_KEYS
         return self._prefs().GROUPS.get(self.group, ())
 
+    @staticmethod
+    def _system_value(key):
+        from core import autostart
+        if key == "autostart":
+            on = autostart.is_enabled()
+            return "Iniciar com o Windows", "ligado" if on else "desligado", on
+        on = autostart.is_agent_running()
+        return "Agente em 2º plano", "rodando" if on else "parado", on
+
     def _option_text(self, key):
+        if key in SYSTEM_KEYS:
+            label, value, on = self._system_value(key)
+            bar = sprites.block_bar(100 if on else 0, 10, "▰", "▱")
+            return f"{label:<22} ◀ {value:^14} ▶  {bar}"
         p = self._prefs()
         value = p.display(key)
         bar = sprites.block_bar(p.level(key) * 100, 10, "▰", "▱")
@@ -114,6 +135,11 @@ class SettingsScreen(JarvisScreen):
                     f"Microfone     índice {settings.MIC_INDEX}")
         if self.group == "MICROFONE":
             return "Mudanças no microfone valem na próxima vez que a voz for ligada."
+        if self.group == "SISTEMA":
+            hotkey = settings.GLOBAL_HOTKEY or "desligado (GLOBAL_HOTKEY vazio)"
+            return (f"Atalho global  {hotkey}\n"
+                    "O agente fica na bandeja: fechar a TUI não o fecha, e o atalho\n"
+                    "reabre o JARVIS direto no Copilot.")
         if self.group == "ROTINAS":
             return ("Briefing: /briefing força a qualquer hora. Manchetes usam a busca web.\n"
                     "Clipboard: só sugere (/clip); nada copiado vai para o log.")
@@ -141,9 +167,24 @@ class SettingsScreen(JarvisScreen):
         if not options.display or options.highlighted is None:
             return
         key = options.get_option_at_index(options.highlighted).id
+        if key in SYSTEM_KEYS:
+            self._adjust_system(key)
+            return
         self._prefs().step(key, direction)
         hook = getattr(self.app, "on_pref_changed", None)
         if callable(hook):
             hook(key)
         self._render_group()
         self.query_one("#cfg-quip", Label).update(QUIPS.get(key, IDLE) + " ▼")
+
+    def _adjust_system(self, key):
+        from core import autostart
+        quip = key
+        if key == "autostart":
+            autostart.set_enabled(not autostart.is_enabled())
+        elif autostart.is_agent_running():
+            quip = "agent_running"
+        else:
+            autostart.start_agent()
+        self._render_group()
+        self.query_one("#cfg-quip", Label).update(QUIPS.get(quip, IDLE) + " ▼")

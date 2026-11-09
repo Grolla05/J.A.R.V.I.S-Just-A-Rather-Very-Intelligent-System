@@ -42,8 +42,8 @@ $p = Start-Process -FilePath $setup -Wait -PassThru -ArgumentList @(
 Confere ($p.ExitCode -eq 0) "instalacao saiu com codigo $($p.ExitCode)"
 
 # 3. Arquivos instalados
-foreach ($arq in 'jarvis.cmd', 'unins000.exe', 'runtime\python.exe', 'app\VERSION', 'app\env.example',
-                 'app\backend\main.py', 'app\backend\prompts\system_prompt.md', 'app\frontend\app.py',
+foreach ($arq in 'jarvis.cmd', 'unins000.exe', 'runtime\python.exe', 'runtime\pythonw.exe', 'app\VERSION',
+                 'app\env.example', 'app\backend\main.py', 'app\backend\agent.py', 'app\backend\prompts\system_prompt.md', 'app\frontend\app.py',
                  'app\frontend\jarvis.tcss') {
     Confere (Test-Path (Join-Path $destino $arq)) "arquivo ausente apos instalar: $arq"
 }
@@ -55,7 +55,8 @@ Confere (Test-Path $envReal) ".env nao foi criado em $envReal"
 import json, os, sys
 # cwd = app\backend (como no jarvis.cmd); ".." = app\, onde mora o pacote frontend
 sys.path[:0] = [os.getcwd(), os.path.dirname(os.getcwd())]
-import textual, ollama, faster_whisper, pyaudio, pycaw, psutil, mcp, edge_tts, pygame
+import textual, ollama, faster_whisper, pyaudio, pycaw, psutil, mcp, edge_tts, pygame, pystray
+import core.autostart, core.presence, core.hotkey, core.launcher
 from core.config import settings as s
 import frontend.app
 print(json.dumps({"data": str(s.DIR_DATA), "installed": s.IS_INSTALLED, "db": str(s.DB_PATH), "version": s.VERSION}))

@@ -35,6 +35,26 @@ def _read_version():
         return "1.0.0"
     return text or "1.0.0"
 
+DEFAULT_WAKE_WORDS = ("jarvis", "jar", "jair", "javis", "davis", "gervis", "jarbas",
+                      "garvis", "jefferson", "jorge", "jair vis")
+
+
+def parse_word_list(raw, default=()):
+    """'Jarvis, Sexta-Feira ,,' -> ('jarvis', 'sexta-feira'). Vazio -> default."""
+    words = []
+    for part in (raw or "").split(","):
+        word = " ".join(part.lower().split())
+        if word and word not in words:
+            words.append(word)
+    return tuple(words) or tuple(default)
+
+
+def _env_int(name, default):
+    """Inteiro do .env; ausente/inválido -> default."""
+    raw = os.getenv(name, "").strip()
+    return int(raw) if raw.lstrip("-").isdigit() else default
+
+
 def _optional_int(name):
     """Lê inteiro opcional do .env. Ausente/inválido -> None (= não repassa ao Ollama)."""
     raw = os.getenv(name, "").strip()
@@ -140,6 +160,19 @@ class Settings:
 
     # --- Telemetria da barra de status da TUI (polling leve) ---
     TELEMETRY_INTERVAL: float = 3.0   # Intervalo de atualização da StatusBar (s)
+    # Saúde de Ollama/Obsidian/mic/SQLite na linha de status (core/health.py).
+    # Mais espaçado que a telemetria: Obsidian e PyAudio custam mais que o psutil.
+    HEALTH_INTERVAL: float = 15.0
+
+    # --- Atalho global do agente residente (agent.py): abre/foca a TUI no Copilot ---
+    # Formato modificador+tecla (win, ctrl, alt, shift). Vazio desliga o atalho.
+    GLOBAL_HOTKEY: str = os.getenv("GLOBAL_HOTKEY", "win+j").strip().lower()
+
+    # --- Pomodoro / Não Perturbe (services/focus.py, /focus e skill FOCUS_MODE) ---
+    POMODORO_FOCUS_MIN: int = _env_int("POMODORO_FOCUS_MIN", 25)
+    POMODORO_SHORT_BREAK_MIN: int = _env_int("POMODORO_SHORT_BREAK_MIN", 5)
+    POMODORO_LONG_BREAK_MIN: int = _env_int("POMODORO_LONG_BREAK_MIN", 15)
+    POMODORO_CYCLES: int = _env_int("POMODORO_CYCLES", 4)  # focos até a pausa longa
 
     # --- Configurações de Áudio (Listen/Speak) ---
     DEFAULT_LANGUAGE: str = "pt-BR"
@@ -148,6 +181,9 @@ class Settings:
     # Threshold de energia estático. >0 desliga o dynamic_energy_threshold (instável
     # com ruído de ventilador). 0 mantém o modo dinâmico automático.
     MIC_ENERGY_THRESHOLD: int = int(os.getenv("MIC_ENERGY_THRESHOLD", "300"))
+    # Palavras que acordam o Copilot por voz (vírgula separa; ver services/listen.py).
+    # Inclui variações que o Google STT costuma ouvir no lugar de "Jarvis".
+    WAKE_WORDS: tuple = parse_word_list(os.getenv("WAKE_WORDS", ""), DEFAULT_WAKE_WORDS)
 
     # --- Configurações do Banco de Dados ---
     DB_NAME: str = "jarvis_memory.db"

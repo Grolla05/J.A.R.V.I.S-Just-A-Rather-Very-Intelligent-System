@@ -42,6 +42,7 @@ requests                    # Cliente HTTP para APIs externas e comunicação
 # --- WEB ---
 ddgs                        # Busca no DuckDuckGo sem chave de API (skill WEB_SEARCH / /web)
 PyGithub                    # API do GitHub (skill GITHUB / /gh) — token no .env
+pystray                     # Ícone na bandeja do agente residente (agent.py, Win+J)
 
 # --- MODEL CONTEXT PROTOCOL ---
 mcp                         # SDK oficial MCP (cliente para Obsidian MCP server)

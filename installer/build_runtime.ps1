@@ -54,6 +54,8 @@ $py = Join-Path $runtime 'python.exe'
 $env:PYTHONNOUSERSITE = '1'   # nao herdar pacotes do usuario de quem gera o build
 $env:PIP_DISABLE_PIP_VERSION_CHECK = '1'
 Roda $py @('--version')
+# O agente residente (Win+J, inicio com o Windows) roda sem janela via pythonw.exe
+if (-not (Test-Path (Join-Path $runtime 'pythonw.exe'))) { throw "pythonw.exe ausente em $runtime" }
 
 # --- 2. Dependencias --------------------------------------------------------
 Passo 'pip install -r backend\requirements.txt'
@@ -96,7 +98,7 @@ Roda $py @('-m', 'compileall', '-q', '-j', '0', $app, $site)
 # --- 5. Smoke test -----------------------------------------------------------
 Passo 'Smoke test das libs'
 $env:PYGAME_HIDE_SUPPORT_PROMPT = '1'
-Roda $py @('-c', 'import textual, ollama, faster_whisper, PIL, dotenv, speech_recognition, pyaudio, edge_tts, pyttsx3, pygame, pyautogui, comtypes, pycaw, psutil, GPUtil, requests, ddgs, github, mcp, colorama; print(''libs OK'')')
+Roda $py @('-c', 'import textual, ollama, faster_whisper, PIL, dotenv, speech_recognition, pyaudio, edge_tts, pyttsx3, pygame, pyautogui, comtypes, pycaw, psutil, GPUtil, requests, ddgs, github, mcp, colorama, pystray; print(''libs OK'')')
 
 # --- 6. MAX_PATH ---------------------------------------------------------------
 # O ISCC (Inno Setup) nao aceita caminhos com mais de 260 caracteres e falha so
