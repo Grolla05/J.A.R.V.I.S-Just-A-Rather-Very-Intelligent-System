@@ -113,6 +113,29 @@ def act(action, text):
     return answer.strip() if answer else "O modelo não respondeu agora, Senhor."
 
 
+TARGET_PT, TARGET_EN = "português do Brasil", "inglês"
+
+
+def translation_target(text):
+    """Português vira inglês; qualquer outra língua vira português (atalho de tradução)."""
+    words = re.findall(r"[a-zà-ú']+", (text or "").lower())
+    pt = sum(w in _PT_WORDS for w in words)
+    en = sum(w in _EN_WORDS for w in words)
+    accents = len(re.findall(r"[ãõçáéíóúâêô]", (text or "").lower()))
+    return TARGET_EN if (pt + accents) > en and (pt >= 2 or accents >= 2) else TARGET_PT
+
+
+def translate_auto(text, query=None):
+    """(tradução, idioma alvo) — tradução None se o modelo não respondeu."""
+    text = (text or "").strip()[:MAX_CHARS]
+    target = translation_target(text)
+    if query is None:
+        from core.llm import query_ollama as query
+    answer = query([{"role": "user", "content": load_prompt("translate_selection.md", target=target, text=text)}],
+                   temperature=0.2)
+    return (answer.strip() if answer else None), target
+
+
 def _digest(text):
     return hashlib.sha1(text.encode("utf-8", "ignore")).hexdigest()
 

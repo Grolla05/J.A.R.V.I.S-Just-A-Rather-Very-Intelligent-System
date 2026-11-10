@@ -6,7 +6,15 @@ Segura o atalho global (GLOBAL_HOTKEY, padrão Win+J) e fica na bandeja:
 - TUI em foco            -> volta ao Chat.
 Fechar a TUI (Ctrl+Q ou o X) não fecha o agente: o próximo Win+J reabre.
 
-Leve de propósito: nada de Ollama, SystemInfo ou Textual aqui. Uma instância
+Também segura TRANSLATE_HOTKEY (padrão Ctrl+Alt+T): copia o texto selecionado
+em qualquer app, traduz no Ollama (pt → inglês, resto → pt-BR), põe a tradução
+no clipboard e mostra num toast da bandeja.
+
+Subindo com o Windows (`--logon`, gravado no valor do HKCU\\...\\Run), verifica
+uma vez se há Release novo no GitHub e se atualiza sozinho (core/updater.py).
+Aberto de qualquer outro jeito, não verifica.
+
+Leve de propósito: nada de SystemInfo ou Textual; o Ollama só é tocado ao traduzir. Uma instância
 só (mutex `Local\\JARVIS_AGENT`). Rodar: `pythonw agent.py` (ou `python agent.py`
 para ver o log no console).
 """
@@ -18,6 +26,10 @@ from pathlib import Path
 
 MUTEX_NAME = "Local\\JARVIS_AGENT"
 ERROR_ALREADY_EXISTS = 183
+TRANSLATE_HOTKEY_ID = 0x4A54  # 'JT' — o Win+J usa 0x4A41
+TOAST_CHARS = 240
+LOGON_FLAG = "--logon"
+TRAY_WAIT_S = 5  # dá tempo do ícone da bandeja subir antes do 1º toast
 
 
 def _prepare_environment():
@@ -61,6 +73,37 @@ def handle_hotkey(read_tui, launch, foreground, focus, signal):
     return "summon"
 
 
+def translate_selection(copy, translate, write, notify):
+    """Fluxo do atalho de tradução. Dependências injetadas (testes sem Win32/Ollama).
+    Retorna 'empty', 'no_model' ou 'ok'."""
+    text = copy()
+    if not text:
+        notify("Selecione um texto antes de usar o atalho, Senhor.", "J.A.R.V.I.S — tradução")
+        return "empty"
+    translation, target = translate(text)
+    if not translation:
+        notify("O modelo não respondeu. O Ollama está rodando?", "J.A.R.V.I.S — tradução")
+        return "no_model"
+    write(translation)
+    short = translation if len(translation) <= TOAST_CHARS else translation[:TOAST_CHARS - 1] + "…"
+    notify(short, f"Tradução para {target} (copiada)")
+    return "ok"
+
+
+def run_update_check(from_logon, updater, notify, tui_open, sleep, exit_agent):
+    """Thread do agente: avisa o resultado de uma atualização anterior e, só
+    quando o agente subiu com o Windows, verifica o Release novo. Devolve o
+    status do updater (ou None fora do logon)."""
+    sleep(TRAY_WAIT_S)
+    updater.announce_result(notify)
+    if not from_logon:
+        return None
+    status = updater.check_and_update(notify, tui_open, sleep)
+    if status == "installing":
+        exit_agent()  # libera os arquivos do runtime; o setup reabre o agente
+    return status
+
+
 def _single_instance():
     kernel32 = ctypes.windll.kernel32
     handle = kernel32.CreateMutexW(None, False, MUTEX_NAME)
@@ -89,7 +132,9 @@ def main():
     if _single_instance() is None:
         return 0  # já existe um agente rodando
 
-    from core import autostart, launcher, presence
+    import time
+
+    from core import autostart, launcher, presence, updater
     from core.config import settings
     from core.hotkey import GlobalHotkey
     from core.logger import log
@@ -97,20 +142,65 @@ def main():
 
     if sys.stdout is not None and getattr(sys.stdout, "name", "") == os.devnull:
         log.use_tui()  # sem console: só arquivo de log
-    log.info("🛰️ Agente residente do J.A.R.V.I.S no ar.")
+    from_logon = LOGON_FLAG in sys.argv[1:]
+    log.info(f"🛰️ Agente residente do J.A.R.V.I.S no ar{' (logon)' if from_logon else ''}.")
+    autostart.ensure_logon_flag()
 
     def on_hotkey():
         action = handle_hotkey(presence.read_tui, lambda: launcher.launch_tui(copilot=True),
                                user32.GetForegroundWindow, force_foreground, presence.signal)
         log.info(f"Atalho global: {action}")
 
+    tray = {"icon": None}
+
+    def notify(message, title):
+        icon = tray["icon"]
+        if icon is not None:
+            try:
+                icon.notify(message, title)
+                return
+            except Exception as e:
+                log.warning(f"Toast da bandeja falhou: {e}")
+        log.info(f"{title}: {len(message)} caracteres (sem bandeja para mostrar).")
+
+    def on_translate():
+        from core import clipboard, selection
+
+        def run():
+            result = translate_selection(selection.copy_selection, clipboard.translate_auto,
+                                         selection.write_clipboard, notify)
+            log.info(f"Atalho de tradução: {result}")
+        threading.Thread(target=run, daemon=True, name="jarvis-translate").start()
+
     hotkey = None
+    translate_hotkey = None
+    if settings.TRANSLATE_HOTKEY:
+        try:
+            translate_hotkey = GlobalHotkey(settings.TRANSLATE_HOTKEY, on_translate,
+                                            hotkey_id=TRANSLATE_HOTKEY_ID, name="TRANSLATE_HOTKEY")
+            translate_hotkey.start()
+        except ValueError as e:
+            log.warning(f"TRANSLATE_HOTKEY inválido: {e}")
     if settings.GLOBAL_HOTKEY:
         try:
             hotkey = GlobalHotkey(settings.GLOBAL_HOTKEY, on_hotkey)
             hotkey.start()
         except ValueError as e:
             log.warning(f"GLOBAL_HOTKEY inválido: {e}")
+
+    def exit_agent():
+        icon = tray["icon"]
+        if icon is not None:
+            try:
+                icon.stop()
+            except Exception as e:
+                log.debug(f"Bandeja não fechou: {e}")
+        os._exit(0)
+
+    threading.Thread(
+        target=run_update_check, daemon=True, name="jarvis-update",
+        args=(from_logon, updater, notify, lambda: bool(presence.read_tui()), time.sleep, exit_agent),
+    ).start()
 
     try:
         import pystray
@@ -126,18 +216,21 @@ def main():
         autostart.set_enabled(not autostart.is_enabled())
 
     def quit_agent(icon, _item):
-        if hotkey:
-            hotkey.stop()
+        for listener in (hotkey, translate_hotkey):
+            if listener:
+                listener.stop()
         icon.stop()
 
     menu = pystray.Menu(
         pystray.MenuItem("Abrir J.A.R.V.I.S", open_tui, default=True),
         pystray.MenuItem("Iniciar com o Windows", toggle_autostart, checked=lambda _i: autostart.is_enabled()),
+        pystray.MenuItem(f"Traduzir seleção: {settings.TRANSLATE_HOTKEY or 'desligado'}", None, enabled=False),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Sair do agente", quit_agent),
     )
     title = f"J.A.R.V.I.S — {settings.GLOBAL_HOTKEY or 'sem atalho'}"
-    pystray.Icon("jarvis", _tray_image(), title, menu).run()
+    tray["icon"] = pystray.Icon("jarvis", _tray_image(), title, menu)
+    tray["icon"].run()
     log.info("Agente residente encerrado.")
     return 0
 
