@@ -139,11 +139,12 @@ def speak(text, play_callback=None, show=True, force=False):
     Com a voz desligada (state.voice_enabled=False) só exibe o texto.
     show=False quando quem chama já exibe a resposta (ex: loop de voz da TUI).
     force=True fala mesmo com a voz desligada (ex: briefing) — só o TTS; o
-    microfone continua fechado.
+    microfone continua fechado. Com o Modo Apresentação nada é falado.
     """
     if show:
         _show(text)
-    if not (state.voice_enabled or force):
+    from services.presentation import is_silent
+    if is_silent() or not (state.voice_enabled or force):  # modo apresentação cala até o force
         if play_callback: play_callback()
         return
     with speech_lock:

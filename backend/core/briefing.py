@@ -103,8 +103,9 @@ def _system_line():
 
 
 def _news(limit=4):
-    from core import web
-    return [r["title"] for r in web.search("principais notícias do Brasil hoje", max_results=limit) if r["title"]]
+    """Manchetes das fontes escolhidas em /config → SISTEMA (core/news.py)."""
+    from core import news
+    return news.headlines(limit=limit)
 
 
 def collect(include_news=False, now=None):

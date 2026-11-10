@@ -47,6 +47,15 @@ def rms_level(chunk, floor_rms=None):
     return level_from_rms(chunk_rms(chunk), floor_rms)
 
 
+def _silenced():
+    """Modo Apresentação ligado? (o ouvido não abre o microfone)"""
+    try:
+        from services.presentation import is_silent
+        return is_silent()
+    except Exception:
+        return False
+
+
 def clean_phrase(text):
     """Minúsculas, pontuação vira espaço e espaços colapsam:
     'Sexta-Feira, abre!' -> 'sexta feira abre'."""
@@ -151,7 +160,7 @@ class Ear:
 
     def listen(self):
         while True:
-            if self.is_paused:
+            if self.is_paused or _silenced():  # Modo Apresentação: microfone fechado
                 time.sleep(0.5)
                 continue
 

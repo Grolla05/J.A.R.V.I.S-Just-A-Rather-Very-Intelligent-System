@@ -2,6 +2,25 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+**Data:** 2026-11-10 (3)
+**Escopo:** Fontes de notícias do briefing, Modo Apresentação, /config sem a caixa do JARVIS, skills de consulta no Chat, `/rota` com locais livres e Esc para sair.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | **Fontes de notícias**: `/config` → SISTEMA ganha o campo "Fontes de notícias do briefing" (texto separado por vírgula) com botão **Salvar alterações** (Enter também salva; o texto volta limpo, sem repetidos). Padrão: G1, BBC, CNN, New York Times, Wall Street Journal, SciELO, Google Acadêmico, DOI. Cada fonte vira `site:<domínio>` (nomes conhecidos ou domínio digitado), "DOI" busca artigos de periódico publicados desde ontem no Crossref; nome desconhecido vira busca livre. Uma manchete por fonte, começando por uma fonte diferente a cada dia. Guardado na tabela `config` (`news_sources`), sem variável nova no `.env` | `backend/core/news.py`, `backend/core/briefing.py`, `frontend/screens/settings.py`, `frontend/jarvis.tcss` |
+| 2 | **Modo Apresentação**: `/silent [on\|off]`, skill **PRESENTATION_MODE** ("vou apresentar", "acabou a apresentação") ou automático com PowerPoint/leitor de PDF em tela cheia (pref "Modo apresentação auto" em ROTINAS). Enquanto ativo: alertas não-críticos vão para o backlog (críticos passam), o TTS não fala nem com `force=True`, o ouvido não abre o microfone e a linha de status mostra `[SILENT]`. Ao sair, resumo dos alertas guardados | `backend/services/presentation.py`, `backend/skills/productivity/presentation_mode.py`, `backend/prompts/skills/presentation_mode.md`, `backend/services/notify_filter.py`, `backend/services/speak.py`, `backend/services/listen.py`, `backend/core/window_utils.py`, `backend/core/state.py`, `backend/services/user_prefs.py`, `frontend/commands.py`, `frontend/app.py` |
+| 3 | **/config sem a caixa do JARVIS** (rosto + fala): a fala vira uma linha no pé do painel (`#cfg-quip`), com as mesmas mensagens (ajustes, integrações, fontes salvas) | `frontend/screens/settings.py`, `frontend/jarvis.tcss` |
+| 4 | **Skills no Chat**: o Chat passa a rodar as skills de `productivity` e `web` (agenda, trânsito, GitHub, busca, briefing, foco, apresentação) com o selo `[INTENT]`; `automation` e `system` seguem só no Copilot/voz (`CHAT_BLOCKED_CATEGORIES`). Ações que pedem confirmação (ex.: issue no GitHub) também funcionam no Chat. Briefing pela skill no Chat também é falado | `backend/services/intent.py`, `backend/services/brain.py`, `backend/prompts/mode_chat.md`, `frontend/app.py` |
+| 5 | **`/rota <local> <endereço>` só cadastra** qualquer local fixo (casa, trabalho, faculdade, escola, academia…; apelidos como "facul", "colégio", "home"); `/rota` sem argumento lista os locais. Quem calcula é a skill **TRAFFIC**, por decisão do classificador: entende origem e destino na frase ("quanto tempo até a faculdade?", "da escola pra casa"), usa casa/trabalho pelo horário quando só um ponto é citado e avisa como cadastrar um local que não existe. Casa/trabalho mantêm as chaves antigas (briefing e aviso de saída inalterados) | `backend/core/traffic.py`, `backend/skills/productivity/traffic_commute.py`, `backend/prompts/skills/traffic.md`, `frontend/commands.py`, `frontend/app.py` |
+| 6 | **Rodapé mais limpo e Esc para sair**: saem o nome do modelo e o "^q Sair" da linha de status; `Ctrl+Q` deixa de existir. Na conversa, `Esc` cancela a edição → interrompe a resposta → sem nada em andamento, sai com o CRT (Esc de novo sai na hora). Nas telas cheias o Esc continua sendo "Voltar" | `frontend/app.py`, `frontend/screens/shutdown.py`, `frontend/commands.py` |
+| 7 | Documentação das regras novas | `CLAUDE.md` |
+
+**Testes novos:** `test_news.py` (parse, mapeamento das fontes, rodízio diário, Crossref, fonte que falha, briefing usa as fontes), `test_presentation.py` (detecção PowerPoint/PDF, filtro + `[SILENT]`, resumo ao sair, TTS mudo com `force`, mic fechado, skill e `/silent`), `test_intent_chat_skills.py` (Chat oferece só productivity/web, cache separado por modo); ampliados `test_mode_routing.py` (skills por categoria no Chat, confirmação no Chat), `test_traffic.py` (locais livres, `places_text`, `trip_text`, origem/destino da skill), `test_tui_phase34.py` (/config sem caixa, campo de fontes em SISTEMA, ←→ no campo, Esc sai/para/volta), `test_tui_app.py` (rodapé sem modelo nem Sair).
+
+**Pendente (manual):** abrir `/config` → SISTEMA, salvar fontes e rodar `/briefing` com "Manchetes no briefing" ligado; `/rota faculdade <endereço>` e perguntar "quanto tempo até a faculdade?"; apresentar no PowerPoint (F5) e conferir `[SILENT]`.
+
+---
+
 **Data:** 2026-11-10 (2)
 **Escopo:** Atualização automática do app instalado, verificada só quando o JARVIS inicia com o Windows.
 

@@ -200,7 +200,9 @@ class TestJarvisApp(unittest.IsolatedAsyncioTestCase):
             self.assertIn("voz off", str(app.query_one("#status-left").render()))
             await self._wait_for(pilot, lambda: list(footers[0].query("FooterKey")))
             keys = [k.key for k in footers[0].query("FooterKey")]
-            self.assertEqual(keys[-1], "ctrl+q")  # Sair fica no fim
+            self.assertNotIn("ctrl+q", keys)  # sair é Esc, fora do rodapé
+            status = str(app.query_one("#status-left").render())
+            self.assertNotIn(tui_app.settings.OLLAMA_MODEL, status)  # modelo saiu da linha de status
 
     async def test_critical_marks_main_screen_and_voicebar(self):
         app = self._app()

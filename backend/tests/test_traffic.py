@@ -68,7 +68,8 @@ class TestPlaces(_Base):
         self.assertEqual(traffic.get_place("casa")["lat"], -23.5)
         self.assertFalse(traffic.has_places())
         self.assertIn("Não encontrei", traffic.set_place("trabalho", "???", geocoder=lambda a: None))
-        self.assertIn("Uso", traffic.set_place("praia", "x"))
+        self.assertIn("Uso", traffic.set_place("???", "x"))       # tag sem letras
+        self.assertIn("Qual o endereço de praia", traffic.set_place("praia", " "))
 
     def test_clear_places(self):
         self._places()
@@ -138,6 +139,72 @@ class TestRoute(_Base):
             self.assertEqual(traffic_commute.execute("", "como está o trânsito"), "ok")
 
 
+FACUL = {"address": "Av C, 3", "lat": -23.55, "lon": -46.65, "label": "Av C"}
+
+
+class TestFreePlaces(_Base):
+    def test_set_any_tag_and_list(self):
+        geo = lambda a: {**FACUL, "address": a}  # noqa: E731
+        self.assertIn("faculdade salvo", traffic.set_place("Faculdade", "Av C, 3", geocoder=geo))
+        self.assertIn("escola salvo", traffic.set_place("colégio", "Rua D", geocoder=geo))  # alias
+        self.assertIn("casa da mae", traffic.set_place("casa_da_mãe", "Rua E", geocoder=geo))
+        self._places()
+        self.assertEqual(list(traffic.list_places()), ["casa", "trabalho", "faculdade", "escola", "casa_da_mae"])
+        self.assertEqual(traffic.get_place("FACULDADE")["label"], "Av C")
+        text = traffic.places_text()
+        self.assertIn("**Faculdade:** Av C", text)
+        traffic.clear_places()
+        self.assertEqual(traffic.list_places(), {})
+
+    def test_set_place_keeps_legacy_keys(self):
+        traffic.set_place("home", "Rua A", geocoder=lambda a: HOME)
+        self.assertIn(traffic.PLACES["casa"], self.db.data)
+
+    def test_places_text_empty(self):
+        self.assertIn("Nenhum local", traffic.places_text())
+
+    def test_trip_text(self):
+        self._places()
+        self.db.data["place_faculdade"] = json.dumps(FACUL)
+        with patch.object(traffic, "route", return_value={"minutes": 15, "typical": None, "source": "OSRM"}) as r:
+            text = traffic.trip_text("faculdade", "casa")
+        self.assertTrue(text.startswith("Faculdade → casa: 15 min"))
+        self.assertEqual(r.call_args.args, (FACUL, HOME))
+        self.assertIn("Não tenho o endereço de academia", traffic.trip_text("casa", "academia"))
+        self.assertIn("já está", traffic.trip_text("casa", "casa"))
+
+
+class TestTrafficSkill(_Base):
+    TAGS = ["casa", "trabalho", "faculdade", "escola"]
+    MORNING = D(2026, 11, 9, 8)
+
+    def test_decide(self):
+        d = lambda text: traffic_commute.decide(text, self.TAGS, self.MORNING)  # noqa: E731
+        self.assertEqual(d("quanto tempo até a faculdade?"), ("casa", "faculdade"))
+        self.assertEqual(d("quanto demora da escola pra casa"), ("escola", "casa"))
+        self.assertEqual(d("pra casa saindo da faculdade"), ("faculdade", "casa"))
+        self.assertEqual(d("saindo da facul, quanto demora?"), ("faculdade", "casa"))
+        self.assertEqual(d("quanto tempo até minha casa"), ("trabalho", "casa"))
+        self.assertIsNone(d("como está o trânsito"))
+        evening = traffic_commute.decide("quanto tempo pra faculdade", self.TAGS, D(2026, 11, 9, 18))
+        self.assertEqual(evening, ("trabalho", "faculdade"))
+
+    def test_execute_routes_between_places(self):
+        self._places()
+        self.db.data["place_faculdade"] = json.dumps(FACUL)
+        self.db.data[traffic.INDEX_KEY] = json.dumps(["faculdade"])
+        with patch.object(traffic, "trip_text", return_value="trip") as trip:
+            self.assertEqual(traffic_commute.execute("faculdade", "da faculdade pra casa"), "trip")
+        trip.assert_called_once_with("faculdade", "casa")
+
+    def test_execute_unknown_place_explains(self):
+        self._places()
+        self.assertIn("Não tenho o endereço de academia", traffic_commute.execute("academia", "tempo até a academia"))
+        with patch.object(traffic, "commute_text", return_value="commute"):
+            self.assertEqual(traffic_commute.execute("null", "como está o trânsito"), "commute")
+            self.assertEqual(traffic_commute.execute("agora", "e o trânsito agora?"), "commute")
+
+
 class TestAlertDue(unittest.TestCase):
     def test_rules(self):
         monday = D(2026, 11, 9, 7, 40)
@@ -158,10 +225,11 @@ class TestRotaCommand(unittest.TestCase):
     def test_parse(self):
         self.assertIn("rota", COMMANDS)
         self.assertEqual(parse("/rota casa Rua A, 1").arg, "casa Rua A, 1")
-        self.assertEqual(parse_rota_arg(""), ("show", None, ""))
+        self.assertEqual(parse_rota_arg(""), ("list", None, ""))
         self.assertEqual(parse_rota_arg("casa Rua A, 1"), ("set", "casa", "Rua A, 1"))
         self.assertEqual(parse_rota_arg("Trabalho Av B"), ("set", "trabalho", "Av B"))
-        self.assertIsNone(parse_rota_arg("praia Rua X"))
+        self.assertEqual(parse_rota_arg("Faculdade Av. Paulista, 1000"), ("set", "faculdade", "Av. Paulista, 1000"))
+        self.assertIsNone(parse_rota_arg("faculdade"))  # sem endereço
 
 
 if __name__ == "__main__":

@@ -86,6 +86,37 @@ def is_foreground_fullscreen():
                             bool(user32.IsZoomed(hwnd)), caption)
 
 
+# Processos que, em tela cheia, contam como apresentação (PowerPoint e leitores de PDF)
+PRESENTATION_APPS = {"powerpnt.exe", "acrord32.exe", "acrobat.exe", "sumatrapdf.exe",
+                     "foxitpdfreader.exe", "foxitreader.exe"}
+
+
+def looks_presenting(process_name, fullscreen):
+    """Apresentação = app de slides/PDF em tela cheia. Lógica pura (testável)."""
+    return bool(fullscreen and (process_name or "").lower() in PRESENTATION_APPS)
+
+
+def foreground_process_name():
+    """Nome do executável da janela em foco ('' se não der para descobrir)."""
+    from ctypes import wintypes
+    hwnd = user32.GetForegroundWindow()
+    if not hwnd:
+        return ""
+    pid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    try:
+        import psutil
+        return psutil.Process(pid.value).name()
+    except Exception:
+        return ""
+
+
+def is_presenting():
+    """PowerPoint (F5) ou leitor de PDF em tela cheia em foco?"""
+    fullscreen = is_foreground_fullscreen()
+    return looks_presenting(foreground_process_name() if fullscreen else "", fullscreen)
+
+
 def get_active_window_handle():
     return user32.GetForegroundWindow()
 

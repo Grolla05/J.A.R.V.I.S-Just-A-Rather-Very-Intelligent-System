@@ -585,17 +585,13 @@ SlotBar > .slot-bar--empty { color: $j-line; }
 #cfg-group { color: $j-white; text-style: bold; margin-bottom: 1; }
 #cfg-options { border: none; background: $j-panel; height: auto; }
 #cfg-info { color: $j-text-soft; margin-top: 1; }
-#cfg-dialog {
-    height: auto;
-    margin-top: 1;
-    border: double $j-neon;
-    background: $j-panel;
-    padding: 1 2;
-}
-#cfg-face { margin-right: 2; }
-#cfg-dialog-text { height: auto; width: 1fr; }
-#cfg-quip { width: 1fr; }  /* quebra linha: instruções longas não somem na borda */
-#cfg-speaker { color: $j-neon; text-style: bold; }
+/* fala do JARVIS no pé do painel; quebra linha: instruções longas não somem na borda */
+#cfg-quip { width: 1fr; color: $j-neon; margin-top: 1; }
+/* SISTEMA: fontes de notícias do briefing */
+#cfg-news { height: auto; margin-top: 1; }
+#cfg-news-row { height: auto; }
+#cfg-news-input { width: 1fr; }
+#cfg-news-save { margin-left: 1; min-width: 20; }
 
 /* --- /config → INTEGRAÇÕES: cards --- */
 #cfg-cards { grid-size: 2; grid-gutter: 1 2; height: auto; }

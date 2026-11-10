@@ -1,7 +1,8 @@
 """Dados reais injetados no prompt do chat quando a pergunta precisa deles.
 
-No modo Chat as skills não executam (`skip_skills=True`): sem isto, "o que tenho
-amanhã?" ia direto ao LLM, que inventava compromissos. Aqui detectamos (sem LLM,
+Rede de segurança do Chat: quando o classificador não roteia para a skill
+CALENDAR (cai em CHAT), "o que tenho amanhã?" iria direto ao LLM, que inventava
+compromissos. Aqui detectamos (sem LLM,
 por palavras-chave) que a mensagem é sobre a agenda, buscamos os eventos de
 verdade no Google Agenda e montamos um bloco de sistema com a instrução de
 responder SÓ com eles — ou de dizer que a agenda não está conectada.

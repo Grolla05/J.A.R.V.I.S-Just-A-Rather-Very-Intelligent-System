@@ -217,6 +217,50 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
             self.assertIn("+20%", str(app.screen.query_one("#cfg-options").get_option_at_index(1).prompt))
             self.assertIn("Velocidade", str(app.screen.query_one("#cfg-quip").render()))
 
+    async def test_config_has_no_dialog_box_and_quip_lives_in_panel(self):
+        app = self._app()
+        async with app.run_test(size=(140, 45)) as pilot:
+            await self._cmd(app, pilot, "/config")
+            screen = app.screen
+            self.assertFalse(screen.query("#cfg-dialog"))
+            self.assertFalse(screen.query("#cfg-face"))
+            quip = screen.query_one("#cfg-quip")
+            self.assertIs(quip.parent, screen.query_one("#cfg-panel"))
+            self.assertFalse(screen.query_one("#cfg-news").display)  # só em SISTEMA
+
+    async def test_config_system_saves_news_sources(self):
+        from core import autostart, news, updater
+        with patch.object(news, "_db", return_value=self.db), \
+             patch.object(autostart, "is_enabled", return_value=True), \
+             patch.object(autostart, "is_agent_running", return_value=True), \
+             patch.object(updater, "is_enabled", return_value=False):
+            app = self._app()
+            async with app.run_test(size=(140, 45)) as pilot:
+                await self._cmd(app, pilot, "/config")
+                screen = app.screen
+                screen.query_one("#cfg-menu").highlighted = 4  # SISTEMA
+                await pilot.pause()
+                self.assertEqual(screen.group, "SISTEMA")
+                field = screen.query_one("#cfg-news-input")
+                self.assertTrue(screen.query_one("#cfg-news").display)
+                self.assertEqual(field.value, news.DEFAULT_SOURCES)
+                for _ in range(3):              # menu → opções → campo
+                    if field.has_focus:
+                        break
+                    await pilot.press("tab")
+                self.assertTrue(field.has_focus)
+                field.value = "G1 , BBC,,g1, DOI"
+                field.cursor_position = 3
+                await pilot.press("left")       # ←→ movem o cursor, não ajustam opções
+                self.assertEqual(field.cursor_position, 2)
+                await pilot.press("tab")        # → botão
+                self.assertTrue(screen.query_one("#cfg-news-save").has_focus)
+                await pilot.press("enter")
+                await pilot.pause()
+                self.assertEqual(news.get_sources(self.db), "G1, BBC, DOI")
+                self.assertEqual(field.value, "G1, BBC, DOI")
+                self.assertIn("Fontes salvas: 3", str(screen.query_one("#cfg-quip").render()))
+
     async def test_config_integrations_cards_connect_and_disconnect(self):
         import threading
 
@@ -374,15 +418,35 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
                 await self._wait(pilot, lambda: exit_.called)
                 self.assertTrue(app.screen.query_one("#crt").display)
 
-    async def test_ctrl_q_twice_skips_animation(self):
+    async def test_escape_twice_skips_animation(self):
         app = self._app()
         async with app.run_test(size=(80, 24)) as pilot:
             with patch.object(app, "exit") as exit_:
-                await pilot.press("ctrl+q")
+                await pilot.press("escape")
                 await pilot.pause(0.05)
-                await pilot.press("ctrl+q")
+                self.assertIsInstance(app.screen, tui_app.ShutdownScreen)
+                await pilot.press("escape")
                 await pilot.pause(0.05)
                 exit_.assert_called()
+
+    async def test_escape_while_busy_only_stops_stream(self):
+        app = self._app()
+        async with app.run_test(size=(80, 24)) as pilot:
+            app.busy = True
+            await pilot.press("escape")
+            await pilot.pause(0.05)
+            self.assertIs(app.screen, app.main_screen)
+            self.assertFalse(app._shutting_down)
+            app.busy = False
+
+    async def test_escape_in_full_screen_goes_back(self):
+        app = self._app()
+        async with app.run_test(size=(140, 45)) as pilot:
+            await self._cmd(app, pilot, "/config")
+            await pilot.press("escape")
+            await pilot.pause(0.1)
+            self.assertIs(app.screen, app.main_screen)
+            self.assertFalse(app._shutting_down)
 
     async def test_house_party_easter_egg_skips_model(self):
         _fake_stream.last = None
