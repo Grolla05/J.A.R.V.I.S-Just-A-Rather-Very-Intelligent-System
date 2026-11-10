@@ -216,8 +216,10 @@ backend/assets/
 
 # CLAUDE and Docs
 CLAUDE.md
-Post_Linkedin/
 .claude/
 
 # Uploads do usuário (chat multimodal)
 backend/uploads/
+
+# Presença TUI⇄agente (pid/hwnd em runtime) — nunca versionar
+backend/tui.json
