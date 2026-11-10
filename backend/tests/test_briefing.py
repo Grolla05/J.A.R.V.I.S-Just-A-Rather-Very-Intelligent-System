@@ -12,7 +12,7 @@ from tests._stubs import install
 install()
 
 import core.database as database  # noqa: E402
-from core import briefing, github_client, weather  # noqa: E402
+from core import briefing, github_client, google_calendar, traffic, weather  # noqa: E402
 from core.config import settings  # noqa: E402
 
 
@@ -87,13 +87,17 @@ class TestRecentFiles(unittest.TestCase):
 class TestCollectAndBuild(unittest.TestCase):
     def _patches(self, **overrides):
         values = dict(weather="22°C com céu limpo.", system="CPU 5%, RAM 40%",
-                      files=[Path("relatorio.docx")], github="1 PR(s) seus abertos")
+                      files=[Path("relatorio.docx")], github="1 PR(s) seus abertos",
+                      agenda="2 eventos hoje: 09:00 Daily · 14:00 Dentista",
+                      traffic="Casa → trabalho: 34 min (+9 pelo trânsito, TomTom).")
         values.update(overrides)
         return [
             patch.object(weather, "get_weather_context", side_effect=_maybe_raise(values["weather"])),
             patch.object(briefing, "_system_line", side_effect=_maybe_raise(values["system"])),
             patch.object(briefing, "recent_files", side_effect=_maybe_raise(values["files"])),
             patch.object(github_client, "summary", side_effect=_maybe_raise(values["github"])),
+            patch.object(google_calendar, "summary", side_effect=_maybe_raise(values["agenda"])),
+            patch.object(traffic, "commute_line", side_effect=_maybe_raise(values["traffic"])),
             patch.object(briefing, "_user_name", return_value="Felipe"),
         ]
 
@@ -113,6 +117,25 @@ class TestCollectAndBuild(unittest.TestCase):
         self.assertEqual(data["weekday"], "segunda-feira")
         self.assertEqual(data["files"], ["relatorio.docx"])
         self.assertNotIn("news", data)
+        self.assertIn("Daily", data["agenda"])
+        self.assertIn("**Agenda:** 2 eventos hoje", briefing.to_markdown(data))
+        self.assertIn("**Trânsito:** Casa → trabalho: 34 min", briefing.to_markdown(data))
+
+    def test_traffic_only_on_weekdays(self):
+        ps = self._patches()
+        for p in ps:
+            p.start()
+        try:
+            data = briefing.collect(now=datetime.datetime(2026, 11, 14, 9, 0))  # sábado
+        finally:
+            for p in reversed(ps):
+                p.stop()
+        self.assertNotIn("traffic", data)
+
+    def test_agenda_absent_when_not_connected(self):
+        data = self._collect(agenda=None)
+        self.assertIsNone(data["agenda"])
+        self.assertNotIn("Agenda", briefing.to_markdown(data))
 
     def test_failing_source_is_isolated(self):
         data = self._collect(weather=RuntimeError("offline"), github=RuntimeError("401"))
