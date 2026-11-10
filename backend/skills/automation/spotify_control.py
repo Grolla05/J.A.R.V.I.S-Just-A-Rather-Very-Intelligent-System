@@ -259,8 +259,8 @@ def execute(entity, command=""):
     texto = command or entity or ""
 
     if not spotify.is_configured():
-        return ("Senhor, falta cadastrar o SPOTIFY_CLIENT_ID no arquivo .env "
-                "antes que eu possa comandar a sua música.")
+        return ("Senhor, falta a sua chave do Spotify: crie um app em developer.spotify.com e "
+                "preencha SPOTIFY_CLIENT_ID no .env (ver docs/integracoes-oauth.md).")
 
     if not spotify.is_authorized():
         start_authorization()

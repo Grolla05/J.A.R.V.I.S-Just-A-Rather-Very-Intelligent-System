@@ -125,7 +125,7 @@ class Settings:
 
     # --- Configurações do Spotify (Web API — OAuth PKCE) ---
     # PKCE não usa client_secret: o único segredo em disco é o refresh token.
-    SPOTIFY_CLIENT_ID: str = os.getenv("SPOTIFY_CLIENT_ID", "")
+    SPOTIFY_CLIENT_ID: str = os.getenv("SPOTIFY_CLIENT_ID", "").strip()
     # ATENÇÃO: o Spotify só aceita HTTP em loopback e exige o IP literal.
     # 'localhost' é REJEITADO no cadastro do app. Este valor precisa ser
     # idêntico, byte a byte, ao registrado em developer.spotify.com/dashboard.
@@ -135,6 +135,17 @@ class Settings:
     # --- GitHub (PyGithub) — token pessoal; vazio = integração desligada ---
     GITHUB_TOKEN: str = os.getenv("GITHUB_TOKEN", "").strip()
     GITHUB_DEFAULT_REPO: str = os.getenv("GITHUB_DEFAULT_REPO", "").strip()
+
+    # --- Google Agenda (OAuth loopback, /config → INTEGRAÇÕES) ---
+    # Chaves PESSOAIS: cada usuário cria o próprio client "App para computador"
+    # no Google Cloud (docs/integracoes-oauth.md). Vazio = card mostra o que falta.
+    # O refresh token vai para o Cofre do Windows.
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+    GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
+    GOOGLE_AUTH_TIMEOUT: int = 180    # s — janela para autorizar no navegador
+
+    # --- Trânsito (core/traffic.py): OSRM grátis; com chave TomTom = trânsito ao vivo ---
+    TOMTOM_API_KEY: str = os.getenv("TOMTOM_API_KEY", "").strip()
 
     # --- Briefing diário — pastas vigiadas p/ "arquivos recentes" (separadas por ';').
     # Vazio = Desktop, Documentos e Downloads do usuário.
@@ -167,6 +178,14 @@ class Settings:
     # --- Atalho global do agente residente (agent.py): abre/foca a TUI no Copilot ---
     # Formato modificador+tecla (win, ctrl, alt, shift). Vazio desliga o atalho.
     GLOBAL_HOTKEY: str = os.getenv("GLOBAL_HOTKEY", "win+j").strip().lower()
+    # Traduz o texto selecionado em qualquer app (toast da bandeja). Vazio desliga.
+    TRANSLATE_HOTKEY: str = os.getenv("TRANSLATE_HOTKEY", "ctrl+alt+t").strip().lower()
+
+    # --- Atualização automática (core/updater.py): só no logon, só instalado ---
+    # Padrão do toggle de /config → SISTEMA (o toggle grava no registro e vence).
+    AUTO_UPDATE: bool = os.getenv("AUTO_UPDATE", "True").strip().lower() != "false"
+    UPDATE_REPO: str = (os.getenv("UPDATE_REPO", "").strip()
+                        or "Grolla05/J.A.R.V.I.S-Just-A-Rather-Very-Intelligent-System")
 
     # --- Pomodoro / Não Perturbe (services/focus.py, /focus e skill FOCUS_MODE) ---
     POMODORO_FOCUS_MIN: int = _env_int("POMODORO_FOCUS_MIN", 25)
