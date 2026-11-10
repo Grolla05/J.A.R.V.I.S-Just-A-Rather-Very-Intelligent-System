@@ -23,13 +23,14 @@ COMMANDS = {
     "web":      ("/web <pergunta>", "pesquisa na internet e resume com fontes"),
     "gh":       ("/gh [prs|issues|commit|ci] [dono/repo]", "GitHub: PRs, issues, último commit e CI"),
     "briefing": ("/briefing", "briefing do dia: clima, agenda, trânsito, máquina e GitHub"),
-    "rota":     ("/rota [casa|trabalho <endereço>]", "trânsito casa ⇄ trabalho (sem argumento mostra o tempo agora)"),
+    "rota":     ("/rota [<local> <endereço>]", "cadastra um local fixo (casa, trabalho, faculdade…); sem argumento lista"),
     "clip":     ("/clip [explicar|traduzir|resumir|hist]", "age sobre o que você copiou (monitor no /config)"),
     "focus":    ("/focus [min|stop|skip|status]", "pomodoro 25/5 (liga o Não Perturbe no foco)"),
     "dnd":      ("/dnd [on|off|min]", "Não Perturbe: silencia notificações do Windows e alertas"),
+    "silent":   ("/silent [on|off]", "Modo Apresentação: mic fechado, voz muda e alertas guardados"),
     "config":   ("/config", "ajustes de voz, microfone e rotinas (menu estilo RPG)"),
     "clear":    ("/clear", "limpa a tela (não apaga o histórico)"),
-    "quit":     ("/quit", "encerra o J.A.R.V.I.S (Ctrl+Q)"),
+    "quit":     ("/quit", "encerra o J.A.R.V.I.S (Esc)"),
 }
 
 # /help saiu (a paleta Ctrl+K lista tudo); quem digitar por hábito cai na paleta.
@@ -85,20 +86,26 @@ def parse_dnd_arg(arg):
     return (action, None) if action else None
 
 
-_ROTA_PLACES = {"casa": "casa", "home": "casa", "trabalho": "trabalho", "work": "trabalho",
-                "serviço": "trabalho", "servico": "trabalho"}
+_SILENT_WORDS = {"on": "on", "liga": "on", "off": "off", "desliga": "off"}
+
+
+def parse_silent_arg(arg):
+    """/silent <arg> -> 'toggle' | 'on' | 'off' | None se inválido."""
+    arg = (arg or "").strip().lower()
+    return "toggle" if not arg else _SILENT_WORDS.get(arg)
 
 
 def parse_rota_arg(arg):
-    """/rota <arg> -> ('show', None, '') · ('set', 'casa'|'trabalho', endereço) · None se inválido."""
+    """/rota <arg> -> ('list', None, '') · ('set', local, endereço) · None se faltar o endereço.
+    O local é uma palavra (casa, trabalho, faculdade, escola…); o resto é o endereço."""
     arg = (arg or "").strip()
     if not arg:
-        return "show", None, ""
+        return "list", None, ""
     word, _, rest = arg.partition(" ")
-    place = _ROTA_PLACES.get(word.lower())
-    if place is None:
+    rest = rest.strip()
+    if not rest:
         return None
-    return "set", place, rest.strip()
+    return "set", word.lower(), rest
 
 
 def unescape(text):

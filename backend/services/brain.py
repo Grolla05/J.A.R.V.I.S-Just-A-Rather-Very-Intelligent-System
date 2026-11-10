@@ -6,10 +6,11 @@ from core.alerts import process_system_alert
 from core.obsidian import get_vault_context
 from services import live_context
 from services.chat import ask_local_ai, ask_local_ai_stream
-from services.intent import classify_intent, is_skill_enabled
+from services.intent import CHAT_BLOCKED_CATEGORIES, classify_intent, is_skill_enabled, skill_allowed_in_chat
 from services.memory import extract_fact_to_memory
 
-# Modos da interface de texto: CHAT só conversa; COPILOT pode executar skills.
+# Modos da interface de texto: CHAT roda só skills de consulta/produtividade
+# (sem automation/system); COPILOT executa todas.
 MODE_CHAT = "chat"
 MODE_COPILOT = "copilot"
 
@@ -76,16 +77,23 @@ def execute_command(command, session_id='default'):
                             session_id=session_id, live_context=live_context.build(command))
 
 
-def execute_command_stream(command, session_id='default', images=None, mode=MODE_CHAT, on_route=None):
-    """Pipeline de texto (TUI). mode=chat nunca executa skill; mode=copilot sim.
-    on_route(intent) é chamado quando a mensagem vira uma skill (badge na TUI)."""
-    if mode == MODE_COPILOT:
-        res = _check_pending_action(command)
-        if res:
-            yield res
-            return
+def _skill_allowed(intent, mode):
+    if intent not in manager.skills or not is_skill_enabled(intent):
+        return False
+    return mode == MODE_COPILOT or skill_allowed_in_chat(intent)
 
-    decision = classify_intent(command, skip_skills=(mode != MODE_COPILOT))
+
+def execute_command_stream(command, session_id='default', images=None, mode=MODE_CHAT, on_route=None):
+    """Pipeline de texto (TUI). mode=chat só roda skills fora de automation/system;
+    mode=copilot roda todas. on_route(intent) é chamado quando a mensagem vira
+    uma skill (badge na TUI)."""
+    res = _check_pending_action(command)
+    if res:
+        yield res
+        return
+
+    exclude = () if mode == MODE_COPILOT else CHAT_BLOCKED_CATEGORIES
+    decision = classify_intent(command, exclude_categories=exclude)
     intent = decision.get("intent")
     entity = decision.get("entity")
     log.info(f"🧠 [INTENÇÃO DETECTADA STREAM/{mode}]: {intent} (Confiança: {decision.get('confidence')})")
@@ -93,7 +101,7 @@ def execute_command_stream(command, session_id='default', images=None, mode=MODE
     if intent == "MEMORY_WRITE":
         yield extract_fact_to_memory(command)
 
-    elif mode == MODE_COPILOT and intent in manager.skills and is_skill_enabled(intent):
+    elif _skill_allowed(intent, mode):
         if on_route:
             on_route(intent)
         skill_module = manager.skills[intent]

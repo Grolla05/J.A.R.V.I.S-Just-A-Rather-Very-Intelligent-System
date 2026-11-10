@@ -2,7 +2,7 @@
 
 Mostra 3 linhas de encerramento com `[  OK  ]` e então os 5 quadros do CRT
 (tela cheia → faixa → linha → linha curta → ponto), ~100 ms cada. No fim
-chama `on_done()` (que faz o `app.exit()`). Ctrl+Q de novo pula a animação.
+chama `on_done()` (que faz o `app.exit()`). Esc de novo pula a animação.
 """
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -18,7 +18,7 @@ FRAME_S = 0.1   # quadro do CRT
 
 
 class ShutdownScreen(Screen):
-    BINDINGS = [Binding("ctrl+q", "now", "Sair já", priority=True)]
+    BINDINGS = [Binding("escape", "now", "Sair já", priority=True)]
 
     def __init__(self, on_done, **kwargs):
         super().__init__(**kwargs)

@@ -1,22 +1,22 @@
 """/config — painel de ajustes estilo RPG (canvas: "10 · Configurações").
 
 Menu lateral com cursor ▶ (VOZ, MICROFONE, ROTINAS, INTEGRAÇÕES, SISTEMA, MODELO, SOBRE), opções ◀ ▶ com
-barra de blocos e uma caixa de diálogo com o rosto pixel-art do JARVIS
-comentando a escolha. Valores persistem em services.user_prefs (tabela config).
+barra de blocos e, no pé do painel, uma linha com a fala do JARVIS comentando a
+escolha. Valores persistem em services.user_prefs (tabela config).
 INTEGRAÇÕES troca as opções por cards (frontend/screens/integrations_panel.py).
+SISTEMA tem ainda o campo das fontes de notícias do briefing (core/news.py).
 """
 from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Grid, Horizontal, Vertical
-from textual.widgets import Label, OptionList, Static
+from textual.widgets import Button, Input, Label, OptionList, Static
 from textual.widgets.option_list import Option
 
 from core import settings
 from frontend import sprites
 from frontend.screens.base import JarvisScreen
 from frontend.screens.integrations_panel import IntegrationCard
-from frontend.widgets import PixelSprite
 
 INTEGRATIONS = "INTEGRAÇÕES"
 MENU = ("VOZ", "MICROFONE", "ROTINAS", INTEGRATIONS, "SISTEMA", "MODELO", "SOBRE")
@@ -37,12 +37,14 @@ QUIPS = {
     "commute_alert": "Aviso de saída ajustado: clima, trânsito e o 1º compromisso, só em dias úteis.",
     "dnd_auto_meeting": "Em reunião eu seguro os alertas. Os críticos passam, claro.",
     "dnd_auto_fullscreen": "Tela cheia é sagrada. Guardo os alertas para depois.",
+    "presentation_auto": "PowerPoint ou PDF em tela cheia: fecho o mic, calo a voz e mostro [SILENT].",
     "autostart": "Anotado. Eu acordo junto com o Windows — café por sua conta.",
     "agent": "Agente em 2º plano. Win+J me chama de qualquer lugar.",
     "autoupdate": "Toda vez que o Windows me acordar, confiro o GitHub. Versão nova, eu mesmo instalo.",
     "agent_running":"Já estou de plantão. Para me dispensar, use o ícone da bandeja.",
     "int_wait": "Abri o navegador, Senhor. Autorize o acesso e eu cuido do resto.",
     "int_idle": "Enter conecta, Del desconecta. Tokens ficam no Cofre do Windows, Senhor.",
+    "news_saved": "Fontes salvas: {n}. As próximas manchetes do briefing saem delas, Senhor.",
 }
 IDLE = "Escolha uma opção com ↑↓ e ajuste com ←→, Senhor."
 
@@ -57,6 +59,12 @@ class SettingsScreen(JarvisScreen):
         Binding("right", "adjust(1)", "Ajustar"),
         Binding("tab", "switch_panel", "Menu/opções", show=False),
     ]
+
+    def check_action(self, action, parameters):
+        # ←→ dentro do campo de fontes movem o cursor do texto, não as opções
+        if action == "adjust" and isinstance(self.focused, Input):
+            return False
+        return True
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -74,12 +82,13 @@ class SettingsScreen(JarvisScreen):
                     with Grid(id="cfg-cards"):
                         for integration in self._integrations().all_integrations():
                             yield IntegrationCard(integration, id=f"int-{integration.id}")
+                    with Vertical(id="cfg-news"):
+                        yield Label("Fontes de notícias do briefing (separadas por vírgula)", classes="hint")
+                        with Horizontal(id="cfg-news-row"):
+                            yield Input(id="cfg-news-input", placeholder="G1, BBC, CNN, DOI…")
+                            yield Button("Salvar alterações", id="cfg-news-save")
                     yield Static("", id="cfg-info", markup=False)
-                with Horizontal(id="cfg-dialog"):
-                    yield PixelSprite(sprites.sprite("face"), id="cfg-face")
-                    with Vertical(id="cfg-dialog-text"):
-                        yield Label("JARVIS", id="cfg-speaker")
-                        yield Label(IDLE + " ▼", id="cfg-quip")
+                    yield Label(IDLE, id="cfg-quip", markup=False)
 
     def _menu_label(self, group):
         return f"{'▶' if group == self.group else ' '} {group}"
@@ -147,9 +156,18 @@ class SettingsScreen(JarvisScreen):
         cards.display = self.group == INTEGRATIONS
         if cards.display:
             self.refresh_cards()
+        news_box = self.query_one("#cfg-news", Vertical)
+        if self.group == "SISTEMA" and not news_box.display:
+            self.query_one("#cfg-news-input", Input).value = self._news().get_sources()
+        news_box.display = self.group == "SISTEMA"
         info = self.query_one("#cfg-info", Static)
         info.update(self._info_text())
         info.display = not cards.display  # os cards ocupam o painel; a dica vai na fala do JARVIS
+
+    @staticmethod
+    def _news():
+        from core import news
+        return news
 
     def refresh_cards(self):
         for card in self.query(IntegrationCard):
@@ -178,7 +196,7 @@ class SettingsScreen(JarvisScreen):
                     "O agente fica na bandeja: fechar a TUI não o fecha, e o atalho\n"
                     "reabre o JARVIS direto no Copilot.")
         if self.group == "ROTINAS":
-            return ("Briefing: /briefing força a qualquer hora. Manchetes usam a busca web.\n"
+            return ("Briefing: /briefing força a qualquer hora. Fontes das manchetes em SISTEMA.\n"
                     "Clipboard: só sugere (/clip); nada copiado vai para o log.\n"
                     "Aviso de saída usa /rota casa|trabalho. Silêncio: alertas críticos sempre passam.")
         return ""
@@ -213,7 +231,31 @@ class SettingsScreen(JarvisScreen):
                 menu.focus()
             return
         options = self.query_one("#cfg-options", OptionList)
-        (options if menu.has_focus and options.display else menu).focus()
+        ring = [menu] + ([options] if options.display else [])
+        if self.group == "SISTEMA":
+            ring += [self.query_one("#cfg-news-input", Input), self.query_one("#cfg-news-save", Button)]
+        current = ring.index(self.focused) if self.focused in ring else -1
+        ring[(current + 1) % len(ring)].focus()
+
+    # ------------------------------------------------------ fontes de notícias
+    def on_button_pressed(self, event: Button.Pressed):
+        if event.button.id == "cfg-news-save":
+            self.save_news_sources()
+
+    def on_input_submitted(self, event: Input.Submitted):
+        if event.input.id == "cfg-news-input":
+            self.save_news_sources()
+
+    def save_news_sources(self):
+        field = self.query_one("#cfg-news-input", Input)
+        news = self._news()
+        try:
+            saved = news.save_sources(field.value)
+        except Exception as e:
+            self._quip(f"Não consegui salvar as fontes: {e}")
+            return
+        field.value = saved
+        self._quip(QUIPS["news_saved"].format(n=len(news.parse_sources(saved))))
 
     def action_adjust(self, direction):
         options = self.query_one("#cfg-options", OptionList)
@@ -228,7 +270,7 @@ class SettingsScreen(JarvisScreen):
         if callable(hook):
             hook(key)
         self._render_group()
-        self.query_one("#cfg-quip", Label).update(QUIPS.get(key, IDLE) + " ▼")
+        self._quip(QUIPS.get(key, IDLE))
 
     def _adjust_system(self, key):
         from core import autostart
@@ -243,11 +285,11 @@ class SettingsScreen(JarvisScreen):
         else:
             autostart.start_agent()
         self._render_group()
-        self.query_one("#cfg-quip", Label).update(QUIPS.get(quip, IDLE) + " ▼")
+        self._quip(QUIPS.get(quip, IDLE))
 
     # ---------------------------------------------------------- integrações
     def _quip(self, text):
-        self.query_one("#cfg-quip", Label).update(text + " ▼")
+        self.query_one("#cfg-quip", Label).update(text)
 
     def connect_integration(self, integration_id):
         self._connect_worker(integration_id)

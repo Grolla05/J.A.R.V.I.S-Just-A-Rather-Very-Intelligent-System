@@ -55,7 +55,7 @@ class TestDecide(_StateCase):
     def test_context_respects_prefs(self):
         prefs = {"dnd_auto_meeting": False, "dnd_auto_fullscreen": True}
         ctx = nf.context(meeting_fn=lambda: True, fullscreen_fn=lambda: True, pref=prefs.get)
-        self.assertEqual(ctx, {"dnd": False, "meeting": False, "fullscreen": True})
+        self.assertEqual(ctx, {"presentation": False, "dnd": False, "meeting": False, "fullscreen": True})
         state.dnd_active = True
         self.assertTrue(nf.context(lambda: False, lambda: False, prefs.get)["dnd"])
 

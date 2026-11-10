@@ -34,6 +34,7 @@ from frontend.commands import (
     parse_dnd_arg,
     parse_focus_arg,
     parse_rota_arg,
+    parse_silent_arg,
     unescape,
 )
 from frontend.screens import (
@@ -67,6 +68,11 @@ TELEMETRY_HISTORY = 40  # amostras guardadas p/ os sparklines (40 × 3 s = 2 min
 NOTE_CONTEXT_MAX = 4000  # caracteres da nota do /vault que vão ao modelo
 
 
+def _presentation_silent():
+    from services.presentation import is_silent
+    return is_silent()
+
+
 def _default_stream(text, session_id, images, mode, on_route=None):
     from services.brain import execute_command_stream
     return execute_command_stream(text, session_id=session_id, images=images, mode=mode, on_route=on_route)
@@ -98,8 +104,7 @@ def _now_hhmm():
 
 
 class JarvisApp(App, inherit_bindings=False):
-    # inherit_bindings=False: o ctrl+q prioritário do App base furava a ordem
-    # do rodapé ("Sair" antes de "Nova"); o ctrl+c dele é recolocado abaixo.
+    # inherit_bindings=False: sem o ctrl+q do App base (sair é Esc); o ctrl+c dele é recolocado abaixo.
     CSS_PATH = "jarvis.tcss"
     TITLE = "J.A.R.V.I.S"
     ENABLE_COMMAND_PALETTE = False
@@ -113,10 +118,10 @@ class JarvisApp(App, inherit_bindings=False):
         Binding("ctrl+t", "toggle_voice", "Voz"),
         # priority: o Input do Textual usa Ctrl+K para "apagar até o fim"
         Binding("ctrl+k", "palette", "Menu", priority=True),
+        # Esc: cancela a edição, interrompe o stream ou (sem nada em andamento) sai.
+        # Fora do rodapé. Nas telas cheias o Esc delas (Voltar) vem antes.
         Binding("escape", "cancel", "Parar", show=False),
         Binding("ctrl+l", "clear", "Limpar", show=False),
-        # sem priority: o Footer lista bindings prioritários primeiro, e Sair fica no fim
-        Binding("ctrl+q", "quit", "Sair"),
         Binding("ctrl+c", "help_quit", show=False, system=True),
     ]
 
@@ -337,12 +342,11 @@ class JarvisApp(App, inherit_bindings=False):
         self.main_screen.query_one("#topbar-info", Static).update(info)
 
     def status_text(self):
-        """Lado esquerdo da linha de status: telemetria · foco · voz · modelo · ocupado.
-        A saúde dos subsistemas fica no /status (falhas novas viram notificação)."""
+        """Lado esquerdo da linha de status: telemetria · foco · voz · ocupado.
+        O modelo fica no /config → MODELO; a saúde no /status (falhas novas viram notificação)."""
         voice = "voz on" if state.voice_enabled else "voz off"
         busy = "   ▚ pensando…" if self.busy else ""
-        model = settings.OLLAMA_MODEL or "?"
-        parts = [p for p in (self._telemetry, self._focus_badge(), voice, model) if p]
+        parts = [p for p in (self._telemetry, self._focus_badge(), voice) if p]
         return "   ".join(parts) + busy
 
     def _refresh_status(self):
@@ -431,11 +435,15 @@ class JarvisApp(App, inherit_bindings=False):
         self.notify("Editando a última mensagem — Enter reenvia, Esc cancela.")
 
     def action_cancel(self):
+        """Esc na conversa: cancela a edição → interrompe a resposta → sai (CRT; Esc de novo sai já)."""
         if self.edit_message_id is not None:
             self.edit_message_id = None
             self.main_screen.query_one("#prompt", PromptInput).value = ""
             return
-        self.workers.cancel_group(self, "chat")
+        if self.busy:
+            self.workers.cancel_group(self, "chat")
+            return
+        self.shutdown_jarvis()
 
     def action_clear(self):
         self.log_view.remove_children()
@@ -607,6 +615,8 @@ class JarvisApp(App, inherit_bindings=False):
             self._focus_action(parse_focus_arg(arg), "Uso: /focus [minutos|stop|skip|status]")
         elif name == "dnd":
             self._focus_action(parse_dnd_arg(arg), "Uso: /dnd [on|off|minutos]")
+        elif name == "silent":
+            self._silent(arg)
         elif name == "config":
             self.push_screen(SettingsScreen())
         elif name == "clear":
@@ -651,6 +661,17 @@ class JarvisApp(App, inherit_bindings=False):
         finally:
             if listening:
                 self.voice.resume()
+
+    def _silent(self, arg):
+        """/silent — Modo Apresentação (services.presentation): só estado em memória, roda na UI."""
+        from services import presentation
+        action = parse_silent_arg(arg)
+        if action is None:
+            self.notify("Uso: /silent [on|off]", severity="warning")
+            return
+        text = presentation.toggle() if action == "toggle" else presentation.set_manual(action == "on")
+        self.add_system(text)
+        self._refresh_status()
 
     def _focus_action(self, parsed, usage):
         """Pomodoro/Não Perturbe (services.focus) num worker: mexe em registro e banco."""
@@ -708,9 +729,10 @@ class JarvisApp(App, inherit_bindings=False):
         from core import traffic
         parsed = parse_rota_arg(arg)
         if parsed is None:
-            self.notify("Uso: /rota [casa|trabalho <endereço>]", severity="warning")
-        elif parsed[0] == "show":
-            self.tool_reply("trânsito", traffic.commute_text)
+            self.notify("Uso: /rota <local> <endereço> (ex.: /rota faculdade Av. Paulista, 1000)",
+                        severity="warning")
+        elif parsed[0] == "list":
+            self.tool_reply("locais", traffic.places_text)
         else:
             self.tool_reply(f"rota · {parsed[1]}", traffic.set_place, parsed[1], parsed[2])
 
@@ -937,6 +959,8 @@ class JarvisApp(App, inherit_bindings=False):
                               model_text=model_text)
         if full == "PROTOCOL_SHUTDOWN":
             self.call_from_thread(self.shutdown_jarvis)
+        elif full and self._turn_was_briefing(text):
+            self._speak_always(full)  # skill DAILY_BRIEFING no Chat: briefing é sempre falado
 
     def _run_turn(self, text, image, mode, session_id, reply, worker=None, on_output=None, model_text=None):
         """Roda UMA mensagem pelo brain numa thread de fundo e pinta a resposta.
@@ -1156,8 +1180,8 @@ class JarvisApp(App, inherit_bindings=False):
         (1º trecho ou skill roteada, até o fim da fala) → ouvindo."""
         while not self._voice_stop.is_set():
             try:
-                if not state.voice_enabled:
-                    time.sleep(0.3)
+                if not state.voice_enabled or _presentation_silent():
+                    time.sleep(0.3)  # voz desligada ou Modo Apresentação: mic fica fechado
                     continue
                 self._call_ui(self._set_orb, "ouvindo")
                 command = self._listen_with_level()
@@ -1215,7 +1239,7 @@ class JarvisApp(App, inherit_bindings=False):
             log.warning(f"Briefing automático falhou: {e}")
 
     def shutdown_jarvis(self):
-        """Encerra com o desligamento CRT; chamado de novo (Ctrl+Q duas vezes) sai na hora."""
+        """Encerra com o desligamento CRT; chamado de novo (Esc duas vezes) sai na hora."""
         if self._shutting_down:
             self._exit_now()
             return

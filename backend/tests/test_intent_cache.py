@@ -47,7 +47,7 @@ class TestIntentCache(unittest.TestCase):
     def test_expired_entry_recomputes(self):
         self._run("abrir o spotify")
         # Força expiração da entrada cacheada
-        key = ("abrir o spotify", True)
+        key = ("abrir o spotify", True, ())
         value, _ = intent._intent_cache._store[key]
         intent._intent_cache._store[key] = (value, intent._intent_cache._time() - 1)
         _, q2 = self._run("abrir o spotify")

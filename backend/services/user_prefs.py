@@ -39,6 +39,7 @@ PREFS = {
     "commute_alert": ("Aviso de saída", COMMUTE_TIMES, 0, _time_label),
     "dnd_auto_meeting": ("Silenciar em reunião", _ONOFF, True, _onoff_label),
     "dnd_auto_fullscreen": ("Silenciar em tela cheia", _ONOFF, True, _onoff_label),
+    "presentation_auto": ("Modo apresentação auto", _ONOFF, True, _onoff_label),
 }
 
 # Grupos do menu lateral (estilo RPG) -> chaves editáveis
@@ -46,7 +47,7 @@ GROUPS = {
     "VOZ": ("tts_voice", "tts_rate", "tts_volume"),
     "MICROFONE": ("mic_threshold", "attention_window"),
     "ROTINAS": ("briefing_auto", "briefing_news", "clipboard_monitor", "commute_alert",
-                "dnd_auto_meeting", "dnd_auto_fullscreen"),
+                "dnd_auto_meeting", "dnd_auto_fullscreen", "presentation_auto"),
 }
 
 
