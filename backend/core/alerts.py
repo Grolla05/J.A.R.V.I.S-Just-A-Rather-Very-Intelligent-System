@@ -23,12 +23,15 @@ def _announce(text):
 
 
 def process_system_alert(message, is_proactive=False):
-    if state.dnd_active:
-        # Não Perturbe: nada de fala, notificação ou pedido de confirmação.
-        # O alerta é resumido quando o foco termina (services/focus.py).
+    from services import notify_filter
+    verdict, prio, reason = notify_filter.evaluate(message)
+    if verdict == notify_filter.DEFER:
+        # Não Perturbe / reunião / tela cheia: nada de fala, notificação ou pedido de
+        # confirmação. O alerta é resumido quando o silêncio acaba (services/focus.py
+        # para o DND manual, notify_filter.poll_auto_quiet para o automático).
         from services.focus import remember_alert
         remember_alert(message)
-        log.info(f"🔕 [DND] Alerta guardado: {str(message)[:80]}")
+        log.info(f"🔕 [{reason}] Alerta ({prio}) guardado: {str(message)[:80]}")
         return
     if is_proactive:
         try:

@@ -6,6 +6,7 @@ direto — main.py do backend põe a raiz no sys.path. Dois modos, alternados co
 - COPILOT → agente SÓ POR VOZ: o campo de texto dá lugar à barra de voz e à orb;
             o mesmo pipeline de stream, com skills liberadas, e a resposta é falada.
 """
+import datetime
 import inspect
 import logging
 import os
@@ -32,6 +33,7 @@ from frontend.commands import (
     parse,
     parse_dnd_arg,
     parse_focus_arg,
+    parse_rota_arg,
     unescape,
 )
 from frontend.screens import (
@@ -597,6 +599,8 @@ class JarvisApp(App, inherit_bindings=False):
             self._gh(arg)
         elif name == "briefing":
             self.tool_reply("briefing", self._make_briefing, speak=True)
+        elif name == "rota":
+            self._rota(arg)
         elif name == "clip":
             self._clip(arg)
         elif name == "focus":
@@ -665,8 +669,9 @@ class JarvisApp(App, inherit_bindings=False):
     @staticmethod
     def _focus_badge():
         try:
+            from services import notify_filter
             from services.focus import focus
-            return focus.badge()
+            return focus.badge() or notify_filter.badge()
         except Exception as e:
             log.debug(f"Selo de foco indisponível: {e}")
             return ""
@@ -698,6 +703,52 @@ class JarvisApp(App, inherit_bindings=False):
         text = briefing.generate(include_news=user_prefs.get("briefing_news"))
         briefing.mark_ran()
         return text
+
+    def _rota(self, arg):
+        from core import traffic
+        parsed = parse_rota_arg(arg)
+        if parsed is None:
+            self.notify("Uso: /rota [casa|trabalho <endereço>]", severity="warning")
+        elif parsed[0] == "show":
+            self.tool_reply("trânsito", traffic.commute_text)
+        else:
+            self.tool_reply(f"rota · {parsed[1]}", traffic.set_place, parsed[1], parsed[2])
+
+    # ------------------------------------------------------- aviso de saída
+    def _check_commute_alert(self, now=None):
+        """No tick da telemetria (sem timer próprio): clima + trânsito + 1º compromisso
+        no horário escolhido em /config → ROTINAS, dias úteis, 1×/dia."""
+        from core import traffic
+        from services import user_prefs
+        now = now or datetime.datetime.now()
+        try:
+            due = traffic.alert_due(user_prefs.get("commute_alert"), now, db.get_config(traffic.ALERT_LAST_KEY))
+        except Exception as e:
+            log.debug(f"Aviso de saída indisponível: {e}")
+            return False
+        if not due:
+            return False
+        db.save_config(traffic.ALERT_LAST_KEY, now.date().isoformat())
+        self.tool_reply("aviso de saída", self._make_commute_alert, speak=not state.dnd_active)
+        return True
+
+    @staticmethod
+    def _make_commute_alert():
+        from core import google_calendar, traffic
+        from core.weather import get_weather_context
+        lines = ["**Hora de sair, Senhor.**"]
+        for label, fn in (("Clima", get_weather_context), ("Trânsito", traffic.commute_line),
+                          ("Agenda", google_calendar.summary)):
+            try:
+                value = fn()
+            except Exception as e:
+                log.warning(f"Aviso de saída: '{label}' falhou: {e}")
+                value = None
+            if value:
+                lines.append(f"- **{label}:** {value}")
+        if len(lines) == 1:
+            lines.append("- Sem dados de clima, trânsito ou agenda agora.")
+        return "\n".join(lines)
 
     def _maybe_daily_briefing(self):
         """1º boot do dia (pref `briefing_auto`): briefing sozinho, sempre falado (qualquer modo)."""
@@ -1036,6 +1087,20 @@ class JarvisApp(App, inherit_bindings=False):
         for name, value in (values or {}).items():
             self.telemetry_history.setdefault(name, deque(maxlen=TELEMETRY_HISTORY)).append(value)
         self._refresh_status()
+        self._check_commute_alert()
+        if self._start_services:
+            self.run_worker(self._poll_auto_quiet, thread=True, group="auto-quiet", exclusive=True)
+
+    def _poll_auto_quiet(self):
+        """Silêncio automático (reunião/tela cheia) — fora da thread da UI: a agenda faz HTTP."""
+        from services import notify_filter
+        before = state.auto_quiet
+        summary = notify_filter.poll_auto_quiet()
+        if state.auto_quiet != before:
+            self.call_from_thread(self._refresh_status)
+        if summary:
+            from core.alerts import _announce  # mostra na TUI e fala se a voz estiver ligada
+            _announce(summary)
 
     # ----------------------------------------------------------------- health
     def _poll_health(self):
