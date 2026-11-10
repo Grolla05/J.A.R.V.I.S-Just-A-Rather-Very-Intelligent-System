@@ -20,6 +20,10 @@ Baixe o **`JARVIS-Setup.exe`** do [Release mais recente](https://github.com/Grol
 - Abra pelo atalho **J.A.R.V.I.S** (ou `jarvis` no terminal, se marcou a opção do PATH). Usa o Windows Terminal quando existir.
 - Configurações e dados ficam em `%APPDATA%\JARVIS` (`.env`, banco, logs) e sobrevivem a atualizações.
 
+### 🔑 Integrações de conta (Google Agenda e Spotify) — chaves pessoais
+
+Para conectar o **Google Agenda** e o **Spotify** em `/config → INTEGRAÇÕES`, **cada usuário precisa criar as próprias chaves** (apps grátis no Google Cloud e no Spotify Developer) e preencher no `.env`: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` e `SPOTIFY_CLIENT_ID`. O JARVIS não traz chaves de nenhum serviço. Passo a passo completo: **[docs/integracoes-oauth.md](docs/integracoes-oauth.md)**.
+
 Cada merge na `main` publica um Release novo automaticamente (`.github/workflows/release.yml`).
 
 ### Gerar o instalador localmente

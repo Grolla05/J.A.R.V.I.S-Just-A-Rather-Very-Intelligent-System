@@ -23,6 +23,12 @@ _MSG = "Processo pesado detectado. Consumo: chrome.exe (95%)"
 class TestJudgementCacheTTL(unittest.TestCase):
     def setUp(self):
         alerts.PROCESS_JUDGEMENT_CACHE.clear()
+        # Sem reunião/tela cheia/DND: o filtro de notificações deixa o alerta passar
+        import services.notify_filter as nf
+        quiet = {"dnd": False, "meeting": False, "fullscreen": False}
+        self._ctx = patch.object(nf, "context", return_value=quiet)
+        self._ctx.start()
+        self.addCleanup(self._ctx.stop)
 
     def _run(self, judge_return="NÃO"):
         with patch.object(alerts, "query_ollama", return_value=judge_return) as q, \

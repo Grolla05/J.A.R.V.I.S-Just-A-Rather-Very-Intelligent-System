@@ -13,6 +13,10 @@ from .logger import log
 MEMORY_NOTE_PATH = "Projetos/J.A.R.V.I.S/Mem\u00f3ria/{key}.md"
 
 
+MEMORY_SAVED = "saved"  # nota criada agora
+MEMORY_KEPT = "kept"    # nota já existia: versão do vault mantida, valor novo descartado
+
+
 class ObsidianClient:
     def __init__(self):
         self.base = settings.OBSIDIAN_HOST
@@ -95,18 +99,21 @@ class ObsidianClient:
                 return line.strip()
         return None
 
-    def save_memory(self, key: str, value: str) -> bool:
+    def save_memory(self, key: str, value: str) -> Optional[str]:
         """Escreve fato do usuário como nota Markdown — apenas se ainda não existir no vault.
-        Nota já existente = usuário editou manualmente → não sobrescrever."""
+        Nota já existente = usuário editou manualmente → não sobrescrever.
+
+        Retorna MEMORY_SAVED (nota criada), MEMORY_KEPT (já existia; o valor novo foi
+        descartado) ou None (falha ao gravar)."""
         if self.get_memory(key) is not None:
             log.info(f"Obsidian: nota '{key}' já existe, mantendo versão do vault.")
-            return True
+            return MEMORY_KEPT
         from datetime import datetime
         content = f"---\nkey: {key}\nupdated_at: {datetime.now().strftime('%Y-%m-%d')}\n---\n{value}\n"
         path = MEMORY_NOTE_PATH.format(key=key)
         encoded = urllib.parse.quote(path, safe="", encoding="utf-8")
         r = self._req("PUT", f"/vault/{encoded}", data=content.encode("utf-8"))
-        return r is not None
+        return MEMORY_SAVED if r is not None else None
 
 
 obsidian = ObsidianClient()

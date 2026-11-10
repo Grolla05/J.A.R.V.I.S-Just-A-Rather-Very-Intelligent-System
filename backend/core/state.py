@@ -11,6 +11,8 @@ voice_enabled = False
 # nem notificam — vão para o backlog e são resumidos quando o foco termina.
 dnd_active = False
 dnd_backlog = []
+# Silêncio automático do filtro de notificações: "REUNIÃO" | "TELA CHEIA" | None
+auto_quiet = None
 
 # Callback opcional (str) -> None que a interface registra para exibir
 # falas/alertas do JARVIS em texto (ex: TUI). None = só log.

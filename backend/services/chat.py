@@ -44,7 +44,8 @@ def get_session_history_for_ai(session_id, limit=8):
         return []
 
 
-def ask_local_ai(text, intent_type="CHAT", entity=None, vault_context="", vault_filename="", session_id="default"):
+def ask_local_ai(text, intent_type="CHAT", entity=None, vault_context="", vault_filename="", session_id="default",
+                 live_context=""):
     db_history = get_session_history_for_ai(session_id, limit=8)
 
     sys_instruction = SYSTEM_PROMPT['content'] + "\n\n[MODO ATUAL: VOZ] Aplique REGRAS DE ÁUDIO. Proibido Markdown. Sem asteriscos, cerquilhas ou listas."
@@ -76,9 +77,12 @@ def ask_local_ai(text, intent_type="CHAT", entity=None, vault_context="", vault_
             'content': f"[MEMÓRIA PESSOAL — {vault_filename}]:\n{vault_context}"
         })
 
+    if live_context:  # dados reais (agenda…) — services/live_context.py
+        messages.append({'role': 'system', 'content': live_context})
+
     messages += db_history + [{'role': 'user', 'content': text}]
 
-    temp = 0.1 if intent_type in ("HARDWARE", "MEMORY_READ") else 0.7
+    temp = 0.1 if live_context or intent_type in ("HARDWARE", "MEMORY_READ") else 0.7
     reply = query_ollama(messages, temperature=temp)
 
     if reply:
@@ -87,7 +91,8 @@ def ask_local_ai(text, intent_type="CHAT", entity=None, vault_context="", vault_
     return "Erro de processamento neural."
 
 
-def ask_local_ai_stream(text, intent_type="CHAT", entity=None, vault_context="", vault_filename="", session_id="default", images=None, mode="chat"):
+def ask_local_ai_stream(text, intent_type="CHAT", entity=None, vault_context="", vault_filename="", session_id="default",
+                        images=None, mode="chat", live_context=""):
     if images:
         # Imagem anexada: roteia pro modelo de visão com um contexto mínimo e
         # dedicado. Moondream/LLaVA são modelos pequenos — empilhar a
@@ -139,8 +144,11 @@ def ask_local_ai_stream(text, intent_type="CHAT", entity=None, vault_context="",
             'content': f"[MEMÓRIA PESSOAL — {vault_filename}]:\n{vault_context}"
         })
 
+    if live_context:  # dados reais (agenda…) — services/live_context.py
+        messages.append({'role': 'system', 'content': live_context})
+
     messages += db_history + [{'role': 'user', 'content': text}]
 
-    temp = 0.1 if intent_type in ("HARDWARE", "MEMORY_READ") else 0.7
+    temp = 0.1 if live_context or intent_type in ("HARDWARE", "MEMORY_READ") else 0.7
     for chunk in query_ollama_stream(messages, temperature=temp):
         yield chunk

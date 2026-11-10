@@ -22,7 +22,8 @@ COMMANDS = {
     "vault":    ("/vault [termo]", "memória no Obsidian: árvore, busca e nota no chat"),
     "web":      ("/web <pergunta>", "pesquisa na internet e resume com fontes"),
     "gh":       ("/gh [prs|issues|commit|ci] [dono/repo]", "GitHub: PRs, issues, último commit e CI"),
-    "briefing": ("/briefing", "briefing do dia: clima, máquina, arquivos recentes e GitHub"),
+    "briefing": ("/briefing", "briefing do dia: clima, agenda, trânsito, máquina e GitHub"),
+    "rota":     ("/rota [casa|trabalho <endereço>]", "trânsito casa ⇄ trabalho (sem argumento mostra o tempo agora)"),
     "clip":     ("/clip [explicar|traduzir|resumir|hist]", "age sobre o que você copiou (monitor no /config)"),
     "focus":    ("/focus [min|stop|skip|status]", "pomodoro 25/5 (liga o Não Perturbe no foco)"),
     "dnd":      ("/dnd [on|off|min]", "Não Perturbe: silencia notificações do Windows e alertas"),
@@ -82,6 +83,22 @@ def parse_dnd_arg(arg):
         return "dnd_on", int(arg)
     action = _DND_WORDS.get(arg)
     return (action, None) if action else None
+
+
+_ROTA_PLACES = {"casa": "casa", "home": "casa", "trabalho": "trabalho", "work": "trabalho",
+                "serviço": "trabalho", "servico": "trabalho"}
+
+
+def parse_rota_arg(arg):
+    """/rota <arg> -> ('show', None, '') · ('set', 'casa'|'trabalho', endereço) · None se inválido."""
+    arg = (arg or "").strip()
+    if not arg:
+        return "show", None, ""
+    word, _, rest = arg.partition(" ")
+    place = _ROTA_PLACES.get(word.lower())
+    if place is None:
+        return None
+    return "set", place, rest.strip()
 
 
 def unescape(text):

@@ -374,22 +374,23 @@ class ConfirmScreen(ModalScreen):
         Binding("n,escape", "dismiss(False)", "Cancelar"),
     ]
 
-    def __init__(self, question, deadline=None):
+    def __init__(self, question, deadline=None, title="AÇÃO CRÍTICA", yes="Encerrar", no="Manter"):
         super().__init__()
         self._question = question
+        self._title, self._yes, self._no = title, yes, no
         self._deadline = time.time() + CONFIRM_SECONDS if deadline is None else deadline
 
     def compose(self) -> ComposeResult:
         with Vertical(id="confirm"):
             with Horizontal(id="confirm-head"):
                 yield PixelSprite(sprites.sprite("alert"), id="confirm-icon")
-                yield Label("AÇÃO CRÍTICA", id="confirm-title")
+                yield Label(self._title, id="confirm-title")
             yield Static(self._question, markup=False)
             yield Label(self._bar_text(), id="confirm-bar")
             yield Label(self._expiry_text(), id="confirm-expiry", classes="hint")
             with Horizontal(id="confirm-buttons"):
-                yield Button("▶ s · Encerrar", id="confirm-yes")
-                yield Button("n · Manter", id="confirm-no")
+                yield Button(f"▶ s · {self._yes}", id="confirm-yes")
+                yield Button(f"n · {self._no}", id="confirm-no")
         # Mesma linha única da tela principal (telemetria + atalhos), mas com
         # os atalhos deste modal (s/n) — o Footer só enxerga a própria Screen.
         with Horizontal(id="confirm-statusbar", classes="statusbar"):

@@ -2,6 +2,7 @@
 
 O valor sobe o agente residente (agent.py) via pythonw — sem janela — no logon.
 O instalador marca isso numa checkbox; /config e a bandeja ligam/desligam.
+O valor leva `--logon`: só nessa subida o agente procura atualização (core/updater.py).
 """
 import sys
 from pathlib import Path
@@ -11,6 +12,7 @@ from .logger import log
 
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 VALUE_NAME = "JARVIS"
+LOGON_FLAG = "--logon"  # mesmo valor do agent.py
 
 
 def _winreg():
@@ -36,7 +38,27 @@ def agent_script():
 
 
 def agent_command():
-    return f'"{pythonw_path()}" "{agent_script()}"'
+    return f'"{pythonw_path()}" "{agent_script()}" {LOGON_FLAG}'
+
+
+def _current_value():
+    reg = _winreg()
+    if reg is None:
+        return None
+    try:
+        with reg.OpenKey(reg.HKEY_CURRENT_USER, RUN_KEY) as key:
+            return str(reg.QueryValueEx(key, VALUE_NAME)[0])
+    except OSError:
+        return None
+
+
+def ensure_logon_flag():
+    """Valor antigo (sem --logon, de versões anteriores) é regravado; sem ele o
+    agente nunca saberia que subiu com o Windows. Devolve True se regravou."""
+    value = _current_value()
+    if value is None or LOGON_FLAG in value.split():
+        return False
+    return enable()
 
 
 def is_enabled():

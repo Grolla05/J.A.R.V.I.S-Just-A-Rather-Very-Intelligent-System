@@ -2,6 +2,94 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+**Data:** 2026-11-10 (2)
+**Escopo:** Atualização automática do app instalado, verificada só quando o JARVIS inicia com o Windows.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | **`core/updater.py`**: compara o `VERSION` instalado com o último Release do GitHub (`UPDATE_REPO`); se houver versão nova, baixa o `JARVIS-Setup.exe` para `%APPDATA%\JARVIS\updates`, confere tamanho e SHA-256 (`digest` do asset; sem digest ou URL fora do repositório = não instala) e roda o setup com `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SKIPOLLAMA /UPDATE`. Sem rede logo após o logon: tenta de novo (15/45/90/180 s) e desiste em silêncio. TUI aberta adia para o próximo logon. Dev (sem `JARVIS_DATA_DIR`) nunca atualiza. Setups antigos são apagados | `backend/core/updater.py` |
+| 2 | **Só no logon**: o valor `JARVIS` do `HKCU\…\Run` passa a levar `--logon`; só com ele o agente verifica (bandeja, Win+J e menu Iniciar não). `autostart.ensure_logon_flag()` regrava valores antigos. Com `installing`, o agente fecha a bandeja e sai (libera o runtime); toasts "Baixando…", "Instalando…" e, na volta, "Atualizado para a versão X" | `backend/agent.py`, `backend/core/autostart.py` |
+| 3 | **Instalador**: Run com `--logon`; `/UPDATE` (`EhAtualizacao`) reabre o agente ao fim do setup silencioso (sem `--logon`, não verifica de novo). O `PrepareToInstall` já fechava o pythonw antigo | `installer/jarvis.iss` |
+| 4 | **`/config` → SISTEMA**: opção "Atualização automática" (registro `HKCU\Software\JARVIS\AutoUpdate`; padrão `AUTO_UPDATE`) e linha com a versão instalada | `frontend/screens/settings.py` |
+| 5 | Novas variáveis com default: `AUTO_UPDATE=True`, `UPDATE_REPO` (vazio = repositório oficial) | `backend/core/config.py`, `env.example`, `CLAUDE.md` |
+
+**Testes novos:** `test_updater.py` — versões, Release (404, sem asset, prerelease, URL estranha, sem digest), download (hash/tamanho errado apagam o arquivo), fluxo (dev, desligado, em dia, sem rede com novas tentativas, rede voltando, TUI aberta, instalação com `/UPDATE` e marcador, download adulterado nunca roda o setup), aviso pós-atualização, agente só verifica no logon e sai ao instalar, migração do `--logon`.
+
+**Pendente (manual):** compilar o setup (ISCC) e testar de verdade: instalar uma versão antiga, fazer logoff/logon e ver o toast + a versão nova em `/config` → SISTEMA.
+
+---
+
+**Data:** 2026-11-10
+**Escopo:** Login de contas de verdade no Google Agenda e no Spotify (OAuth pelo navegador com escolha de conta), conexão salva entre reinícios e chaves **pessoais** documentadas.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | **Chaves pessoais**: cada usuário cria o próprio app no Google Cloud (client "App para computador") e no Spotify Developer e preenche `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` e `SPOTIFY_CLIENT_ID` no `.env`. Guia passo a passo com tabela de erros comuns; aviso no README e no `env.example`. Sem chave, o card diz qual variável falta, abre o painel do serviço e aponta o guia | `docs/integracoes-oauth.md`, `README.md`, `env.example`, `core/config.py`, `core/google_calendar.py`, `services/integrations.py`, `skills/automation/spotify_control.py` |
+| 2 | **Escolha de conta no navegador**: Google abre em "Escolha uma conta" (`prompt=select_account consent`); Spotify sempre mostra login/consentimento (`show_dialog=true`). Página de retorno no visual do JARVIS (CONECTADO / NEGADO) | `core/google_calendar.py`, `core/spotify.py`, `core/oauth.py` |
+| 3 | **Spotify usa o OAuth comum** (`oauth.authorize` com porta e caminho fixos do redirect cadastrado); some o servidor de callback próprio. Depois do login busca o nome da conta (`/v1/me`) e o card mostra "conta: …" | `core/spotify.py`, `services/integrations.py` |
+| 4 | **Conexão salva**: token do Spotify vai para o Cofre do Windows (o `spotify_token.json` antigo é migrado e apagado); Google já estava lá. Access token renova sozinho; Enter num card já conectado não abre o login de novo ("Del para trocar de conta"). Só pede reconexão se o serviço revogar (`invalid_grant`); erro de rede mantém a conta | `core/spotify.py`, `core/google_calendar.py`, `services/integrations.py` |
+| 6 | **Chat consulta a agenda de verdade**: no modo Chat as skills não rodam, então "o que tenho amanhã?" ia direto ao LLM, que inventava compromissos. `services/live_context.py` detecta pergunta de agenda (palavras-chave, sem LLM), resolve o dia (hoje, amanhã, dia da semana), busca os eventos reais no Google Agenda e injeta no prompt (`prompts/calendar_context.md`) com a regra de não inventar; agenda desconectada ou com erro vira instrução de dizer isso. Temperatura 0.1 quando há dados reais. `resolve_day` foi para `core/google_calendar.py` (skill CALENDAR reusa). Validado com a agenda real + Ollama | `services/live_context.py`, `prompts/calendar_context.md`, `services/chat.py`, `services/brain.py`, `core/google_calendar.py`, `skills/productivity/calendar_agenda.py` |
+| 5 | /config: a fala do JARVIS quebra linha (instrução longa não some na borda) e o aviso no canto só aparece quando um card muda de estado (antes empilhava o mesmo texto a cada Enter) | `frontend/screens/settings.py`, `frontend/jarvis.tcss` |
+
+**Testes novos:** `test_live_context.py` (detecção da pergunta, eventos reais do dia pedido, agenda livre/desconectada/com erro, contexto chega ao modelo); `test_oauth_connect.py` — loopback de verdade com socket (código, porta/caminho fixos, página de negado), escolha de conta, fluxo do Spotify com conta, token sobrevivendo a reinício, migração do arquivo antigo, renovação sem login, revogação × erro de rede (Google e Spotify), card conectado não reabre login, card sem chave aponta o `.env` e o guia, docs citam as chaves pessoais. Cofre em memória nos testes (nunca o Cofre real).
+
+**Pendente (manual):** criar os apps seguindo `docs/integracoes-oauth.md`, preencher as variáveis já cadastradas (vazias) no `.env` local, reiniciar e conectar pelos cards.
+
+---|---------|----------|
+| 1 | **Client IDs do projeto embutidos**: o JARVIS lê `backend/oauth_clients.json` (Google: client "App para computador" + secret; Spotify: client ID). O arquivo não vai para o repositório: o `release.yml` grava a partir dos GitHub Secrets `JARVIS_GOOGLE_CLIENT_ID`, `JARVIS_GOOGLE_CLIENT_SECRET` e `JARVIS_SPOTIFY_CLIENT_ID` antes do build. `.env` continua sobrescrevendo. O usuário não cadastra nada | `core/config.py`, `.github/workflows/release.yml`, `.gitignore`, `backend/oauth_clients.example.json` |
+| 2 | **Escolha de conta no navegador**: Google abre em "Escolha uma conta" (`prompt=select_account consent`); Spotify sempre mostra login/consentimento (`show_dialog=true`). Página de retorno no visual do JARVIS (CONECTADO / NEGADO) | `core/google_calendar.py`, `core/spotify.py`, `core/oauth.py` |
+| 3 | **Spotify usa o OAuth comum** (`oauth.authorize` com porta e caminho fixos do redirect cadastrado); some o servidor de callback próprio. Depois do login busca o nome da conta (`/v1/me`) e o card mostra "conta: …" | `core/spotify.py`, `services/integrations.py` |
+| 4 | **Conexão salva**: token do Spotify vai para o Cofre do Windows (o `spotify_token.json` antigo é migrado e apagado); Google já estava lá. Access token renova sozinho; Enter num card já conectado não abre o login de novo ("Del para trocar de conta"). Só pede reconexão se o serviço revogar (`invalid_grant`); erro de rede mantém a conta | `core/spotify.py`, `core/google_calendar.py`, `services/integrations.py` |
+| 5 | Mensagens de "sem client" falam do build (não pedem mais para o usuário editar o .env); guia de cadastro dos apps para o mantenedor, incluindo o aviso de que app do Google "Em teste" expira o token em 7 dias | `services/integrations.py`, `skills/automation/spotify_control.py`, `docs/integracoes-oauth.md` |
+
+**Testes novos:** `test_oauth_connect.py` — client embutido (BOM, vazio, .env vence), loopback de verdade com socket (código, porta/caminho fixos, página de negado), escolha de conta, fluxo do Spotify com conta, token sobrevivendo a reinício, migração do arquivo antigo, renovação sem login, revogação × erro de rede (Google e Spotify), card conectado não reabre login. Os testes usam cofre em memória (nunca o Cofre real).
+
+**Pendente (manual):** cadastrar os apps (ver `docs/integracoes-oauth.md`), pôr os IDs no `.env` para testar em dev e nos GitHub Secrets para o instalador; colocar o app do Google **Em produção** para o login não expirar em 7 dias.
+
+---
+
+**Data:** 2026-11-10
+**Escopo:** TUI aberta pelo agente (Win+J / bandeja) abre direto na interface do Copilot, sem a tela de boot.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `--copilot` (usado só pelo agente) liga `quiet_boot`: a conversa já aparece no Copilot e as checagens do boot rodam num worker de thread; etapas com `warn`/`fail` viram notificação "Boot". A etapa do microfone fica de fora (o Copilot já abre o mic e duas threads no PortAudio derrubam o processo); a saúde roda ao fim, como no boot normal. Aberto à mão (`jarvis.cmd` / `python main.py`) continua com a tela de boot | `frontend/app.py`, `backend/main.py`, `backend/core/boot.py` (`MIC_STEP`) |
+
+**Testes novos:** `test_quiet_boot_skips_screen_and_notifies_problems` em `test_tui_phase34.py`.
+
+---
+
+**Data:** 2026-11-09 (4)
+**Escopo:** /config → INTEGRAÇÕES (canvas 15), Google Agenda, trânsito antes de sair, tradução do texto selecionado e filtro inteligente de notificações.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | **INTEGRAÇÕES no /config** (entre ROTINAS e SISTEMA): cards Google Agenda, GitHub, Spotify e Trânsito com LED, selo (CONECTADO / AGUARDANDO / DESCONECTADO / CONFIGURAR), detalhe e dica de tecla. Setas andam na grade; Enter conecta em worker de thread (card fica AGUARDANDO enquanto o navegador espera); Del desconecta com confirmação. `ConfirmScreen` aceita título/botões próprios | `services/integrations.py`, `frontend/screens/integrations_panel.py`, `frontend/screens/settings.py`, `frontend/widgets.py`, `frontend/jarvis.tcss` |
+| 2 | **OAuth genérico + cofre**: PKCE e callback num servidor efêmero do loopback (porta livre, valida `state`); refresh tokens no Cofre de Credenciais do Windows via `keyring` (fallback JSON). O Spotify passa a reusar o PKCE daqui | `core/oauth.py`, `core/secrets_store.py`, `core/spotify.py`, `requirements.txt`, `installer/build_runtime.ps1` |
+| 3 | **Google Agenda** (só leitura, REST com `requests`): cada usuário usa o próprio client "App para computador" (`GOOGLE_CLIENT_ID/SECRET`); sem client, o card abre o Google Cloud Console. Agenda entra no briefing; skill **CALENDAR** ("o que tenho amanhã?", "próxima reunião", dias da semana) | `core/google_calendar.py`, `skills/productivity/calendar_agenda.py`, `prompts/skills/calendar.md`, `core/briefing.py`, `prompts/briefing.md` |
+| 4 | **Trânsito**: `/rota casa|trabalho <endereço>` (Nominatim) e `/rota` mostra o tempo agora; OSRM grátis ou TomTom (`TOMTOM_API_KEY`) com trânsito ao vivo; sentido inverte depois das 15 h. Entra no briefing em dias úteis; skill **TRAFFIC**; **aviso de saída** (ROTINAS → horário) com clima + trânsito + agenda, 1×/dia no tick da telemetria | `core/traffic.py`, `skills/productivity/traffic_commute.py`, `frontend/commands.py`, `frontend/app.py`, `services/user_prefs.py` |
+| 5 | **Tradução do texto selecionado**: `Ctrl+Alt+T` (`TRANSLATE_HOTKEY`) no agente copia a seleção (Ctrl+C sintético depois de soltar o atalho), traduz no Ollama (pt → inglês; resto → pt-BR), põe no clipboard (Win32, sem PowerShell) e mostra toast da bandeja. `GlobalHotkey` ganhou id por atalho | `agent.py`, `core/selection.py`, `core/clipboard.py`, `core/hotkey.py`, `prompts/translate_selection.md` |
+| 6 | **Filtro de notificações**: prioridade do alerta (crítico = disco CRÍTICO, bateria crítica, GPU superaquecendo) × contexto (Não Perturbe, reunião na agenda, app em tela cheia). Crítico sempre fala; o resto vai para o backlog e é resumido quando o silêncio acaba. Prefs "Silenciar em reunião/tela cheia" em ROTINAS; selo `☾ REUNIÃO` / `☾ TELA CHEIA`. Janela só maximizada não conta como tela cheia | `services/notify_filter.py`, `core/alerts.py`, `core/window_utils.py`, `core/state.py`, `frontend/app.py` |
+| 7 | Novas variáveis com default: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `TOMTOM_API_KEY`, `TRANSLATE_HOTKEY`; docs atualizadas | `core/config.py`, `env.example`, `CLAUDE.md` |
+
+**Testes novos:** `test_oauth.py`, `test_integrations.py`, `test_google_calendar.py`, `test_traffic.py`, `test_selection.py`, `test_notify_filter.py`; ampliados `test_briefing.py`, `test_hotkey_agent.py`, `test_alerts_cache.py`, `test_tui_phase34.py` (cards de integrações e aviso de saída).
+
+**Pendente (manual):** criar o client OAuth Desktop no Google Cloud (ativar Calendar API, seu e-mail como usuário de teste) e conectar pelo card; `/rota casa …` e `/rota trabalho …`; reiniciar o agente para o `Ctrl+Alt+T`; conferir o silêncio em tela cheia (F11 num vídeo).
+
+---
+
+**Data:** 2026-11-09 (3)
+**Escopo:** Issue #29 — "Memorizado no vault" respondido mesmo quando a nota já existia e o valor novo era descartado.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `ObsidianClient.save_memory` devolve `MEMORY_SAVED` (nota criada), `MEMORY_KEPT` (nota já existia; vault mantido, valor novo descartado) ou `None` (falha ao gravar), em vez de `True` para os dois primeiros casos | `backend/core/obsidian.py` |
+| 2 | `extract_fact_to_memory` só diz "Memorizado" quando gravou; nota existente com o mesmo valor → "Já estava memorizado"; com valor diferente → avisa que manteve a versão do vault (mostra o valor atual) e pede para editar a nota no Obsidian; falha de gravação deixa de cair no genérico "não consegui extrair" | `backend/services/memory.py` |
+
+**Testes novos:** `test_memory_save.py` (retornos de `save_memory` e as 4 respostas). 408 testes passando, ruff limpo.
+
+---
+
 **Data:** 2026-11-09 (2)
 **Escopo:** Correções de interface: crash intermitente no boot, rodapé, logo na aba do Windows Terminal, VU de voz, fim do `/help` e `/skills` por categoria.
 

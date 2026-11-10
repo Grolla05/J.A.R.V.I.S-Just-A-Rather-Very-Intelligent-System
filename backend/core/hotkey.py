@@ -46,8 +46,10 @@ class GlobalHotkey:
 
     HOTKEY_ID = 0x4A41  # 'JA'
 
-    def __init__(self, spec, callback):
+    def __init__(self, spec, callback, hotkey_id=None, name="GLOBAL_HOTKEY"):
         self.spec = spec
+        self.hotkey_id = hotkey_id or self.HOTKEY_ID  # cada atalho do processo precisa de um id
+        self.name = name
         self.mods, self.vk = parse_hotkey(spec)
         self._callback = callback
         self._thread = None
@@ -57,7 +59,7 @@ class GlobalHotkey:
 
     def start(self, timeout=2.0):
         """Registra e começa a ouvir. Retorna False se o atalho já estiver em uso."""
-        self._thread = threading.Thread(target=self._loop, daemon=True, name="jarvis-hotkey")
+        self._thread = threading.Thread(target=self._loop, daemon=True, name=f"jarvis-hotkey-{self.hotkey_id:x}")
         self._thread.start()
         self._ready.wait(timeout)
         return self.registered
@@ -69,20 +71,20 @@ class GlobalHotkey:
     def _loop(self):
         user32 = ctypes.windll.user32
         self._thread_id = ctypes.windll.kernel32.GetCurrentThreadId()
-        self.registered = bool(user32.RegisterHotKey(None, self.HOTKEY_ID, self.mods | MOD_NOREPEAT, self.vk))
+        self.registered = bool(user32.RegisterHotKey(None, self.hotkey_id, self.mods | MOD_NOREPEAT, self.vk))
         self._ready.set()
         if not self.registered:
             log.warning(f"Atalho global '{self.spec}' já está em uso no Windows. "
-                        "Troque GLOBAL_HOTKEY no .env (ex: ctrl+alt+j).")
+                        f"Troque {self.name} no .env (ex: ctrl+alt+j).")
             return
         log.info(f"⌨️ Atalho global {self.spec} registrado.")
         msg = wintypes.MSG()
         try:
             while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
-                if msg.message == WM_HOTKEY and msg.wParam == self.HOTKEY_ID:
+                if msg.message == WM_HOTKEY and msg.wParam == self.hotkey_id:
                     try:
                         self._callback()
                     except Exception as e:
                         log.error(f"Atalho global: callback falhou: {e}")
         finally:
-            user32.UnregisterHotKey(None, self.HOTKEY_ID)
+            user32.UnregisterHotKey(None, self.hotkey_id)

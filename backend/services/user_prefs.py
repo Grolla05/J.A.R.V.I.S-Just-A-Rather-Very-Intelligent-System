@@ -17,6 +17,14 @@ def _onoff_label(value):
     return "ligado" if value else "desligado"
 
 
+# Aviso de saída (clima + trânsito + 1º compromisso): minutos desde 00:00; 0 = desligado
+COMMUTE_TIMES = (0, 360, 390, 420, 450, 480, 510, 540, 570)
+
+
+def _time_label(minutes):
+    return "desligado" if not minutes else f"{minutes // 60:02d}:{minutes % 60:02d}"
+
+
 # chave -> (rótulo, opções, padrão, formatação p/ exibir)
 PREFS = {
     "tts_voice": ("Voz", VOICES, VOICES[0], lambda v: v.replace("pt-BR-", "").replace("Neural", "")),
@@ -28,13 +36,17 @@ PREFS = {
     "briefing_auto": ("Briefing no 1º boot do dia", _ONOFF, True, _onoff_label),
     "briefing_news": ("Manchetes no briefing", _ONOFF, False, _onoff_label),
     "clipboard_monitor": ("Monitor de clipboard", _ONOFF, False, _onoff_label),
+    "commute_alert": ("Aviso de saída", COMMUTE_TIMES, 0, _time_label),
+    "dnd_auto_meeting": ("Silenciar em reunião", _ONOFF, True, _onoff_label),
+    "dnd_auto_fullscreen": ("Silenciar em tela cheia", _ONOFF, True, _onoff_label),
 }
 
 # Grupos do menu lateral (estilo RPG) -> chaves editáveis
 GROUPS = {
     "VOZ": ("tts_voice", "tts_rate", "tts_volume"),
     "MICROFONE": ("mic_threshold", "attention_window"),
-    "ROTINAS": ("briefing_auto", "briefing_news", "clipboard_monitor"),
+    "ROTINAS": ("briefing_auto", "briefing_news", "clipboard_monitor", "commute_alert",
+                "dnd_auto_meeting", "dnd_auto_fullscreen"),
 }
 
 

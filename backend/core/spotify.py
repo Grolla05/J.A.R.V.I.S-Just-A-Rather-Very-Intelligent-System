@@ -2,8 +2,11 @@
 
 Três camadas, de baixo pra cima:
 
-1. AUTENTICAÇÃO (OAuth 2.0 PKCE) — sem client_secret. O único segredo que
-   toca o disco é o refresh token, em `backend/database/spotify_token.json`.
+1. AUTENTICAÇÃO (OAuth 2.0 PKCE, `core/oauth.py`) — sem client_secret. O
+   Client ID é PESSOAL: cada usuário cria o próprio app (SPOTIFY_CLIENT_ID no .env).
+   O navegador abre no login do Spotify (show_dialog) para escolher a conta.
+   O refresh token fica no Cofre do Windows (`core/secrets_store.py`): conecta
+   uma vez e segue conectado; só pede login de novo se o acesso for revogado.
 2. WEB API — busca, playlists do usuário, dispositivos e controle de player.
    Exige conta Premium para os endpoints `/v1/me/player/*`.
 3. BOOTSTRAP LOCAL (Win32) — abre o app, acha o HWND e força o play.
@@ -12,23 +15,20 @@ Três camadas, de baixo pra cima:
 
 O cliente é um singleton (`spotify`), no mesmo molde de `core.obsidian`.
 """
-import base64
 import ctypes
-import hashlib
 import json
 import re
-import secrets
 import socket
 import threading
 import time
 import urllib.parse
-import webbrowser
-from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import requests
 
+from . import secrets_store
 from .config import settings
 from .logger import log
+from .oauth import build_pkce_pair, token_expired
 from .utils import TTLCache
 
 AUTH_URL = "https://accounts.spotify.com/authorize"
@@ -54,24 +54,13 @@ _auth_in_progress = threading.Event()
 # ============================================================================
 # 1. PKCE — HELPERS PUROS
 # ============================================================================
-def _build_pkce_pair():
-    """Gera o par (code_verifier, code_challenge) do fluxo PKCE.
-
-    O verifier é o segredo efêmero; o challenge é o SHA-256 dele em base64url
-    sem padding. A RFC 7636 exige verifier entre 43 e 128 caracteres.
-    """
-    verifier = secrets.token_urlsafe(64)[:128]
-    digest = hashlib.sha256(verifier.encode("ascii")).digest()
-    challenge = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
-    return verifier, challenge
+# PKCE e validade do token vivem em core/oauth.py (compartilhados com o Google Agenda).
+_build_pkce_pair = build_pkce_pair
 
 
 def _token_is_expired(expires_at, now=None, margin=TOKEN_EXPIRY_MARGIN):
     """True se o access token já venceu (ou vence dentro da margem)."""
-    if not isinstance(expires_at, (int, float)):
-        return True
-    reference = time.time() if now is None else now
-    return reference >= (expires_at - margin)
+    return token_expired(expires_at, now=now, margin=margin)
 
 
 def _sanitize_spotify_uri(uri):
@@ -121,134 +110,89 @@ def _pick_device(devices, hostname=None):
 # ============================================================================
 # 2. PERSISTÊNCIA DO TOKEN
 # ============================================================================
+SECRET_NAME = "spotify"
+
+
 def _load_token():
-    """Lê o token do disco. Retorna {} se não existir ou estiver corrompido."""
+    """Token salvo no Cofre do Windows. Migra o `spotify_token.json` antigo na 1ª
+    leitura (e apaga o arquivo). Retorna {} se não houver."""
+    data = secrets_store.get(SECRET_NAME)
+    if data:
+        return data
     path = settings.SPOTIFY_TOKEN_PATH
     try:
         if not path.exists():
             return {}
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        return data if isinstance(data, dict) else {}
     except Exception as e:
-        log.warning(f"⚠️ Token do Spotify ilegível ({e}). Reautorização necessária.")
+        log.warning(f"⚠️ Token antigo do Spotify ilegível ({e}). Reautorização necessária.")
         return {}
+    if not isinstance(data, dict):
+        return {}
+    if secrets_store.set(SECRET_NAME, data):
+        try:
+            path.unlink()
+            log.info("🔐 Token do Spotify migrado para o Cofre do Windows.")
+        except OSError:
+            pass
+    return data
 
 
 def _save_token(payload, previous=None):
     """Grava o token, preservando o refresh token quando o Spotify não manda um novo.
 
     No fluxo PKCE o Spotify ROTACIONA o refresh_token a cada renovação — mas nem
-    sempre devolve um. Sobrescrever com None mata a sessão em 1 hora.
+    sempre devolve um. Sobrescrever com None mata a sessão em 1 hora. Fica no Cofre
+    do Windows: a conta segue conectada entre reinícios, sem pedir login de novo.
     """
     with _token_lock:
-        base = dict(previous or _load_token())
+        base = dict(_load_token() if previous is None else previous)
         base.update({k: v for k, v in payload.items() if v is not None})
 
         if "expires_in" in payload:
             base["expires_at"] = time.time() + float(payload["expires_in"])
             base.pop("expires_in", None)
 
-        try:
-            settings.DIR_DATABASE.mkdir(parents=True, exist_ok=True)
-            with open(settings.SPOTIFY_TOKEN_PATH, "w", encoding="utf-8") as f:
-                json.dump(base, f, indent=2)
-        except Exception as e:
-            log.error(f"❌ Não consegui gravar o token do Spotify: {e}")
+        if not secrets_store.set(SECRET_NAME, base):
+            log.error("❌ Não consegui guardar o token do Spotify.")
         return base
 
 
 # ============================================================================
 # 3. FLUXO DE AUTORIZAÇÃO (PKCE)
 # ============================================================================
-class _CallbackHandler(BaseHTTPRequestHandler):
-    """Recebe o redirect do Spotify e extrai o `code` da query string."""
-
-    result = {}
-
-    def do_GET(self):
-        parsed = urllib.parse.urlparse(self.path)
-        params = urllib.parse.parse_qs(parsed.query)
-        _CallbackHandler.result = {
-            "code": (params.get("code") or [None])[0],
-            "state": (params.get("state") or [None])[0],
-            "error": (params.get("error") or [None])[0],
-        }
-
-        ok = bool(_CallbackHandler.result["code"])
-        corpo = (
-            "<h2>J.A.R.V.I.S. autorizado.</h2><p>Pode fechar esta aba, senhor.</p>"
-            if ok else
-            "<h2>Autorizacao negada.</h2><p>O JARVIS segue sem acesso ao Spotify.</p>"
-        )
-        self.send_response(200)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.end_headers()
-        self.wfile.write(corpo.encode("utf-8"))
-
-    def log_message(self, *_args):
-        """Silencia o log padrão do http.server (polui o console do JARVIS)."""
-        return
-
-
-def _build_authorize_url(challenge, state):
-    """Monta a URL de consentimento do Spotify."""
+def _build_authorize_url(redirect_uri, challenge, state):
+    """URL de consentimento do Spotify. `show_dialog=true` sempre mostra a tela de
+    login/consentimento — dá para entrar com outra conta em vez de reaproveitar a
+    sessão do navegador."""
     query = urllib.parse.urlencode({
         "client_id": settings.SPOTIFY_CLIENT_ID,
         "response_type": "code",
-        "redirect_uri": settings.SPOTIFY_REDIRECT_URI,
+        "redirect_uri": redirect_uri,
         "code_challenge_method": "S256",
         "code_challenge": challenge,
         "state": state,
         "scope": settings.SPOTIFY_SCOPES,
+        "show_dialog": "true",
     })
     return f"{AUTH_URL}?{query}"
 
 
-def _wait_for_callback(state, timeout):
-    """Sobe um servidor efêmero no loopback e espera o redirect. Nunca levanta."""
+def _redirect_parts():
+    """(porta, caminho) do SPOTIFY_REDIRECT_URI — o Spotify exige o redirect exato
+    cadastrado no app (http://127.0.0.1:8888/callback)."""
     parsed = urllib.parse.urlparse(settings.SPOTIFY_REDIRECT_URI)
-    host = parsed.hostname or "127.0.0.1"
-    port = parsed.port or 8888
-
-    _CallbackHandler.result = {}
-    try:
-        server = HTTPServer((host, port), _CallbackHandler)
-    except OSError as e:
-        log.error(f"❌ Porta {port} ocupada — não consigo receber o callback do Spotify: {e}")
-        return None
-
-    server.timeout = 1.0
-    deadline = time.monotonic() + timeout
-    try:
-        while time.monotonic() < deadline:
-            server.handle_request()  # respeita server.timeout
-            if _CallbackHandler.result:
-                break
-    finally:
-        server.server_close()
-
-    result = _CallbackHandler.result
-    if not result:
-        log.warning(f"⚠️ Ninguém autorizou o Spotify em {timeout}s.")
-        return None
-    if result.get("error"):
-        log.warning(f"⚠️ Autorização do Spotify recusada: {result['error']}")
-        return None
-    if result.get("state") != state:
-        # State divergente = possível CSRF. Descarta o código sem trocar.
-        log.error("❌ State do callback do Spotify não confere. Autorização descartada.")
-        return None
-    return result.get("code")
+    return parsed.port or 8888, parsed.path or ""
 
 
-def _exchange_code(code, verifier):
+def _exchange_code(code, verifier, redirect_uri=None):
     """Troca o authorization code pelo par de tokens."""
     try:
         r = requests.post(TOKEN_URL, data={
             "grant_type": "authorization_code",
             "code": code,
-            "redirect_uri": settings.SPOTIFY_REDIRECT_URI,
+            "redirect_uri": redirect_uri or settings.SPOTIFY_REDIRECT_URI,
             "client_id": settings.SPOTIFY_CLIENT_ID,
             "code_verifier": verifier,
         }, timeout=settings.TIMEOUT_SPOTIFY)
@@ -267,9 +211,15 @@ def _refresh(refresh_token):
             "refresh_token": refresh_token,
             "client_id": settings.SPOTIFY_CLIENT_ID,
         }, timeout=settings.TIMEOUT_SPOTIFY)
+        if r.status_code == 400 and "invalid_grant" in r.text:
+            # Acesso revogado pelo usuário (ou app removido): só um login novo resolve.
+            log.warning("⚠️ O Spotify revogou o acesso do JARVIS. Reconecte em /config → INTEGRAÇÕES.")
+            disconnect()
+            return None
         r.raise_for_status()
         payload = r.json()
     except requests.RequestException as e:
+        # Rede/servidor: mantém o token, tenta de novo no próximo uso.
         log.warning(f"⚠️ Não consegui renovar o token do Spotify: {e}")
         return None
 
@@ -277,10 +227,26 @@ def _refresh(refresh_token):
     return _save_token(payload)
 
 
-def _run_auth_flow():
+def _fetch_account(access_token):
+    """Nome da conta (display_name, ou id) para mostrar no card. None se falhar."""
+    try:
+        r = requests.get(f"{API_BASE}/me", headers={"Authorization": f"Bearer {access_token}"},
+                         timeout=settings.TIMEOUT_SPOTIFY)
+        if r.status_code != 200:
+            return None
+        me = r.json()
+        return me.get("display_name") or me.get("id")
+    except requests.RequestException as e:
+        log.debug(f"Spotify: /me indisponível: {e}")
+        return None
+
+
+def _run_auth_flow(authorize=None):
     """Executa o consentimento de ponta a ponta. Bloqueante — rode numa thread."""
+    from .oauth import authorize as default_authorize
+    authorize = authorize or default_authorize
     if not settings.SPOTIFY_CLIENT_ID:
-        log.error("❌ SPOTIFY_CLIENT_ID ausente no .env. Cadastre o app em developer.spotify.com.")
+        log.error("❌ SPOTIFY_CLIENT_ID vazio no .env (ver docs/integracoes-oauth.md).")
         return False
 
     if _auth_in_progress.is_set():
@@ -289,25 +255,36 @@ def _run_auth_flow():
 
     _auth_in_progress.set()
     try:
-        verifier, challenge = _build_pkce_pair()
-        state = secrets.token_urlsafe(16)
-
-        log.info("🔐 Abrindo o navegador para autorizar o Spotify...")
-        webbrowser.open(_build_authorize_url(challenge, state))
-
-        code = _wait_for_callback(state, settings.SPOTIFY_AUTH_TIMEOUT)
-        if not code:
+        port, path = _redirect_parts()
+        result = authorize(_build_authorize_url, settings.SPOTIFY_AUTH_TIMEOUT, port=port, path=path)
+        if not result:
             return False
+        code, verifier, redirect_uri = result
 
-        payload = _exchange_code(code, verifier)
+        payload = _exchange_code(code, verifier, redirect_uri)
         if not payload:
             return False
 
-        _save_token(payload)
+        token = _save_token(payload, previous={})  # conta nova: não herda o token antigo
+        account = _fetch_account(token.get("access_token"))
+        if account:
+            _save_token({"account": account}, previous=token)
         log.info("✅ Spotify autorizado.")
         return True
     finally:
         _auth_in_progress.clear()
+
+
+def disconnect():
+    """Apaga o token salvo (o próximo uso pede autorização de novo)."""
+    with _token_lock:
+        secrets_store.delete(SECRET_NAME)
+        try:
+            settings.SPOTIFY_TOKEN_PATH.unlink(missing_ok=True)  # resto da versão antiga
+        except OSError as e:
+            log.error(f"Não consegui apagar o token antigo do Spotify: {e}")
+            return False
+    return True
 
 
 def start_authorization(blocking=False):
@@ -331,6 +308,10 @@ class SpotifyClient:
     def is_authorized(self):
         token = _load_token()
         return bool(token.get("access_token") or token.get("refresh_token"))
+
+    def account(self):
+        """Conta conectada (nome no Spotify) ou None."""
+        return _load_token().get("account")
 
     def _access_token(self):
         """Devolve um access token válido, renovando quando necessário."""

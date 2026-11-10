@@ -157,5 +157,48 @@ class TestAgentDecision(unittest.TestCase):
         self.signal.assert_called_once_with("TO_CHAT")
 
 
+
+class TestTranslateHotkey(unittest.TestCase):
+    def setUp(self):
+        import agent
+        self.agent = agent
+        self.notified, self.written = [], []
+
+    def _run(self, text, translation=("Hello world", "inglês")):
+        return self.agent.translate_selection(lambda: text, lambda t: translation,
+                                              self.written.append,
+                                              lambda msg, title: self.notified.append((msg, title)))
+
+    def test_translates_writes_and_notifies(self):
+        self.assertEqual(self._run("Olá mundo"), "ok")
+        self.assertEqual(self.written, ["Hello world"])
+        self.assertIn("inglês", self.notified[0][1])
+
+    def test_empty_selection(self):
+        self.assertEqual(self._run(None), "empty")
+        self.assertEqual(self.written, [])
+        self.assertIn("Selecione", self.notified[0][0])
+
+    def test_model_offline(self):
+        self.assertEqual(self._run("texto", translation=(None, "inglês")), "no_model")
+        self.assertEqual(self.written, [])
+
+    def test_long_translation_is_cut_in_toast(self):
+        self._run("x", translation=("a" * 1000, "português do Brasil"))
+        self.assertEqual(len(self.notified[0][0]), self.agent.TOAST_CHARS)
+        self.assertEqual(len(self.written[0]), 1000)  # clipboard leva tudo
+
+    def test_hotkeys_have_distinct_ids(self):
+        from core.hotkey import GlobalHotkey
+        win_j = GlobalHotkey("win+j", lambda: None)
+        trans = GlobalHotkey("ctrl+alt+t", lambda: None, hotkey_id=self.agent.TRANSLATE_HOTKEY_ID)
+        self.assertNotEqual(win_j.hotkey_id, trans.hotkey_id)
+        self.assertEqual(trans.mods, MOD_CONTROL | MOD_ALT)
+
+    def test_setting_has_default(self):
+        self.assertEqual(settings.TRANSLATE_HOTKEY, "ctrl+alt+t")
+
+
+
 if __name__ == "__main__":
     unittest.main()

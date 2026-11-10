@@ -35,6 +35,57 @@ def get_monitors():
     return monitors
 
 
+class MONITORINFO(ctypes.Structure):
+    _fields_ = [("cbSize", ctypes.c_ulong), ("rcMonitor", RECT), ("rcWork", RECT), ("dwFlags", ctypes.c_ulong)]
+
+
+MONITOR_DEFAULTTONEAREST = 2
+_SHELL_CLASSES = {"Progman", "WorkerW", "Shell_TrayWnd"}
+
+
+WS_CAPTION = 0x00C00000
+GWL_STYLE = -16
+
+
+def covers_monitor(window, monitor):
+    """Retângulo da janela cobre o monitor inteiro? (lógica pura)"""
+    return (window[0] <= monitor[0] and window[1] <= monitor[1]
+            and window[2] >= monitor[2] and window[3] >= monitor[3])
+
+
+def looks_fullscreen(window, monitor, zoomed, caption):
+    """Tela cheia de verdade (jogo, F11, vídeo, apresentação) — não uma janela comum
+    maximizada num monitor sem barra de tarefas, que também cobre o monitor."""
+    return covers_monitor(window, monitor) and not (zoomed and caption)
+
+
+def is_foreground_fullscreen():
+    """App em tela cheia em foco (jogo, vídeo, apresentação)? Desktop e barra de tarefas não contam."""
+    from ctypes import wintypes
+    user32.GetForegroundWindow.restype = wintypes.HWND
+    user32.MonitorFromWindow.restype = wintypes.HANDLE
+    user32.MonitorFromWindow.argtypes = (wintypes.HWND, wintypes.DWORD)
+    hwnd = user32.GetForegroundWindow()
+    if not hwnd or hwnd == user32.GetShellWindow():
+        return False
+    cls = ctypes.create_unicode_buffer(64)
+    user32.GetClassNameW(hwnd, cls, 64)
+    if cls.value in _SHELL_CLASSES:
+        return False
+    rect = RECT()
+    if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+        return False
+    info = MONITORINFO()
+    info.cbSize = ctypes.sizeof(MONITORINFO)
+    monitor = user32.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)
+    if not monitor or not user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+        return False
+    m = info.rcMonitor
+    caption = bool(user32.GetWindowLongW(hwnd, GWL_STYLE) & WS_CAPTION)
+    return looks_fullscreen((rect.left, rect.top, rect.right, rect.bottom), (m.left, m.top, m.right, m.bottom),
+                            bool(user32.IsZoomed(hwnd)), caption)
+
+
 def get_active_window_handle():
     return user32.GetForegroundWindow()
 

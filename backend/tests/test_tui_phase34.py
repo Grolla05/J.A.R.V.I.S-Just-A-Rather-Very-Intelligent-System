@@ -217,6 +217,75 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
             self.assertIn("+20%", str(app.screen.query_one("#cfg-options").get_option_at_index(1).prompt))
             self.assertIn("Velocidade", str(app.screen.query_one("#cfg-quip").render()))
 
+    async def test_config_integrations_cards_connect_and_disconnect(self):
+        import threading
+
+        import services.integrations as integrations
+        release, state = threading.Event(), {"on": False}
+
+        def connect():
+            release.wait(3)
+            state["on"] = True
+            return "Fake conectado."
+
+        def disconnect():
+            state["on"] = False
+            return "Fake desconectado."
+
+        fake = integrations.Integration(
+            "fake", "Fake Agenda", "desc", lambda: ("on", "conta x") if state["on"] else ("off", "pronto"),
+            connect, disconnect)
+        other = integrations.Integration("other", "Outro", "desc", lambda: ("setup", "falta .env"), lambda: "")
+        with patch.object(integrations, "all_integrations", return_value=[fake, other]), \
+             patch.object(integrations, "get", lambda i: {"fake": fake, "other": other}.get(i)):
+            app = self._app()
+            async with app.run_test(size=(150, 48)) as pilot:
+                await self._cmd(app, pilot, "/config")
+                screen = app.screen
+                menu = screen.query_one("#cfg-menu")
+                menu.highlighted = 3  # INTEGRAÇÕES
+                await pilot.pause()
+                self.assertEqual(screen.group, "INTEGRAÇÕES")
+                self.assertTrue(screen.query_one("#cfg-cards").display)
+                self.assertFalse(screen.query_one("#cfg-options").display)
+                await pilot.press("enter")          # menu → 1º card
+                card = screen.query_one("#int-fake")
+                self.assertTrue(card.has_focus)
+                self.assertTrue(card.has_class("-off"))
+                self.assertTrue(screen.query_one("#int-other").has_class("-setup"))
+                await pilot.press("enter")          # conecta
+                await self._wait(pilot, lambda: card.has_class("-wait"))
+                self.assertIn("AGUARDANDO", str(card.query_one(".int-badge").render()))
+                release.set()
+                await self._wait(pilot, lambda: card.has_class("-on"))
+                self.assertIn("conta x", str(card.query_one(".int-detail").render()))
+                self.assertIn("Fake conectado", str(screen.query_one("#cfg-quip").render()))
+                await pilot.press("delete")         # pede confirmação
+                await pilot.pause(0.2)
+                self.assertIsInstance(app.screen, tui_app.ConfirmScreen)
+                await pilot.press("s")
+                await self._wait(pilot, lambda: card.has_class("-off"))
+                await pilot.press("right")          # anda na grade
+                self.assertTrue(screen.query_one("#int-other").has_focus)
+
+    async def test_commute_alert_fires_once_per_day(self):
+        import datetime
+
+        import frontend.app as app_mod
+        app = self._app()
+        async with app.run_test(size=(140, 45)) as pilot:
+            user_prefs.set("commute_alert", 450)
+            monday = datetime.datetime(2026, 11, 9, 7, 35)
+            with patch.object(app_mod.JarvisApp, "_make_commute_alert", staticmethod(lambda: "**Hora de sair**")), \
+                 patch.object(app, "_speak_always"):
+                self.assertTrue(app._check_commute_alert(monday))
+                await app.workers.wait_for_complete()
+                self.assertFalse(app._check_commute_alert(monday))   # 1×/dia
+            await pilot.pause()
+            self.assertEqual(self.db.get_config("commute_alert_last"), "2026-11-09")
+            texts = [str(v._text) for v in app.main_screen.query("MessageView")]
+            self.assertTrue(any("Hora de sair" in t for t in texts))
+
     async def test_vault_search_preview_and_use_in_chat(self):
         import frontend.screens.vault as vault
         client = FakeVaultClient()
@@ -253,6 +322,28 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
             await self._wait(pilot, lambda: "[ FAIL ]" in tags())
             self.assertIn("[  OK  ]", tags())
             await self._wait(pilot, lambda: app.screen is app.main_screen)
+
+    async def test_quiet_boot_skips_screen_and_notifies_problems(self):
+        # Aberto pelo agente (--copilot): sem tela de boot, checagens em segundo
+        # plano, sem a etapa do microfone e problemas viram notificação
+        seen = {}
+
+        def fake_boot(report, steps=boot.STEPS):
+            seen["steps"] = [name for name, _ in steps]
+            report("core.obsidian", "warn", "vault offline")
+            report(boot.DONE, "ok", "")
+
+        app = self._app(boot_fn=fake_boot, quiet_boot=True)
+        with patch.object(app, "notify") as notify:
+            async with app.run_test(size=(140, 45)) as pilot:
+                await pilot.pause(0.2)
+                self.assertIs(app.screen, app.main_screen)
+                self.assertFalse(any(isinstance(s, tui_app.BootScreen) for s in app.screen_stack))
+                await app.workers.wait_for_complete()
+                await pilot.pause()
+                self.assertNotIn(boot.MIC_STEP, seen["steps"])
+                self.assertIn("core.config", seen["steps"])
+                self.assertTrue(any("vault offline" in str(c) for c in notify.call_args_list))
 
     async def test_boot_row_has_status_without_waiting_for_mount(self):
         # Regressão do CI: a linha era pintada depois de montar e, num runner

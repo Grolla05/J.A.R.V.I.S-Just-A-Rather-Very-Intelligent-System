@@ -4,6 +4,7 @@ import core.state as state
 from core import log, manager, settings
 from core.alerts import process_system_alert
 from core.obsidian import get_vault_context
+from services import live_context
 from services.chat import ask_local_ai, ask_local_ai_stream
 from services.intent import classify_intent, is_skill_enabled
 from services.memory import extract_fact_to_memory
@@ -72,7 +73,7 @@ def execute_command(command, session_id='default'):
         vault_file, vault_ctx = get_vault_context(command)
         return ask_local_ai(command, intent_type=intent, entity=entity,
                             vault_context=vault_ctx, vault_filename=vault_file,
-                            session_id=session_id)
+                            session_id=session_id, live_context=live_context.build(command))
 
 
 def execute_command_stream(command, session_id='default', images=None, mode=MODE_CHAT, on_route=None):
@@ -102,7 +103,8 @@ def execute_command_stream(command, session_id='default', images=None, mode=MODE
         vault_file, vault_ctx = get_vault_context(command)
         for chunk in ask_local_ai_stream(command, intent_type=intent, entity=entity,
                                           vault_context=vault_ctx, vault_filename=vault_file,
-                                          session_id=session_id, images=images, mode=mode):
+                                          session_id=session_id, images=images, mode=mode,
+                                          live_context=live_context.build(command)):
             yield chunk
 
 

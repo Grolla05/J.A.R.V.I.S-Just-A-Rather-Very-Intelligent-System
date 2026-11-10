@@ -593,8 +593,33 @@ SlotBar > .slot-bar--empty { color: $j-line; }
     padding: 1 2;
 }
 #cfg-face { margin-right: 2; }
-#cfg-dialog-text { height: auto; }
+#cfg-dialog-text { height: auto; width: 1fr; }
+#cfg-quip { width: 1fr; }  /* quebra linha: instruções longas não somem na borda */
 #cfg-speaker { color: $j-neon; text-style: bold; }
+
+/* --- /config → INTEGRAÇÕES: cards --- */
+#cfg-cards { grid-size: 2; grid-gutter: 1 2; height: auto; }
+.int-card {
+    height: auto;
+    padding: 0 1;
+    border: round $j-line;
+    background: $j-bg;
+}
+.int-card:focus { border: double $j-neon; background: $j-footer; }
+.int-head { height: 1; }
+.int-led { width: 2; color: $j-orb-ring-dim; }
+.int-name { width: 1fr; color: $j-white; text-style: bold; }
+.int-badge { background: $j-line; color: $j-text-soft; text-style: bold; }
+.int-desc { color: $j-muted; }
+.int-detail { color: $j-text-soft; }
+.int-hint { color: $j-neon; }
+.int-card.-on .int-led { color: $j-ok; }
+.int-card.-on .int-badge { background: $j-ok; color: $j-ink; }
+.int-card.-wait .int-led { color: $j-warn; }
+.int-card.-wait .int-badge { background: $j-warn; color: $j-ink; }
+.int-card.-wait .int-detail { color: $j-warn; }
+.int-card.-setup .int-led { color: $j-warn; }
+.int-card.-setup .int-badge { background: $j-line; color: $j-warn; }
 
 /* --- Boot / splash --- */
 BootScreen { background: $j-bg; }

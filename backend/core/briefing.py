@@ -1,4 +1,4 @@
-"""Briefing diário: saudação, clima, máquina, arquivos recentes, GitHub e notícias.
+"""Briefing diário: saudação, clima, agenda, trânsito, máquina, arquivos recentes, GitHub e notícias.
 
 `collect()` junta as fontes — cada uma isolada em try, uma falha não derruba o
 resto. `build()` pede ao Ollama um texto curto no tom do JARVIS; sem LLM, monta
@@ -109,17 +109,20 @@ def _news(limit=4):
 
 def collect(include_news=False, now=None):
     """Dados do briefing. Chave ausente/None = fonte indisponível."""
-    from core import github_client
+    from core import github_client, google_calendar, traffic
     from core.weather import get_time_greeting, get_weather_context
 
     now = now or datetime.datetime.now()
     sources = {
         "greeting": lambda: get_time_greeting(_user_name(), now),
         "weather": get_weather_context,
+        "agenda": lambda: google_calendar.summary(now.date()),
         "system": _system_line,
         "files": lambda: [p.name for p in recent_files(now=now)],
         "github": github_client.summary,
     }
+    if now.weekday() < 5:
+        sources["traffic"] = lambda: traffic.commute_line(now)
     if include_news:
         sources["news"] = _news
     data = {"date": now.strftime("%d/%m/%Y"), "weekday": _WEEKDAYS[now.weekday()]}
@@ -141,6 +144,10 @@ def to_markdown(data):
     lines = [f"**{data.get('greeting') or 'Bom dia.'}** {data['weekday'].capitalize()}, {data['date']}.", ""]
     if data.get("weather"):
         lines.append(f"- **Clima:** {data['weather']}")
+    if data.get("agenda"):
+        lines.append(f"- **Agenda:** {data['agenda']}")
+    if data.get("traffic"):
+        lines.append(f"- **Trânsito:** {data['traffic']}")
     if data.get("system"):
         lines.append(f"- **Sistema:** {data['system']}")
     if data.get("github"):

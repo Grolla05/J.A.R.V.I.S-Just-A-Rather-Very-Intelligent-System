@@ -10,6 +10,7 @@
 ;
 ; Uso: iscc /DVersao=x.y.z installer\jarvis.iss
 ; Silencioso (CI): JARVIS-Setup.exe /VERYSILENT /SKIPOLLAMA [/MODEL=llama3.2]
+; Atualização automática (agente no logon): /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SKIPOLLAMA /UPDATE
 
 #ifndef Versao
   #define Versao "0.0.0-dev"
@@ -96,10 +97,14 @@ Name: "{group}\{cm:UninstallProgram,J.A.R.V.I.S}"; Filename: "{uninstallexe}"
 [Registry]
 ; Agente residente (pythonw, sem janela) no logon: segura o Win+J e reabre a TUI.
 ; O /config e o ícone da bandeja ligam/desligam este mesmo valor depois.
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "JARVIS"; ValueData: """{app}\runtime\pythonw.exe"" ""{app}\app\backend\agent.py"""; Tasks: autostart; Flags: uninsdeletevalue
+; --logon: só nessa subida o agente procura versão nova (backend\core\updater.py).
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "JARVIS"; ValueData: """{app}\runtime\pythonw.exe"" ""{app}\app\backend\agent.py"" --logon"; Tasks: autostart; Flags: uninsdeletevalue
 
 [Run]
 Filename: "{app}\runtime\pythonw.exe"; Parameters: """{app}\app\backend\agent.py"""; WorkingDir: "{app}\app\backend"; Tasks: autostart; Flags: nowait skipifsilent
+; Atualização automática (/UPDATE, aberta pelo agente no logon): o agente se
+; fechou para liberar o runtime; reabre ele sem --logon (não verifica de novo)
+Filename: "{app}\runtime\pythonw.exe"; Parameters: """{app}\app\backend\agent.py"""; WorkingDir: "{app}\app\backend"; Check: EhAtualizacao; Flags: nowait runasoriginaluser
 Filename: "{app}\jarvis.cmd"; Description: "{cm:LaunchProgram,J.A.R.V.I.S}"; WorkingDir: "{app}"; Flags: postinstall nowait skipifsilent shellexec
 
 [UninstallRun]
@@ -148,6 +153,12 @@ begin
       Result := True;
       exit;
     end;
+end;
+
+// /UPDATE: setup silencioso aberto pelo próprio agente (core/updater.py)
+function EhAtualizacao: Boolean;
+begin
+  Result := TemParam('UPDATE');
 end;
 
 function PularOllama: Boolean;

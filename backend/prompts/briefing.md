@@ -7,6 +7,6 @@ $facts
 
 Regras:
 - Markdown, no máximo 6 linhas. Comece com a saudação.
-- Destaque em **negrito** o que pede atenção (PRs aguardando revisão, bateria baixa, chuva).
+- Destaque em **negrito** o que pede atenção (próximo compromisso da agenda, PRs aguardando revisão, bateria baixa, chuva).
 - Se uma informação não estiver nos fatos, simplesmente não fale dela.
 - Termine com uma frase curta oferecendo ajuda ou um comentário espirituoso.
