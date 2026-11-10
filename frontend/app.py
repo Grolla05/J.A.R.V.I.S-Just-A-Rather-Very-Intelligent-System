@@ -123,12 +123,16 @@ class JarvisApp(App, inherit_bindings=False):
     critical = reactive(False, init=False)
     busy = reactive(False, init=False)
 
-    def __init__(self, stream_fn=None, start_services=True, voice=None, boot_fn=None, start_mode=None):
+    def __init__(self, stream_fn=None, start_services=True, voice=None, boot_fn=None, start_mode=None,
+                 quiet_boot=False):
         """`boot_fn(report)` (core.boot.run_boot) mostra a tela de boot antes da
         conversa; None (testes, `start_services=False`) pula direto pro chat.
         `start_mode="copilot"` (main.py --copilot, aberto pelo Win+J) entra no
-        Copilot assim que a conversa aparece."""
+        Copilot assim que a conversa aparece. `quiet_boot=True` (também do
+        --copilot) roda as checagens do boot em segundo plano, sem a tela de
+        boot: a interface já abre pronta e só os problemas viram notificação."""
         super().__init__()
+        self._quiet_boot = quiet_boot
         self._start_mode = start_mode if start_mode in MODES else None
         self._presence_stop = threading.Event()  # encerra a escuta dos sinais do agente
         self._stream_fn = stream_fn or _default_stream
@@ -200,7 +204,10 @@ class JarvisApp(App, inherit_bindings=False):
             self._register_presence()
         else:
             self.add_system("`[  OK  ]` Sistemas online.")
-        if self._boot_fn:
+        if self._boot_fn and self._quiet_boot:
+            self._apply_start_mode()
+            self._silent_boot()
+        elif self._boot_fn:
             from core.boot import STEPS
             self.push_screen(BootScreen(self._boot_fn, total_steps=len(STEPS)), self._boot_closed)
         else:
@@ -211,6 +218,31 @@ class JarvisApp(App, inherit_bindings=False):
         if self._start_services:
             self._poll_health()
         self._apply_start_mode()
+
+    @work(thread=True, exclusive=True, group="boot")
+    def _silent_boot(self):
+        """Boot sem tela (aberto pelo agente): mesmas checagens, sem a do
+        microfone — o Copilot já abre o mic, e duas threads no PortAudio ao
+        mesmo tempo derrubam o processo."""
+        from core.boot import DONE, MIC_STEP, STEPS
+        problems = []
+
+        def report(name, status, detail):
+            if name != DONE and status in ("warn", "fail"):
+                problems.append(f"{name}: {detail}" if detail else name)
+
+        try:
+            self._boot_fn(report, steps=tuple(s for s in STEPS if s[0] != MIC_STEP))
+        except Exception as e:
+            log.warning(f"Boot silencioso falhou: {e}")
+            problems.append(str(e)[:60])
+        self.call_from_thread(self._silent_boot_done, problems)
+
+    def _silent_boot_done(self, problems):
+        for problem in problems:
+            self.notify(problem, title="Boot", severity="warning")
+        if self._start_services:
+            self._poll_health()
 
     def _apply_start_mode(self):
         if self._start_mode and self._start_mode != self.mode:

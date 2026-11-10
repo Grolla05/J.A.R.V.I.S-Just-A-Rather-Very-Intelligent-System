@@ -2,6 +2,17 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+**Data:** 2026-11-10
+**Escopo:** TUI aberta pelo agente (Win+J / bandeja) abre direto na interface do Copilot, sem a tela de boot.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `--copilot` (usado só pelo agente) liga `quiet_boot`: a conversa já aparece no Copilot e as checagens do boot rodam num worker de thread; etapas com `warn`/`fail` viram notificação "Boot". A etapa do microfone fica de fora (o Copilot já abre o mic e duas threads no PortAudio derrubam o processo); a saúde roda ao fim, como no boot normal. Aberto à mão (`jarvis.cmd` / `python main.py`) continua com a tela de boot | `frontend/app.py`, `backend/main.py`, `backend/core/boot.py` (`MIC_STEP`) |
+
+**Testes novos:** `test_quiet_boot_skips_screen_and_notifies_problems` em `test_tui_phase34.py`.
+
+---
+
 **Data:** 2026-11-09 (2)
 **Escopo:** Correções de interface: crash intermitente no boot, rodapé, logo na aba do Windows Terminal, VU de voz, fim do `/help` e `/skills` por categoria.
 

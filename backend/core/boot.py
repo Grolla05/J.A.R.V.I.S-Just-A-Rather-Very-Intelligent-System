@@ -57,6 +57,8 @@ def _check_microphone():
     return check_microphone(refresh=True)
 
 
+MIC_STEP = "services.listen"
+
 STEPS = (
     ("core.config", _check_config),
     ("core.database", _check_database),
@@ -64,7 +66,7 @@ STEPS = (
     ("core.llm / Ollama", _check_ollama),
     ("core.hardware", _check_hardware),
     ("core.obsidian", _check_obsidian),
-    ("services.listen", _check_microphone),
+    (MIC_STEP, _check_microphone),
 )
 
 

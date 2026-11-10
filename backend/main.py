@@ -45,9 +45,11 @@ def start_jarvis():
     # A tela de boot roda as checagens (config, banco, skills, Obsidian, mic) e
     # dispara em threads daemon o warm-up do Ollama e o scan de hardware (WMI),
     # que escondem a latência do 1º comando sem travar o boot.
-    # --copilot: aberto pelo agente residente (Win+J) já direto no modo voz.
-    start_mode = "copilot" if "--copilot" in sys.argv[1:] else None
-    JarvisApp(boot_fn=run_boot, start_mode=start_mode).run()
+    # --copilot: aberto pelo agente residente (Win+J / bandeja) já direto no
+    # modo voz e sem a tela de boot (as checagens rodam em segundo plano).
+    from_agent = "--copilot" in sys.argv[1:]
+    start_mode = "copilot" if from_agent else None
+    JarvisApp(boot_fn=run_boot, start_mode=start_mode, quiet_boot=from_agent).run()
 
 
 if __name__ == '__main__':

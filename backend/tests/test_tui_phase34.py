@@ -254,6 +254,28 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
             self.assertIn("[  OK  ]", tags())
             await self._wait(pilot, lambda: app.screen is app.main_screen)
 
+    async def test_quiet_boot_skips_screen_and_notifies_problems(self):
+        # Aberto pelo agente (--copilot): sem tela de boot, checagens em segundo
+        # plano, sem a etapa do microfone e problemas viram notificação
+        seen = {}
+
+        def fake_boot(report, steps=boot.STEPS):
+            seen["steps"] = [name for name, _ in steps]
+            report("core.obsidian", "warn", "vault offline")
+            report(boot.DONE, "ok", "")
+
+        app = self._app(boot_fn=fake_boot, quiet_boot=True)
+        with patch.object(app, "notify") as notify:
+            async with app.run_test(size=(140, 45)) as pilot:
+                await pilot.pause(0.2)
+                self.assertIs(app.screen, app.main_screen)
+                self.assertFalse(any(isinstance(s, tui_app.BootScreen) for s in app.screen_stack))
+                await app.workers.wait_for_complete()
+                await pilot.pause()
+                self.assertNotIn(boot.MIC_STEP, seen["steps"])
+                self.assertIn("core.config", seen["steps"])
+                self.assertTrue(any("vault offline" in str(c) for c in notify.call_args_list))
+
     async def test_boot_row_has_status_without_waiting_for_mount(self):
         # Regressão do CI: a linha era pintada depois de montar e, num runner
         # lento, o selo ficava vazio para sempre
