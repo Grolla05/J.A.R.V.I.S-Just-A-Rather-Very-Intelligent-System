@@ -27,6 +27,28 @@ class TestDetection(unittest.TestCase):
         self.assertFalse(window_utils.looks_presenting("POWERPNT.EXE", False))  # editando slides não
         self.assertFalse(window_utils.looks_presenting("", True))
 
+    def test_canva_and_web_slides(self):
+        lp = window_utils.looks_presenting
+        self.assertTrue(lp("Canva.exe", True))                                     # app desktop
+        self.assertTrue(lp("chrome.exe", True, "Pitch Solar Points - Canva"))      # Canva no navegador
+        self.assertTrue(lp("msedge.exe", True, "Aula 3 - Apresentações Google"))
+        self.assertTrue(lp("opera.exe", True, "deck.pptx - PowerPoint"))           # PowerPoint Online
+        self.assertFalse(lp("chrome.exe", True, "YouTube"))                        # vídeo em tela cheia não
+        self.assertFalse(lp("chrome.exe", False, "Pitch - Canva"))                 # editando no Canva não
+        self.assertFalse(lp("notepad.exe", True, "canva.txt"))                     # só navegador lê título
+
+    def test_powerpoint_open_pref(self):
+        lp = window_utils.looks_presenting
+        self.assertTrue(lp("POWERPNT.EXE", False, app_open=True))                  # .pptx aberto em janela
+        self.assertFalse(lp("POWERPNT.EXE", False, app_open=False))
+        self.assertFalse(lp("chrome.exe", False, "Pitch - Canva", app_open=True))  # só o PowerPoint
+
+    def test_filter_passes_open_pref(self):
+        with patch("core.window_utils.is_presenting", return_value=True) as det, \
+             patch.object(notify_filter, "_pref", side_effect=lambda k: k == "presentation_open"):
+            self.assertTrue(notify_filter._presenting())
+        det.assert_called_once_with(app_open=True)
+
 
 class TestFilter(unittest.TestCase):
     def setUp(self):

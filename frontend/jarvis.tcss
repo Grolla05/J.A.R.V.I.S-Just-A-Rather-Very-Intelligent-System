@@ -645,6 +645,21 @@ BootScreen { background: $j-bg; }
 #boot-bar { color: $j-neon; }
 #boot-final { margin-top: 1; color: $j-white; }
 
+/* --- Atualização disponível (canvas "16 · Atualização disponível") --- */
+UpdateScreen { background: $j-bg; }
+#update-head { height: 1; background: $j-panel; color: $j-muted; padding: 0 1; }
+#update-brand { width: auto; color: $j-neon; text-style: bold; margin-right: 2; }
+#update-badge { width: auto; background: $j-neon; color: $j-bg; text-style: bold; padding: 0 1; margin-right: 2; }
+#update-source { width: 1fr; }
+#update-body { height: 1fr; align: center middle; }
+#update-body Center { height: auto; }
+#update-orb { margin-bottom: 1; }
+#update-headline { color: $j-neon; text-style: bold; margin-bottom: 1; }
+#update-versions { color: $j-ok; text-style: bold; }
+#update-prompt { color: $j-white; margin-top: 2; }
+#update-foot { height: 1; background: $j-panel; color: $j-text-soft; padding: 0 1; align-horizontal: right; }
+#update-keys { width: auto; }
+
 /* --- Shutdown CRT --- */
 ShutdownScreen { background: black; align: center middle; }
 #shutdown-lines { width: auto; height: auto; }

@@ -86,14 +86,29 @@ def is_foreground_fullscreen():
                             bool(user32.IsZoomed(hwnd)), caption)
 
 
-# Processos que, em tela cheia, contam como apresentação (PowerPoint e leitores de PDF)
-PRESENTATION_APPS = {"powerpnt.exe", "acrord32.exe", "acrobat.exe", "sumatrapdf.exe",
+# Processos que, em tela cheia, contam como apresentação (slides e leitores de PDF)
+PRESENTATION_APPS = {"powerpnt.exe", "canva.exe", "acrord32.exe", "acrobat.exe", "sumatrapdf.exe",
                      "foxitpdfreader.exe", "foxitreader.exe"}
+# Navegadores: em tela cheia só contam quando o título da aba é de um editor de slides
+BROWSER_APPS = {"chrome.exe", "msedge.exe", "firefox.exe", "opera.exe", "brave.exe", "vivaldi.exe"}
+SLIDE_TITLE_HINTS = ("canva", "google slides", "apresentações google", "powerpoint")
+# Pref `presentation_open`: o PowerPoint em foco conta mesmo sem tela cheia (.pptx aberto)
+OPEN_APPS = {"powerpnt.exe"}
 
 
-def looks_presenting(process_name, fullscreen):
-    """Apresentação = app de slides/PDF em tela cheia. Lógica pura (testável)."""
-    return bool(fullscreen and (process_name or "").lower() in PRESENTATION_APPS)
+def looks_presenting(process_name, fullscreen, title="", app_open=False):
+    """Apresentação = app de slides/PDF em tela cheia, navegador em tela cheia
+    numa aba de slides (Canva, Google Slides, PowerPoint Online) ou — com
+    `app_open` — o PowerPoint em foco mesmo em janela. Lógica pura (testável)."""
+    name = (process_name or "").lower()
+    if app_open and name in OPEN_APPS:
+        return True
+    if not fullscreen:
+        return False
+    if name in PRESENTATION_APPS:
+        return True
+    text = (title or "").lower()
+    return name in BROWSER_APPS and any(hint in text for hint in SLIDE_TITLE_HINTS)
 
 
 def foreground_process_name():
@@ -111,10 +126,25 @@ def foreground_process_name():
         return ""
 
 
-def is_presenting():
-    """PowerPoint (F5) ou leitor de PDF em tela cheia em foco?"""
+def foreground_window_title():
+    """Título da janela em foco ('' se não houver) — no navegador, o da aba."""
+    hwnd = user32.GetForegroundWindow()
+    if not hwnd:
+        return ""
+    length = user32.GetWindowTextLengthW(hwnd)
+    buff = ctypes.create_unicode_buffer(length + 1)
+    user32.GetWindowTextW(hwnd, buff, length + 1)
+    return buff.value
+
+
+def is_presenting(app_open=False):
+    """Slides/PDF em tela cheia em foco (PowerPoint F5, Canva, Google Slides…)?
+    `app_open=True` também conta o PowerPoint em foco sem tela cheia."""
     fullscreen = is_foreground_fullscreen()
-    return looks_presenting(foreground_process_name() if fullscreen else "", fullscreen)
+    if not (fullscreen or app_open):
+        return False
+    return looks_presenting(foreground_process_name(), fullscreen,
+                            foreground_window_title() if fullscreen else "", app_open)
 
 
 def get_active_window_handle():

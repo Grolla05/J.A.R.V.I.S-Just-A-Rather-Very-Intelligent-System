@@ -128,11 +128,12 @@ def is_agent_running():
     return True
 
 
-def start_agent():
-    """Sobe o agente desacoplado desta TUI (sobrevive ao fechar o terminal)."""
+def start_agent(extra_args=()):
+    """Sobe o agente desacoplado desta TUI (sobrevive ao fechar o terminal).
+    `extra_args=("--install-update",)`: tela de atualização sem agente rodando."""
     import subprocess
     try:
-        subprocess.Popen([str(pythonw_path()), str(agent_script())], cwd=str(settings.DIR_BACKEND),
+        subprocess.Popen([str(pythonw_path()), str(agent_script()), *extra_args], cwd=str(settings.DIR_BACKEND),
                          creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP, close_fds=True)
         return True
     except OSError as e:

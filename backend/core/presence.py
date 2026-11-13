@@ -3,7 +3,9 @@
 A TUI grava `tui.json` ({pid, hwnd}) em settings.DIR_DATA ao subir e apaga ao
 sair; o agente lê para saber se ela está aberta e qual janela focar. Para
 mandar a TUI ao Copilot (ou de volta ao Chat) o agente dispara um evento
-nomeado do Windows, que uma thread daemon da TUI espera. Sem socket, sem HTTP.
+nomeado do Windows, que uma thread daemon da TUI espera. No sentido contrário,
+a tela de atualização dispara `INSTALL_UPDATE`, que o agente espera. Sem
+socket, sem HTTP.
 """
 import ctypes
 import json
@@ -15,7 +17,10 @@ from .logger import log
 
 SUMMON = "SUMMON"    # ir ao Copilot
 TO_CHAT = "TO_CHAT"  # voltar ao Chat
-EVENTS = {SUMMON: "Local\\JARVIS_SUMMON", TO_CHAT: "Local\\JARVIS_TO_CHAT"}
+EVENTS = {SUMMON: "Local\\JARVIS_SUMMON", TO_CHAT: "Local\\JARVIS_TO_CHAT"}  # agente -> TUI
+INSTALL_UPDATE = "INSTALL_UPDATE"  # tela de atualização: instalar já
+AGENT_EVENTS = {INSTALL_UPDATE: "Local\\JARVIS_INSTALL_UPDATE"}  # TUI -> agente
+_ALL_EVENTS = {**EVENTS, **AGENT_EVENTS}
 
 EVENT_MODIFY_STATE, SYNCHRONIZE = 0x0002, 0x00100000
 WAIT_TIMEOUT = 0x102
@@ -72,9 +77,9 @@ def read_tui():
 
 
 def signal(name):
-    """Dispara o evento nomeado (agente -> TUI). False se a TUI não o criou."""
+    """Dispara o evento nomeado. False se o outro lado (TUI ou agente) não o criou."""
     kernel32 = ctypes.windll.kernel32
-    handle = kernel32.OpenEventW(EVENT_MODIFY_STATE, False, EVENTS[name])
+    handle = kernel32.OpenEventW(EVENT_MODIFY_STATE, False, _ALL_EVENTS[name])
     if not handle:
         return False
     try:
@@ -83,11 +88,13 @@ def signal(name):
         kernel32.CloseHandle(handle)
 
 
-def wait_signals(callback, stop_event):
-    """Thread daemon da TUI: cria os eventos e chama callback(nome) a cada sinal."""
+def wait_signals(callback, stop_event, events=None):
+    """Thread daemon: cria os eventos e chama callback(nome) a cada sinal.
+    TUI usa `EVENTS` (padrão); o agente passa `AGENT_EVENTS`."""
     kernel32 = ctypes.windll.kernel32
-    names = list(EVENTS)
-    handles = [kernel32.CreateEventW(None, False, False, EVENTS[n]) for n in names]  # auto-reset
+    events = EVENTS if events is None else events
+    names = list(events)
+    handles = [kernel32.CreateEventW(None, False, False, events[n]) for n in names]  # auto-reset
     if not all(handles):
         log.warning("Eventos de invocação (Win+J) indisponíveis.")
         return None
