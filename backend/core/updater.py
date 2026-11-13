@@ -1,12 +1,19 @@
-"""Atualização automática do JARVIS instalado — só no logon do Windows.
+"""Atualização automática do JARVIS instalado.
 
-O agente residente sobe com o Windows com `--logon` (valor `JARVIS` em
-HKCU\\...\\Run). Só nessa hora ele chama `check_and_update()`: compara o
-VERSION instalado com o último Release do GitHub (`UPDATE_REPO`) e, se houver
-versão nova, baixa o `JARVIS-Setup.exe`, confere o SHA-256 publicado pelo
-GitHub (`digest` do asset) e roda o setup em silêncio com `/UPDATE`. O agente
-então se fecha (o pythonw dele trava os arquivos do runtime) e o setup o
-reabre ao terminar. Abrir pela bandeja, Win+J ou menu Iniciar não verifica.
+Duas etapas:
+- `check_available()`: o último Release do GitHub (`UPDATE_REPO`) é mais novo
+  que o VERSION instalado? Roda ao abrir a TUI (boot normal, Win+J, bandeja) e
+  no logon (agente com `--logon`, que então abre a TUI). Com versão nova a TUI
+  mostra a tela "ATUALIZAÇÃO DISPONÍVEL!!" (frontend/screens/update.py). O
+  resultado fica em cache (`updates/available.json`, CACHE_TTL_S) para o Win+J
+  não bater no GitHub toda vez.
+- `install_latest()`: qualquer tecla nessa tela pede ao agente (evento
+  `presence.INSTALL_UPDATE`, ou um agente novo com `--install-update`) que
+  instale. Ele espera a TUI fechar, baixa o `JARVIS-Setup.exe`, confere o
+  SHA-256 publicado pelo GitHub (`digest` do asset) e roda o setup em silêncio
+  com `/UPDATE`. O agente então se fecha (o pythonw dele trava o runtime) e o
+  setup o reabre. O setup apaga `{app}\\app` e `{app}\\runtime` antes de copiar
+  (AppId fixo, mesma pasta): a versão nova substitui a antiga, sem sobras.
 
 Em modo dev (sem JARVIS_DATA_DIR) não faz nada: ali quem atualiza é o git.
 Liga/desliga em /config → SISTEMA (registro HKCU\\Software\\JARVIS\\AutoUpdate);
@@ -17,6 +24,7 @@ import hashlib
 import json
 import re
 import subprocess
+import time
 
 from .config import settings
 from .logger import log
@@ -29,6 +37,10 @@ HTTP_TIMEOUT = 20
 MAX_ASSET_BYTES = 1024 ** 3
 CHUNK = 1024 * 1024
 MARKER_NAME = "pending_update.json"
+CACHE_NAME = "available.json"
+CACHE_TTL_S = 6 * 3600  # Win+J/bandeja reusam a última consulta por 6 h
+QUICK_TIMEOUT = 5       # consulta da TUI: não pode segurar a tela
+TUI_CLOSE_WAIT_S = 60   # install_latest espera a TUI fechar (ela trava o runtime)
 TITLE = "J.A.R.V.I.S — atualização"
 
 REG_KEY = r"Software\JARVIS"
@@ -95,12 +107,12 @@ def _requests():
     return requests
 
 
-def fetch_latest(get=None, repo=None):
+def fetch_latest(get=None, repo=None, timeout=HTTP_TIMEOUT):
     """Último Release: {"version", "url", "size", "sha256"} ou None (sem
     setup/tag válida). Erro de rede sobe como requests.RequestException."""
     repo = repo or settings.UPDATE_REPO
     get = get or _requests().get
-    resp = get(API_URL.format(repo=repo), timeout=HTTP_TIMEOUT,
+    resp = get(API_URL.format(repo=repo), timeout=timeout,
                headers={"Accept": "application/vnd.github+json", "User-Agent": "JARVIS-updater"})
     if resp.status_code == 404:
         return None  # repositório sem Release ainda
@@ -193,6 +205,8 @@ def announce_result(notify):
     current = parse_version(settings.VERSION)
     wanted = parse_version(target)
     if wanted and current and current >= wanted:
+        cleanup()  # o setup da versão antiga não fica no disco
+        _cache_path().unlink(missing_ok=True)
         notify(f"Atualizado para a versão {settings.VERSION}, Senhor.", TITLE)
         log.info(f"✅ Atualização para v{settings.VERSION} concluída.")
         return "updated"
@@ -200,7 +214,104 @@ def announce_result(notify):
     return "not-updated"
 
 
+# ------------------------------------------------- versão nova disponível?
+def _cache_path():
+    return updates_dir() / CACHE_NAME
+
+
+def _read_cache():
+    try:
+        data = json.loads(_cache_path().read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def _write_cache(current, latest, now):
+    try:
+        updates_dir().mkdir(parents=True, exist_ok=True)
+        _cache_path().write_text(json.dumps({"current": current, "version": latest or "", "checked_at": now}),
+                                 encoding="utf-8")
+    except OSError as e:
+        log.debug(f"Cache da atualização não gravado: {e}")
+
+
+def _fetch_with_retries(get, delays, sleep, timeout=HTTP_TIMEOUT):
+    """('ok', release|None) | ('offline', None) | ('failed', None)."""
+    requests = _requests()
+    for delay in (0, *delays):
+        if delay:
+            sleep(delay)
+        try:
+            return "ok", fetch_latest(get, timeout=timeout)
+        except requests.RequestException as e:
+            log.debug(f"Atualização: GitHub indisponível ({e}); tentando de novo.")
+        except (UpdateError, ValueError) as e:
+            log.warning(f"Atualização: release inválido ({e}).")
+            return "failed", None
+    return "offline", None
+
+
+def check_available(get=None, now=None, use_cache=True, retries=(), sleep=time.sleep):
+    """{"version", "current"} quando o Release do GitHub é MAIS NOVO que o
+    instalado (diferente mas mais velho não conta); senão None. Nunca levanta:
+    roda na abertura da TUI e no logon."""
+    try:
+        if not settings.IS_INSTALLED or not is_enabled():
+            return None
+        current = settings.VERSION
+        if not parse_version(current):
+            return None
+        now = time.time() if now is None else now
+        cached = _read_cache() if use_cache else None
+        if (cached and cached.get("current") == current
+                and 0 <= now - float(cached.get("checked_at") or 0) < CACHE_TTL_S):
+            latest = str(cached.get("version") or "")
+        else:
+            status, release = _fetch_with_retries(get, retries, sleep, timeout=QUICK_TIMEOUT)
+            if status != "ok":
+                return None
+            latest = release["version"] if release else ""
+            _write_cache(current, latest, now)
+        return {"version": latest, "current": current} if is_newer(latest, current) else None
+    except Exception as e:  # rede, disco, JSON: a tela simplesmente não aparece
+        log.debug(f"Verificação de atualização falhou: {e}")
+        return None
+
+
+INSTALL_FLAG = "--install-update"  # agent.py: sobe só para instalar
+
+
+def request_install(signal=None, start_agent=None):
+    """TUI → agente (qualquer tecla na tela de atualização). Devolve 'agent'
+    (o agente rodando recebeu o sinal), 'spawned' (subiu um agente com
+    INSTALL_FLAG) ou 'failed'. A TUI deve fechar logo depois."""
+    if signal is None:
+        from . import presence
+        signal = lambda: presence.signal(presence.INSTALL_UPDATE)  # noqa: E731
+    if start_agent is None:
+        from . import autostart
+        start_agent = lambda: autostart.start_agent((INSTALL_FLAG,))  # noqa: E731
+    try:
+        if signal():
+            return "agent"
+        return "spawned" if start_agent() else "failed"
+    except Exception as e:
+        log.warning(f"Pedido de atualização falhou: {e}")
+        return "failed"
+
+
 # ------------------------------------------------------------------ fluxo
+def install_latest(notify, tui_open, sleep, get=None, popen=None, wait_s=TUI_CLOSE_WAIT_S):
+    """Pedido da tela de atualização (qualquer tecla): espera a TUI fechar — o
+    python.exe dela trava o runtime que o setup apaga — e instala."""
+    waited = 0
+    while tui_open() and waited < wait_s:
+        sleep(1)
+        waited += 1
+    return check_and_update(notify, tui_open, sleep, get=get, popen=popen)
+
+
 def check_and_update(notify, tui_open, sleep, get=None, popen=None):
     """Verifica e, se precisar, dispara o setup. Devolve o status; com
     'installing' quem chamou deve encerrar o agente."""
@@ -213,22 +324,13 @@ def check_and_update(notify, tui_open, sleep, get=None, popen=None):
         log.warning(f"VERSION inválido ({current!r}): atualização automática ignorada.")
         return "unknown-version"
     cleanup()
-    requests = _requests()
-    release = None
-    for delay in (0, *RETRY_DELAYS):
-        if delay:
-            sleep(delay)
-        try:
-            release = fetch_latest(get)
-            break
-        except requests.RequestException as e:
-            log.debug(f"Atualização: GitHub indisponível ({e}); tentando de novo.")
-        except (UpdateError, ValueError) as e:
-            log.warning(f"Atualização: release inválido ({e}).")
-            return "failed"
-    else:
-        log.info("Atualização: sem rede depois das tentativas; fica para o próximo logon.")
+    status, release = _fetch_with_retries(get, RETRY_DELAYS, sleep)
+    if status == "failed":
+        return "failed"
+    if status == "offline":
+        log.info("Atualização: sem rede depois das tentativas; fica para a próxima abertura.")
         return "offline"
+    requests = _requests()
     if not release:
         return "no-release"
     if not is_newer(release["version"], current):

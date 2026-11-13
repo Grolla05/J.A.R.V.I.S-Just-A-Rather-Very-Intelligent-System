@@ -254,32 +254,146 @@ class TestCheckAndUpdate(unittest.TestCase):
         marker.write_text(json.dumps({"version": "1.3.0"}), encoding="utf-8")
         self.assertEqual(updater.announce_result(MagicMock()), "not-updated")
 
+    def test_successful_update_deletes_old_setup(self):
+        updates = updater.updates_dir()
+        updates.mkdir(parents=True)
+        (updates / "JARVIS-Setup-1.2.0.exe").write_bytes(b"x")
+        (updates / updater.CACHE_NAME).write_text("{}", encoding="utf-8")
+        (updates / updater.MARKER_NAME).write_text(json.dumps({"version": "1.2.0"}), encoding="utf-8")
+        with patch.object(settings, "VERSION", "1.2.0"):
+            self.assertEqual(updater.announce_result(MagicMock()), "updated")
+        self.assertEqual(list(updates.iterdir()), [])
+
+    def test_install_latest_waits_for_tui_to_close(self):
+        open_checks = iter([True, True, False])
+        status = updater.install_latest(self.notify, lambda: next(open_checks, False), self.sleeps.append,
+                                        get=fake_get(release()), popen=self.popen)
+        self.assertEqual(status, "installing")
+        self.assertEqual(self.sleeps, [1, 1])
+        self.popen.assert_called_once()
+
+
+class TestCheckAvailable(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.patches = [
+            patch.object(updater, "_requests", return_value=requests),
+            patch.object(settings, "IS_INSTALLED", True),
+            patch.object(settings, "DIR_DATA", Path(self.tmp.name)),
+            patch.object(settings, "VERSION", "1.1.0"),
+            patch.object(settings, "UPDATE_REPO", REPO),
+            patch.object(updater, "is_enabled", return_value=True),
+        ]
+        for p in self.patches:
+            p.start()
+
+    def tearDown(self):
+        for p in self.patches:
+            p.stop()
+        self.tmp.cleanup()
+
+    def test_newer_release(self):
+        self.assertEqual(updater.check_available(fake_get(release()), now=1000),
+                         {"version": "1.2.0", "current": "1.1.0"})
+
+    def test_same_or_older_is_not_offered(self):
+        with patch.object(settings, "VERSION", "1.2.0"):
+            self.assertIsNone(updater.check_available(fake_get(release()), now=1000))
+        with patch.object(settings, "VERSION", "1.3.0"):  # distinta, mas mais velha: sem downgrade
+            self.assertIsNone(updater.check_available(fake_get(release()), now=1000, use_cache=False))
+
+    def test_cache_skips_github_until_ttl(self):
+        get = fake_get(release())
+        updater.check_available(get, now=1000)
+        self.assertIsNotNone(updater.check_available(get, now=1000 + 60))
+        self.assertEqual(get.calls["api"], 1)
+        updater.check_available(get, now=1000 + updater.CACHE_TTL_S + 1)
+        self.assertEqual(get.calls["api"], 2)
+
+    def test_cache_from_older_install_is_ignored(self):
+        get = fake_get(release())
+        updater.check_available(get, now=1000)
+        with patch.object(settings, "VERSION", "1.2.0"):  # acabou de atualizar
+            self.assertIsNone(updater.check_available(get, now=1001))
+        self.assertEqual(get.calls["api"], 2)
+
+    def test_never_raises_and_respects_dev_and_toggle(self):
+        self.assertIsNone(updater.check_available(fake_get(release(), fail_times=99), now=1000))
+        self.assertIsNone(updater.check_available(fake_get(release(digest=None)), now=1000, use_cache=False))
+        with patch.object(settings, "IS_INSTALLED", False):
+            self.assertIsNone(updater.check_available(fake_get(release()), now=1000, use_cache=False))
+        with patch.object(updater, "is_enabled", return_value=False):
+            self.assertIsNone(updater.check_available(fake_get(release()), now=1000, use_cache=False))
+
+    def test_retries_on_logon(self):
+        sleeps = []
+        get = fake_get(release(), fail_times=2)
+        info = updater.check_available(get, now=1000, use_cache=False, retries=(15, 45, 90), sleep=sleeps.append)
+        self.assertEqual(info["version"], "1.2.0")
+        self.assertEqual(sleeps, [15, 45])
+
+
+class TestRequestInstall(unittest.TestCase):
+    def test_signal_reaches_running_agent(self):
+        start = MagicMock()
+        self.assertEqual(updater.request_install(lambda: True, start), "agent")
+        start.assert_not_called()
+
+    def test_spawns_agent_when_none_running(self):
+        self.assertEqual(updater.request_install(lambda: False, lambda: True), "spawned")
+        self.assertEqual(updater.request_install(lambda: False, lambda: False), "failed")
+
+    def test_errors_become_failed(self):
+        def boom():
+            raise OSError("sem Win32")
+        self.assertEqual(updater.request_install(boom, lambda: True), "failed")
+
 
 class TestAgentWiring(unittest.TestCase):
     def setUp(self):
         import agent
         self.agent = agent
 
-    def run_it(self, from_logon, status="up-to-date"):
+    def run_it(self, from_logon, available=None, tui_open=False):
         upd = MagicMock()
-        upd.check_and_update.return_value = status
-        exit_agent = MagicMock()
-        result = self.agent.run_update_check(from_logon, upd, MagicMock(), lambda: False, lambda s: None, exit_agent)
-        return result, upd, exit_agent
+        upd.check_available.return_value = available
+        launch = MagicMock()
+        result = self.agent.run_update_check(from_logon, upd, MagicMock(), lambda: tui_open, lambda s: None, launch)
+        return result, upd, launch
 
     def test_only_checks_on_logon(self):
-        result, upd, exit_agent = self.run_it(from_logon=False)
+        result, upd, launch = self.run_it(from_logon=False)
         self.assertIsNone(result)
         upd.announce_result.assert_called_once()
-        upd.check_and_update.assert_not_called()
-        exit_agent.assert_not_called()
+        upd.check_available.assert_not_called()
+        launch.assert_not_called()
 
-    def test_logon_installing_exits_agent(self):
-        result, upd, exit_agent = self.run_it(from_logon=True, status="installing")
-        self.assertEqual(result, "installing")
-        exit_agent.assert_called_once()
-        _r, _u, exit_agent = self.run_it(from_logon=True, status="up-to-date")
-        exit_agent.assert_not_called()
+    def test_logon_with_update_opens_tui(self):
+        info = {"version": "1.2.0", "current": "1.1.0"}
+        result, upd, launch = self.run_it(from_logon=True, available=info)
+        self.assertEqual(result, "prompted")
+        launch.assert_called_once()
+        self.assertFalse(upd.check_available.call_args.kwargs["use_cache"])
+        result, _u, launch = self.run_it(from_logon=True, available=info, tui_open=True)
+        self.assertEqual(result, "deferred")
+        launch.assert_not_called()
+
+    def test_logon_without_update_stays_quiet(self):
+        result, _u, launch = self.run_it(from_logon=True, available=None)
+        self.assertEqual(result, "no-update")
+        launch.assert_not_called()
+
+    def test_install_exits_agent_only_when_setup_runs(self):
+        upd = MagicMock()
+        for status, exits in (("installing", 1), ("failed", 0)):
+            upd.install_latest.return_value = status
+            exit_agent = MagicMock()
+            self.assertEqual(self.agent.run_install(upd, MagicMock(), lambda: False, lambda s: None, exit_agent),
+                             status)
+            self.assertEqual(exit_agent.call_count, exits)
+
+    def test_install_flag_matches_updater(self):
+        self.assertEqual(self.agent.INSTALL_FLAG, updater.INSTALL_FLAG)
 
 
 class TestAutostartLogonFlag(unittest.TestCase):

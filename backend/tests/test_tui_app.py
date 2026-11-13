@@ -485,6 +485,62 @@ class TestJarvisApp(unittest.IsolatedAsyncioTestCase):
             await self._send(pilot, "/naoexiste")
             self.assertEqual(sessions.get_chat_history(app.session_id), [])
 
+    # ------------------------------------------------- atualização disponível
+    def _update_app(self, info, install_fn=None):
+        return tui_app.JarvisApp(stream_fn=_fake_stream, start_services=False, voice=FakeVoice(),
+                                 update_fn=lambda: info, install_fn=install_fn)
+
+    async def test_update_screen_appears_with_versions(self):
+        from frontend.screens import UpdateScreen
+        app = self._update_app({"version": "2.7.0", "current": "2.6.3"})
+        async with app.run_test() as pilot:
+            await self._wait_for(pilot, lambda: isinstance(app.screen, UpdateScreen))
+            text = str(app.screen.query_one("#update-versions").render())
+            self.assertIn("v2.6.3", text)
+            self.assertIn("v2.7.0", text)
+            self.assertIn("ATUALIZAÇÃO DISPONÍVEL!!", str(app.screen.query_one("#update-headline").render()))
+            self.assertIsNone(app.screen.query_one("#update-orb")._timer)  # orb parada
+
+    async def test_no_update_no_screen(self):
+        from frontend.screens import UpdateScreen
+        app = self._update_app(None)
+        async with app.run_test() as pilot:
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            self.assertNotIsInstance(app.screen, UpdateScreen)
+
+    async def test_any_key_requests_install_and_exits(self):
+        from frontend.screens import ShutdownScreen, UpdateScreen
+        calls = []
+        app = self._update_app({"version": "2.7.0", "current": "2.6.3"},
+                               install_fn=lambda: calls.append(1) or "agent")
+        async with app.run_test() as pilot:
+            await self._wait_for(pilot, lambda: isinstance(app.screen, UpdateScreen))
+            await pilot.press("shift+tab")  # até atalho de modo conta como "qualquer tecla"
+            await self._wait_for(pilot, lambda: isinstance(app.screen, ShutdownScreen) or not app.is_running)
+            self.assertEqual(calls, [1])
+            self.assertEqual(app.mode, "chat")
+
+    async def test_failed_install_keeps_tui_open(self):
+        from frontend.screens import UpdateScreen
+        app = self._update_app({"version": "2.7.0", "current": "2.6.3"}, install_fn=lambda: "failed")
+        async with app.run_test() as pilot:
+            await self._wait_for(pilot, lambda: isinstance(app.screen, UpdateScreen))
+            await pilot.press("x")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            self.assertFalse(app._shutting_down)
+            self.assertNotIsInstance(app.screen, UpdateScreen)
+
+    async def test_preview_never_installs(self):
+        from frontend.screens import UpdateScreen
+        app = self._update_app({"version": "9.9.9", "current": "2.6.3"}, install_fn=None)
+        async with app.run_test() as pilot:
+            await self._wait_for(pilot, lambda: isinstance(app.screen, UpdateScreen))
+            await pilot.press("enter")
+            await pilot.pause()
+            self.assertFalse(app._shutting_down)
+
 
 if __name__ == "__main__":
     unittest.main()

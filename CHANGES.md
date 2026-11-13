@@ -2,6 +2,26 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+**Data:** 2026-11-13
+**Escopo:** Tela "ATUALIZAÇÃO DISPONÍVEL!!" ao abrir o JARVIS (logon, Win+J, bandeja, menu Iniciar) com instalação por qualquer tecla; versão nova substitui a antiga sem sobras; Modo Apresentação automático com Canva, Google Slides e PowerPoint aberto.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | **`updater.check_available()`**: o Release do GitHub é **mais novo** que o `VERSION` instalado? (diferente mas mais velho não conta, sem downgrade). Nunca levanta; cache em `%APPDATA%\JARVIS\updates\available.json` por 6 h (`CACHE_TTL_S`) para Win+J/bandeja não consultarem o GitHub toda vez; cache de outra versão instalada é ignorado. Dev e "Atualização automática" desligada continuam sem nada | `backend/core/updater.py` |
+| 2 | **Tela de atualização** (canvas "16 · Atualização disponível"): orb do JARVIS parada no centro, "ATUALIZAÇÃO DISPONÍVEL!!", `instalada vX ──▶ nova vY` e "Clique qualquer tecla para prosseguir". Aparece depois do boot (ou por cima do Copilot no boot silencioso do Win+J). Atalhos da conversa ficam desligados nela; o sinal SUMMON do agente não a fecha | `frontend/screens/update.py`, `frontend/screens/__init__.py`, `frontend/app.py`, `frontend/jarvis.tcss`, `backend/main.py` |
+| 3 | **Qualquer tecla instala já**: a TUI chama `updater.request_install()` → evento novo `presence.INSTALL_UPDATE` para o agente (sem agente rodando, sobe um com `--install-update`) e fecha com o CRT. O agente espera a TUI fechar (até 60 s), baixa, confere SHA-256 e roda o setup `/UPDATE` (fluxo já existente). Falha no pedido = aviso e a TUI fica aberta | `backend/core/updater.py`, `backend/core/presence.py`, `backend/core/autostart.py`, `backend/agent.py` |
+| 4 | **Logon**: o agente com `--logon` não instala mais em silêncio: verifica (mesmas tentativas 15/45/90/180 s) e, havendo versão nova, abre a TUI no Chat, que mostra a tela | `backend/agent.py` |
+| 5 | **Versão nova "apaga" a antiga**: o `PrepareToInstall` (e o desinstalador) fecham `python.exe` **e** `pythonw.exe` do runtime (antes só o agente; uma TUI aberta travava arquivos e o `[InstallDelete]` deixava pedaços da versão antiga). Após atualizar, o setup baixado e o cache são apagados na hora (antes ficavam até o próximo logon). AppId fixo + `[InstallDelete]` de `{app}\app` e `{app}\runtime` seguem garantindo uma instalação só | `installer/jarvis.iss`, `backend/core/updater.py` |
+| 6 | **Modo Apresentação automático**: além de PowerPoint/PDF em tela cheia, conta `Canva.exe` em tela cheia e navegador (Chrome, Edge, Firefox, Opera, Brave, Vivaldi) em tela cheia numa aba de slides (título com "Canva", "Google Slides", "Apresentações Google" ou "PowerPoint"). Pref nova **"Apresentação c/ PowerPoint aberto"** (ROTINAS, padrão ligado): o PowerPoint em foco já silencia, mesmo em janela | `backend/core/window_utils.py`, `backend/services/notify_filter.py`, `backend/services/user_prefs.py`, `backend/services/presentation.py`, `frontend/screens/settings.py` |
+| 7 | `python main.py --update-preview 9.9.9` mostra a tela sem rede e sem instalar (dev) | `backend/main.py` |
+| 8 | Documentação | `CLAUDE.md` |
+
+**Testes novos:** `test_updater.py` — `check_available` (mais nova, igual/mais velha, cache e TTL, cache de outra versão, nunca levanta, dev/desligado, tentativas no logon), `install_latest` espera a TUI fechar, `request_install` (agente, sobe agente, falha), sucesso apaga setup e cache, agente no logon abre a TUI / adia / fica quieto, `run_install` só fecha o agente com o setup aberto. `test_tui_app.py` — tela aparece com as versões e orb parada, sem versão nova não aparece, qualquer tecla (até Shift+Tab) pede a instalação e fecha, falha mantém a TUI, prévia não instala. `test_presentation.py` — Canva app/navegador, Google Slides, PowerPoint Online, YouTube em tela cheia não conta, pref de PowerPoint aberto.
+
+**Pendente (manual):** compilar o setup e testar de verdade (instalar versão antiga, publicar Release nova, logon → tela → tecla → versão nova em `/config` → SISTEMA, sem sobras em `{app}`); conferir no Canva ("Apresentar" em tela cheia) se o título da aba contém "Canva".
+
+---
+
 **Data:** 2026-11-10 (3)
 **Escopo:** Fontes de notícias do briefing, Modo Apresentação, /config sem a caixa do JARVIS, skills de consulta no Chat, `/rota` com locais livres e Esc para sair.
 

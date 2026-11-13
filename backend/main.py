@@ -49,7 +49,20 @@ def start_jarvis():
     # modo voz e sem a tela de boot (as checagens rodam em segundo plano).
     from_agent = "--copilot" in sys.argv[1:]
     start_mode = "copilot" if from_agent else None
-    JarvisApp(boot_fn=run_boot, start_mode=start_mode, quiet_boot=from_agent).run()
+    update_fn, install_fn = _update_hooks(sys.argv[1:])
+    JarvisApp(boot_fn=run_boot, start_mode=start_mode, quiet_boot=from_agent,
+              update_fn=update_fn, install_fn=install_fn).run()
+
+
+def _update_hooks(args):
+    """Tela "ATUALIZAÇÃO DISPONÍVEL!!": (update_fn, install_fn) do JarvisApp.
+    `--update-preview 9.9.9` força a tela sem rede e sem instalar (dev)."""
+    from core import updater
+    if "--update-preview" in args:
+        i = args.index("--update-preview")
+        latest = args[i + 1] if i + 1 < len(args) else "9.9.9"
+        return (lambda: {"version": latest, "current": settings.VERSION}), None
+    return updater.check_available, updater.request_install
 
 
 if __name__ == '__main__':

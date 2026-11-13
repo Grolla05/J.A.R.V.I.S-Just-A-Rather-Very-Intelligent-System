@@ -48,6 +48,7 @@ from frontend.screens import (
     ShutdownScreen,
     SkillsScreen,
     StatusScreen,
+    UpdateScreen,
     VaultScreen,
     is_trigger,
 )
@@ -131,14 +132,20 @@ class JarvisApp(App, inherit_bindings=False):
     busy = reactive(False, init=False)
 
     def __init__(self, stream_fn=None, start_services=True, voice=None, boot_fn=None, start_mode=None,
-                 quiet_boot=False):
+                 quiet_boot=False, update_fn=None, install_fn=None):
         """`boot_fn(report)` (core.boot.run_boot) mostra a tela de boot antes da
         conversa; None (testes, `start_services=False`) pula direto pro chat.
         `start_mode="copilot"` (main.py --copilot, aberto pelo Win+J) entra no
         Copilot assim que a conversa aparece. `quiet_boot=True` (também do
         --copilot) roda as checagens do boot em segundo plano, sem a tela de
-        boot: a interface já abre pronta e só os problemas viram notificação."""
+        boot: a interface já abre pronta e só os problemas viram notificação.
+        `update_fn()` (core.updater.check_available) roda numa thread depois do
+        boot; devolvendo {"version", "current"} abre a UpdateScreen. Qualquer
+        tecla chama `install_fn()` (core.updater.request_install; None = prévia,
+        não instala) e, se o pedido saiu, a TUI fecha para o setup rodar."""
         super().__init__()
+        self._update_fn = update_fn
+        self._install_fn = install_fn
         self._quiet_boot = quiet_boot
         self._start_mode = start_mode if start_mode in MODES else None
         self._presence_stop = threading.Event()  # encerra a escuta dos sinais do agente
@@ -214,17 +221,58 @@ class JarvisApp(App, inherit_bindings=False):
         if self._boot_fn and self._quiet_boot:
             self._apply_start_mode()
             self._silent_boot()
+            self._check_update()
         elif self._boot_fn:
             from core.boot import STEPS
             self.push_screen(BootScreen(self._boot_fn, total_steps=len(STEPS)), self._boot_closed)
         else:
             self._apply_start_mode()
+            self._check_update()
 
     def _boot_closed(self, _result=None):
         self.main_screen.query_one("#prompt").focus()
         if self._start_services:
             self._poll_health()
         self._apply_start_mode()
+        self._check_update()
+
+    # ------------------------------------------------- atualização disponível
+    def _check_update(self):
+        if self._update_fn is not None:
+            self.run_worker(self._read_update, thread=True, group="update", exclusive=True)
+
+    def _read_update(self):
+        try:
+            info = self._update_fn()
+        except Exception as e:
+            log.debug(f"Verificação de atualização falhou: {e}")
+            info = None
+        if info:
+            self.call_from_thread(self._show_update, info)
+
+    def _show_update(self, info):
+        if self._shutting_down or isinstance(self.screen, UpdateScreen):
+            return
+        log.info(f"Atualização disponível: v{info['current']} → v{info['version']}.")
+        self.push_screen(UpdateScreen(info["current"], info["version"]), self._update_chosen)
+
+    def _update_chosen(self, _proceed=True):
+        if self._install_fn is None:
+            self.notify("Prévia da tela de atualização: nada foi instalado.", title="Atualização")
+            return
+        self.run_worker(self._request_install, thread=True, group="update", exclusive=True)
+
+    def _request_install(self):
+        status = self._install_fn()
+        self.call_from_thread(self._install_requested, status)
+
+    def _install_requested(self, status):
+        if status == "failed":
+            self.notify("Não consegui iniciar a atualização. Tento na próxima abertura.",
+                        title="Atualização", severity="warning")
+            return
+        log.info(f"Atualização pedida ({status}); fechando a TUI para o setup.")
+        self.shutdown_jarvis()
 
     @work(thread=True, exclusive=True, group="boot")
     def _silent_boot(self):
@@ -283,7 +331,7 @@ class JarvisApp(App, inherit_bindings=False):
         if not self.is_running or self._shutting_down:
             return
         if name == "SUMMON":
-            while len(self.screen_stack) > 1 and not isinstance(self.screen, (ConfirmScreen, BootScreen)):
+            while len(self.screen_stack) > 1 and not isinstance(self.screen, (ConfirmScreen, BootScreen, UpdateScreen)):
                 self.pop_screen()
             self.mode = "copilot"
         elif name == "TO_CHAT":
@@ -376,7 +424,7 @@ class JarvisApp(App, inherit_bindings=False):
                              "palette"}
 
     def check_action(self, action, parameters):
-        if action in self._CONVERSATION_ACTIONS and isinstance(self.screen, JarvisScreen):
+        if action in self._CONVERSATION_ACTIONS and isinstance(self.screen, (JarvisScreen, UpdateScreen)):
             return False
         # ^t no Copilot não faz sentido (a voz já está ligada): some do rodapé
         if action == "toggle_voice" and self.mode == "copilot":

@@ -11,8 +11,10 @@ em qualquer app, traduz no Ollama (pt → inglês, resto → pt-BR), põe a trad
 no clipboard e mostra num toast da bandeja.
 
 Subindo com o Windows (`--logon`, gravado no valor do HKCU\\...\\Run), verifica
-uma vez se há Release novo no GitHub e se atualiza sozinho (core/updater.py).
-Aberto de qualquer outro jeito, não verifica.
+se há Release novo no GitHub; havendo, abre a TUI, que mostra a tela
+"ATUALIZAÇÃO DISPONÍVEL!!" (core/updater.py). Qualquer tecla ali dispara o
+evento `presence.INSTALL_UPDATE`: o agente espera a TUI fechar, instala e o
+setup o reabre. Sem agente rodando, a TUI sobe um com `--install-update`.
 
 Leve de propósito: nada de SystemInfo ou Textual; o Ollama só é tocado ao traduzir. Uma instância
 só (mutex `Local\\JARVIS_AGENT`). Rodar: `pythonw agent.py` (ou `python agent.py`
@@ -29,6 +31,7 @@ ERROR_ALREADY_EXISTS = 183
 TRANSLATE_HOTKEY_ID = 0x4A54  # 'JT' — o Win+J usa 0x4A41
 TOAST_CHARS = 240
 LOGON_FLAG = "--logon"
+INSTALL_FLAG = "--install-update"  # mesmo valor de core/updater.py
 TRAY_WAIT_S = 5  # dá tempo do ícone da bandeja subir antes do 1º toast
 
 
@@ -90,17 +93,30 @@ def translate_selection(copy, translate, write, notify):
     return "ok"
 
 
-def run_update_check(from_logon, updater, notify, tui_open, sleep, exit_agent):
+def run_update_check(from_logon, updater, notify, tui_open, sleep, launch_tui):
     """Thread do agente: avisa o resultado de uma atualização anterior e, só
-    quando o agente subiu com o Windows, verifica o Release novo. Devolve o
-    status do updater (ou None fora do logon)."""
+    quando o agente subiu com o Windows, procura Release novo. Havendo, abre a
+    TUI (ela mostra a tela de atualização). Devolve 'prompted', 'deferred'
+    (TUI já aberta), 'no-update' ou None fora do logon."""
     sleep(TRAY_WAIT_S)
     updater.announce_result(notify)
     if not from_logon:
         return None
-    status = updater.check_and_update(notify, tui_open, sleep)
+    # logo após o logon a rede pode não estar pronta: mesmas tentativas do install
+    if not updater.check_available(use_cache=False, retries=updater.RETRY_DELAYS, sleep=sleep):
+        return "no-update"
+    if tui_open():
+        return "deferred"
+    launch_tui()
+    return "prompted"
+
+
+def run_install(updater, notify, tui_open, sleep, exit_agent):
+    """Pedido da tela de atualização: instala e, com o setup aberto, fecha o
+    agente (libera o runtime; o setup o reabre)."""
+    status = updater.install_latest(notify, tui_open, sleep)
     if status == "installing":
-        exit_agent()  # libera os arquivos do runtime; o setup reabre o agente
+        exit_agent()
     return status
 
 
@@ -143,6 +159,7 @@ def main():
     if sys.stdout is not None and getattr(sys.stdout, "name", "") == os.devnull:
         log.use_tui()  # sem console: só arquivo de log
     from_logon = LOGON_FLAG in sys.argv[1:]
+    install_now = INSTALL_FLAG in sys.argv[1:]
     log.info(f"🛰️ Agente residente do J.A.R.V.I.S no ar{' (logon)' if from_logon else ''}.")
     autostart.ensure_logon_flag()
 
@@ -197,10 +214,29 @@ def main():
                 log.debug(f"Bandeja não fechou: {e}")
         os._exit(0)
 
-    threading.Thread(
-        target=run_update_check, daemon=True, name="jarvis-update",
-        args=(from_logon, updater, notify, lambda: bool(presence.read_tui()), time.sleep, exit_agent),
-    ).start()
+    def tui_open():
+        return bool(presence.read_tui())
+
+    installing = threading.Lock()
+
+    def start_install():
+        if not installing.acquire(blocking=False):
+            return  # já instalando (tecla dupla, sinal repetido)
+
+        def run():
+            status = run_install(updater, notify, tui_open, time.sleep, exit_agent)
+            log.info(f"Atualização pedida pela TUI: {status}")
+            installing.release()
+        threading.Thread(target=run, daemon=True, name="jarvis-install").start()
+
+    presence.wait_signals(lambda _name: start_install(), threading.Event(), events=presence.AGENT_EVENTS)
+    if install_now:
+        start_install()
+    else:
+        threading.Thread(
+            target=run_update_check, daemon=True, name="jarvis-update",
+            args=(from_logon, updater, notify, tui_open, time.sleep, lambda: launcher.launch_tui(copilot=False)),
+        ).start()
 
     try:
         import pystray

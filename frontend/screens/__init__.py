@@ -9,9 +9,10 @@ from frontend.screens.settings import SettingsScreen
 from frontend.screens.shutdown import ShutdownScreen
 from frontend.screens.skills import SkillsScreen
 from frontend.screens.status import StatusScreen
+from frontend.screens.update import UpdateScreen
 from frontend.screens.vault import VaultScreen
 
 __all__ = [
     "BootScreen", "CommandPalette", "HousePartyScreen", "JarvisScreen", "LogScreen", "SessionPicker", "SettingsScreen",
-    "ShutdownScreen", "SkillsScreen", "StatusScreen", "VaultScreen", "is_trigger",
+    "ShutdownScreen", "SkillsScreen", "StatusScreen", "UpdateScreen", "VaultScreen", "is_trigger",
 ]

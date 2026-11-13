@@ -10,7 +10,7 @@
 ;
 ; Uso: iscc /DVersao=x.y.z installer\jarvis.iss
 ; Silencioso (CI): JARVIS-Setup.exe /VERYSILENT /SKIPOLLAMA [/MODEL=llama3.2]
-; Atualização automática (agente no logon): /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SKIPOLLAMA /UPDATE
+; Atualização automática (tela de atualização → agente): /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SKIPOLLAMA /UPDATE
 
 #ifndef Versao
   #define Versao "0.0.0-dev"
@@ -102,14 +102,14 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 Filename: "{app}\runtime\pythonw.exe"; Parameters: """{app}\app\backend\agent.py"""; WorkingDir: "{app}\app\backend"; Tasks: autostart; Flags: nowait skipifsilent
-; Atualização automática (/UPDATE, aberta pelo agente no logon): o agente se
-; fechou para liberar o runtime; reabre ele sem --logon (não verifica de novo)
+; Atualização automática (/UPDATE, aberta pelo agente depois da tecla na tela de
+; atualização): o agente se fechou para liberar o runtime; reabre ele sem --logon
 Filename: "{app}\runtime\pythonw.exe"; Parameters: """{app}\app\backend\agent.py"""; WorkingDir: "{app}\app\backend"; Check: EhAtualizacao; Flags: nowait runasoriginaluser
 Filename: "{app}\jarvis.cmd"; Description: "{cm:LaunchProgram,J.A.R.V.I.S}"; WorkingDir: "{app}"; Flags: postinstall nowait skipifsilent shellexec
 
 [UninstallRun]
-; Fecha o agente antes de apagar os arquivos (o pythonw.exe dele trava o runtime)
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""Get-Process pythonw -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '{app}\runtime\*' } | Stop-Process -Force"""; Flags: runhidden waituntilterminated; RunOnceId: "FechaAgente"
+; Fecha agente e TUI antes de apagar os arquivos (pythonw/python travam o runtime)
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""Get-Process python,pythonw -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '{app}\runtime\*' } | Stop-Process -Force"""; Flags: runhidden waituntilterminated; RunOnceId: "FechaAgente"
 
 [UninstallDelete]
 ; __pycache__ e afins criados depois da instalação
@@ -567,14 +567,16 @@ begin
     Result := OllamaInstalado;
 end;
 
-// Atualização por cima: o agente residente (pythonw do runtime antigo) trava os
-// arquivos que o [InstallDelete] apaga. Fecha só os pythonw desta instalação.
+// Atualização por cima: o agente residente (pythonw) e uma TUI ainda aberta
+// (python) do runtime antigo travam os arquivos que o [InstallDelete] apaga;
+// sem fechá-los, sobrariam pedaços da versão antiga misturados com a nova.
+// Fecha só os python/pythonw desta instalação.
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   Codigo: Integer;
 begin
   Result := '';
-  Exec('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "Get-Process pythonw -ErrorAction SilentlyContinue | ' +
+  Exec('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "Get-Process python,pythonw -ErrorAction SilentlyContinue | ' +
        'Where-Object { $_.Path -like ''' + ExpandConstant('{app}') + '\runtime\*'' } | Stop-Process -Force"',
        '', SW_HIDE, ewWaitUntilTerminated, Codigo);
 end;

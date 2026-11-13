@@ -2,8 +2,10 @@
 
 Dois gatilhos:
 - manual: `/silent`, skill PRESENTATION_MODE ("modo apresentação") → `state.presentation_active`;
-- automático: PowerPoint/leitor de PDF em tela cheia (`window_utils.is_presenting`, pref
-  `presentation_auto`) → o filtro de notificações põe `state.auto_quiet = "SILENT"`.
+- automático (pref `presentation_auto`): PowerPoint, Canva (app ou navegador), Google
+  Slides ou leitor de PDF em tela cheia — e, com a pref `presentation_open`, o
+  PowerPoint em foco mesmo em janela (`window_utils.is_presenting`) → o filtro de
+  notificações põe `state.auto_quiet = "SILENT"`.
 
 Com qualquer um ligado (`is_silent()`): alertas não-críticos vão para o backlog
 (services/notify_filter.py), o TTS não fala nem com `force=True` (services/speak.py),

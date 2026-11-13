@@ -5,8 +5,10 @@ Prioridade do alerta (`priority`):
 - high:     disco com pouco espaço
 - normal:   CPU/RAM altas e o resto (os alertas "barulhentos")
 
-Contexto (`context`): Modo Apresentação (manual `state.presentation_active` ou
-PowerPoint/PDF em tela cheia com a pref `presentation_auto`), Não Perturbe manual
+Contexto (`context`): Modo Apresentação (manual `state.presentation_active` ou,
+com a pref `presentation_auto`, slides/PDF em tela cheia — PowerPoint, Canva,
+Google Slides no navegador — ou o PowerPoint em foco com a pref
+`presentation_open`), Não Perturbe manual
 (`state.dnd_active`), reunião agora na agenda (`google_calendar.is_busy`, pref
 `dnd_auto_meeting`) e app em tela cheia (`window_utils.is_foreground_fullscreen`,
 pref `dnd_auto_fullscreen`).
@@ -71,7 +73,7 @@ def _fullscreen():
 def _presenting():
     try:
         from core.window_utils import is_presenting
-        return is_presenting()
+        return is_presenting(app_open=bool(_pref("presentation_open")))
     except Exception as e:
         log.debug(f"Filtro: detecção de apresentação falhou: {e}")
         return False
