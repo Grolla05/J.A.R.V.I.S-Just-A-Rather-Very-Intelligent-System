@@ -1,104 +1,70 @@
-# 🗄️ Camada de Persistência (Database J.A.R.V.I.S.)
+# Banco de dados (SQLite)
 
-Este diretório contém a lógica de memória de longo prazo do assistente, utilizando **SQLite3** nativo como motor de banco de dados. Arquitetura desenhada para **Persistência Transparente** — salva estados e históricos sem bloquear o processamento de áudio ou IA.
+O JARVIS guarda o estado local num SQLite (`jarvis_memory.db`), gerenciado por `core/database.py` (`from core.database import db`). A memória de longo prazo fica no Obsidian; o SQLite guarda histórico, sessões, preferências e specs da máquina.
 
-## 📋 Estrutura de Dados (Esquema)
+**Local do arquivo:** `settings.DB_PATH`
+- Dev: `backend/database/jarvis_memory.db`
+- Instalado: `%APPDATA%\JARVIS\database\jarvis_memory.db` (`JARVIS_DATA_DIR`)
 
-O banco `jarvis_memory.db` é composto por quatro tabelas:
+## Tabelas
 
----
+### `config` — chave/valor
 
-### 1. Tabela `hardware` (Identidade da Máquina)
+| Coluna | Tipo | |
+|---|---|---|
+| `key` | TEXT PK | |
+| `value` | TEXT | JSON serializado por `save_config` (listas, números, bools, textos) |
+| `updated_at` | TIMESTAMP | |
 
-Especificações de hardware detectadas pelo `hardware.py` via PowerShell/WMI. Persiste entre reinicializações para evitar alucinação da IA sobre specs do sistema.
+Chaves em uso:
 
-```text
-+-------------------+----------------------------+---------------------+
-|  component (PK)   |        description         |     detected_at     |
-|      [TEXT]       |          [TEXT]            |     [TIMESTAMP]     |
-+-------------------+----------------------------+---------------------+
-| "CPU"             | "Intel Core i9-9900K"      | 2025-12-18 10:00:00 |
-| "GPU"             | "NVIDIA RTX 4070"          | 2025-12-18 10:00:01 |
-| "RAM"             | "32 GB DDR5"               | 2025-12-18 10:00:01 |
-+-------------------+----------------------------+---------------------+
-```
+| Chave | Dono | Conteúdo |
+|---|---|---|
+| `disabled_skills`, `disabled_categories` | `services/skill_settings.py` | listas de INTENT / categorias desligadas em `/skills` |
+| `pref_<nome>` | `services/user_prefs.py` | preferências do `/config` (`pref_tts_voice`, `pref_briefing_auto`…) |
+| `briefing_last_date` | `core/briefing.py` | data do último briefing (automático 1× por dia) |
+| `news_sources` | `core/news.py` | fontes de notícias do briefing ("G1, BBC, …") |
+| `commute_home`, `commute_work`, `place_<local>`, `places_index` | `core/traffic.py` | locais cadastrados com `/rota` |
+| `commute_alert_last` | `core/traffic.py` | último aviso de saída (evita repetir) |
+| `dnd_restore` | `services/focus.py` | estado dos toasts do Windows a restaurar ao sair do Não Perturbe |
 
-- **`component`**: Identificador do componente (Primary Key): `CPU`, `GPU`, `RAM`, `Motherboard`
-- **`description`**: Descrição legível retornada pelo WMI
-- **`detected_at`**: Timestamp da última varredura (atualizado a cada boot)
+### `history` — mensagens
 
----
+| Coluna | Tipo | |
+|---|---|---|
+| `id` | INTEGER PK | autoincremento |
+| `session_id` | TEXT | sessão: `chat_<hex>` na TUI (Chat e Copilot), `voice_<token>` no modo voz standalone |
+| `role` | TEXT | `user` ou `assistant` |
+| `content` | TEXT | texto da mensagem |
+| `timestamp` | TIMESTAMP | **UTC** — mostre com `sessions.to_local()` |
+| `attachment_type` | TEXT | `image`/`audio` (nullable) |
+| `attachment_path` | TEXT | caminho relativo a `DIR_UPLOADS` (nullable) |
+| `mode` | TEXT | `chat` ou `copilot` (mostrado nos save slots) |
 
-### 2. Tabela `history` (Memória Episódica)
+Índice `idx_history_session` em `session_id`.
 
-Trilha completa de conversação por sessão, usada como contexto para a IA.
+### `sessions` — metadados
 
-```text
-+---------+-------------+--------------------------------+--------------------+--------------------+
-| id (PK) |  session_id |    role     |     content      |      timestamp     |
-|  [INT]  |   [TEXT]    |   [TEXT]    |      [TEXT]      |     [TIMESTAMP]    |
-+---------+-------------+-------------+------------------+--------------------+
-|    1    | "voice_abc" | "user"      | "Olá, status?"   | 2025-12-18 10:30:01|
-|    2    | "voice_abc" | "assistant" | "Sistemas online" | 2025-12-18 10:30:05|
-+---------+-------------+-------------+------------------+--------------------+
-```
+| Coluna | Tipo | |
+|---|---|---|
+| `id` | TEXT PK | id da sessão |
+| `title` | TEXT | título (automático ou `/rename`) |
+| `is_pinned` | INTEGER | 1 = fixada (aparece primeiro em `Ctrl+O`) |
+| `created_at` | TIMESTAMP | UTC |
 
-- **`session_id`**: Agrupa mensagens por sessão (voz usa `voice_<token>`; chat usa UUID gerado pelo frontend)
-- **`role`**: `user` ou `assistant`
-- **`content`**: Transcrição integral da mensagem
+### `hardware` — specs da máquina
 
----
+| Coluna | Tipo | |
+|---|---|---|
+| `component` | TEXT PK | `CPU`, `GPU`, `RAM`, `Motherboard`… |
+| `description` | TEXT | texto do WMI |
+| `detected_at` | TIMESTAMP | último scan (a cada boot, em thread) |
 
-### 3. Tabela `sessions` (Metadados de Sessões)
+Usada para responder perguntas de hardware sem o LLM inventar (`db.get_system_specs()`).
 
-Armazena título, estado de pin e timestamp de cada sessão de chat.
+## Regras
 
-```text
-+----------------+-------------------+-----------+---------------------+
-|  id (PK)       |      title        | is_pinned |     created_at      |
-|   [TEXT]       |      [TEXT]       |   [INT]   |     [TIMESTAMP]     |
-+----------------+-------------------+-----------+---------------------+
-| "session-uuid" | "Conversa sobre X"|     0     | 2025-12-18 10:00:00 |
-+----------------+-------------------+-----------+---------------------+
-```
-
-- **`id`**: UUID gerado pelo frontend
-- **`title`**: Título editável pelo usuário via `update_session_title()`
-- **`is_pinned`**: `0` ou `1` — sessões fixadas aparecem primeiro na sidebar
-
----
-
-### 4. Tabela `config` (Configuração de Runtime)
-
-Estado de features e skills que deve persistir entre reinicializações.
-
-```text
-+---------------------+----------+---------------------+
-|       key (PK)      |  value   |     updated_at      |
-|        [TEXT]       |  [TEXT]  |     [TIMESTAMP]     |
-+---------------------+----------+---------------------+
-| "skill_OPEN_APP"    | "true"   | 2025-12-18 10:00:00 |
-| "skill_AUDIO_CTRL"  | "false"  | 2025-12-18 10:01:00 |
-+---------------------+----------+---------------------+
-```
-
-- Usado por `is_skill_enabled()` em `services/intent.py`
-- Modificado via `services/skill_settings.set_enabled()` (comando `/skills on|off` na TUI)
-
----
-
-## ⚙️ Funcionamento Integrado
-
-1. **Inicialização Automática**: `DatabaseManager` cria arquivo e tabelas no boot se não existirem (`settings.DB_PATH`)
-2. **Lógica de UPSERT**: `save_memory()` usa `ON CONFLICT(key) DO UPDATE` — sem erros de duplicata
-3. **Observabilidade**: Todas as transações reportadas ao `logger.py` — escritas em DEBUG, falhas em ERROR/CRITICAL
-4. **Ciclo de Vida no `main.py`**:
-   - Boot: consulta `user_name` para saudação personalizada
-   - Input: grava comando reconhecido imediatamente
-   - Output: grava resposta antes da síntese de voz
-
-## 🛠️ Especificações Técnicas
-
-- **Motor**: SQLite3 nativo
-- **Encoding**: UTF-8
-- **Localização**: `backend/database/jarvis_memory.db` (definida em `config.py`)
+- Toda operação fecha a conexão em `finally`.
+- Coluna nova: `PRAGMA table_info` + `ALTER TABLE` em `_initialize_tables` (bancos antigos migram sozinhos).
+- UPSERT com `ON CONFLICT(key) DO UPDATE SET` — nunca checar se existe antes.
+- SQL de sessão fica em `services/sessions.py`, nunca na TUI.

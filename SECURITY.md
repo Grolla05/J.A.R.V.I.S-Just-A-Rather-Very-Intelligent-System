@@ -54,15 +54,20 @@ nível de acesso que o próprio usuário tem no computador. Recomendações:
 
 ## Segredos e credenciais
 
-- Nunca commite o arquivo `.env` — use [`.env.example`](.env.example)
+- Nunca commite o arquivo `.env` — use [`env.example`](env.example)
   como referência de quais variáveis existem
-- O fluxo OAuth PKCE do Spotify salva o **refresh token** em
-  `backend/database/spotify_token.json`. Confirme, antes de dar push, que
-  esse caminho está coberto pelo seu `.gitignore` local — hoje o
-  `.gitignore` do repositório ainda **não** ignora esse arquivo
-  explicitamente (só `*.db`), então recomendamos adicionar a linha
-  `backend/database/spotify_token.json` (ou `*.json` dentro de
-  `backend/database/`) antes de rodar o projeto com uma conta real
+- Os **refresh tokens** do Google Agenda e do Spotify ficam no Cofre de
+  Credenciais do Windows (serviço "JARVIS", via `keyring` —
+  `backend/core/secrets_store.py`), não em arquivo. Só quando o cofre está
+  indisponível eles caem em `database/integrations_secrets.json`. O
+  `.gitignore` cobre `backend/database/*.json` (além de `*.db` e dos
+  arquivos WAL do SQLite), então esse fallback não entra em commit. Versões
+  antigas gravavam `backend/database/spotify_token.json` (também ignorado);
+  ele é migrado para o cofre e apagado ao desconectar
+- As chaves de OAuth (`GOOGLE_CLIENT_ID/SECRET`, `SPOTIFY_CLIENT_ID`) e o
+  `GITHUB_TOKEN` são **pessoais** e ficam só no `.env` de cada usuário
+  ([docs/integracoes-oauth.md](docs/integracoes-oauth.md)); o repositório e o
+  instalador não trazem chave nenhuma
 - Chaves de API (Obsidian Local REST API, Spotify Client ID) devem ser
   tratadas como segredo mesmo em ambiente de desenvolvimento local
 

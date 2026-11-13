@@ -1,0 +1,3 @@
+[DADOS DE HARDWARE]:
+$hardware
+USE ISSO.

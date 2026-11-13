@@ -4,8 +4,8 @@ O arquivo `SystemInfo.py` abriga a classe `SystemInfo`, responsável pela **obse
 
 ## 🎯 Responsabilidades Principais
 
-1. **Vigilância Proativa (`start_proactive_monitor`)**: Não espera o usuário perguntar. Sobe uma *Daemon Thread* que checa o corpo da máquina a cada X segundos (padrão 3s definidos em `main.py`). Se algo estiver sangrando (bateria < 15%, CPU > 90%), o JARVIS interromperá e avisará sozinho.
-2. **Integração Visual Neural (HUD Sync)**: Além de falar, o monitor ejeta sinais silenciosos via `brain_callback("CRITICAL_START", is_status_signal=True)` para o frontend. É isso que faz a UI gráfica do projeto piscar em Vermelho de emergência quando a RAM enche ou o disco lota.
+1. **Vigilância Proativa (`start_proactive_monitor`)**: Não espera o usuário perguntar. Sobe uma *Daemon Thread* que checa o corpo da máquina a cada X segundos (intervalo passado por quem chama: a TUI usa o `TELEMETRY_INTERVAL` de 3 s para a linha de status). Se algo estiver sangrando (bateria < 15%, CPU > 90%), o JARVIS interromperá e avisará sozinho.
+2. **Sinal de estado crítico**: Além de falar, o monitor envia sinais silenciosos via `brain_callback("CRITICAL_START", is_status_signal=True)` (e `CRITICAL_END`) para a TUI. É isso que pinta a conversa de vermelho (classe `-critical`) e mostra os motivos (`critical_reasons`) no topo quando a RAM enche ou o disco lota. O alerta falado ainda passa pelo filtro de interrupções (`services/notify_filter.py`).
 3. **Sensores de Velocidade (Disco e Rede)**: Utiliza tracking matemático temporal baseado em *timestamps* comparativos (Delta de tempo) para descobrir a banda exata instantânea (em Mbps) da placa de rede e a carga de gravação do disco rígido.
 4. **Contextualização Semântica de Stark (`analyze_semantic_state`)**: A alma do módulo. Ele não injeta no cérebro "CPU: 95%". Ele traduz matematicamente para: `"STATUS CPU: CRÍTICO (Processador em regime de esforço máximo. Risco de thermal throttling.)"`, forçando a IA a agir de acordo no LLM.
 
@@ -15,7 +15,7 @@ O arquivo `SystemInfo.py` abriga a classe `SystemInfo`, responsável pela **obse
 
 ### 1. Prevenção de Race Conditions (CPU Caching)
 
-A biblioteca `psutil.cpu_percent()` tem uma falha arquitetural: ela precisa de um delta de tempo para calcular a CPU. Se o Frontend (a cada segundo) e o Backend (RAG) chamarem essa função juntos, um deles receberá "0.0%".
+A biblioteca `psutil.cpu_percent()` tem uma falha arquitetural: ela precisa de um delta de tempo para calcular a CPU. Se a TUI (telemetria) e o backend (contexto do chat) chamarem essa função juntos, um deles receberá "0.0%".
 Para consertar isso, a classe instiga a thread isolada `_start_cpu_sampler()`. Essa thread passa a vida num *while loop* tirando a foto da CPU e salvando na variável `self._cpu_cache`. O resto inteiro do sistema consome sempre desse cache, nunca gerando fila ou erro 0%.
 
 ### 2. O Juiz de Processos (`get_top_processes`)

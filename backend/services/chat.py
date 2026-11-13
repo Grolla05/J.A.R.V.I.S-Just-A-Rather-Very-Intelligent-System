@@ -44,50 +44,55 @@ def get_session_history_for_ai(session_id, limit=8):
         return []
 
 
-def ask_local_ai(text, intent_type="CHAT", entity=None, vault_context="", vault_filename="", session_id="default",
-                 live_context=""):
-    db_history = get_session_history_for_ai(session_id, limit=8)
+# Modo da conversa → prompt de regras (voz = modo standalone, sem Markdown).
+MODE_PROMPTS = {"voice": "mode_voice.md", "chat": "mode_chat.md", "copilot": "mode_copilot.md"}
 
-    sys_instruction = SYSTEM_PROMPT['content'] + "\n\n[MODO ATUAL: VOZ] Aplique REGRAS DE ÁUDIO. Proibido Markdown. Sem asteriscos, cerquilhas ou listas."
+
+def _prompt(filename, **kwargs):
+    return load_prompt(filename, **kwargs).strip()
+
+
+def build_messages(text, intent_type="CHAT", vault_context="", vault_filename="", session_id="default",
+                   live_context="", mode="chat"):
+    """Mensagens do chat: system (personalidade + modo + HARDWARE/MEMORY_READ),
+    telemetria ao vivo, nota do vault, dados reais (live_context), histórico e a pergunta.
+    Todo texto de instrução vem de backend/prompts/*.md."""
+    sys_instruction = SYSTEM_PROMPT['content'] + "\n\n" + _prompt(MODE_PROMPTS.get(mode, "mode_chat.md"))
 
     if intent_type == "HARDWARE":
-        sys_instruction += f"\n[DADOS DE HARDWARE]:\n{state.sys_monitor.get_detailed_hardware_context()}\nUSE ISSO."
+        hardware = state.sys_monitor.get_detailed_hardware_context()
+        sys_instruction += "\n" + _prompt("hardware_context.md", hardware=hardware)
 
     if intent_type == "MEMORY_READ":
-        sys_instruction += (
-            "\n\n[INSTRUÇÃO CRÍTICA — MEMÓRIA PESSOAL]: O arquivo Obsidian abaixo contém "
-            "informações REAIS e VERIFICADAS sobre o usuário Felipe. Você TEM ACESSO a esses "
-            "dados — eles são sua memória. Use-os para responder diretamente e com segurança. "
-            "NUNCA diga que não tem acesso a informações pessoais quando um arquivo do vault "
-            "for fornecido: esse arquivo É a fonte autoritativa. Extraia os fatos relevantes "
-            "e responda como JARVIS teria acesso a todos os dados pessoais do Senhor."
-        )
-
-    live_data = state.sys_monitor.get_realtime_context()
+        sys_instruction += "\n\n" + _prompt("memory_read.md")
 
     messages = [
         {'role': 'system', 'content': sys_instruction},
-        {'role': 'system', 'content': f"LIVE DATA: {live_data}"},
+        {'role': 'system', 'content': _prompt("live_data.md", live_data=state.sys_monitor.get_realtime_context())},
     ]
 
     if vault_context:
         log.info(f"[VAULT PREVIEW — {vault_filename}]: {vault_context[:500]}")
-        messages.append({
-            'role': 'system',
-            'content': f"[MEMÓRIA PESSOAL — {vault_filename}]:\n{vault_context}"
-        })
+        messages.append({'role': 'system',
+                         'content': _prompt("vault_memory.md", note=vault_filename, content=vault_context)})
 
     if live_context:  # dados reais (agenda…) — services/live_context.py
         messages.append({'role': 'system', 'content': live_context})
 
-    messages += db_history + [{'role': 'user', 'content': text}]
+    return messages + get_session_history_for_ai(session_id, limit=8) + [{'role': 'user', 'content': text}]
 
-    temp = 0.1 if live_context or intent_type in ("HARDWARE", "MEMORY_READ") else 0.7
-    reply = query_ollama(messages, temperature=temp)
 
+def _temperature(intent_type, live_context):
+    return 0.1 if live_context or intent_type in ("HARDWARE", "MEMORY_READ") else 0.7
+
+
+def ask_local_ai(text, intent_type="CHAT", entity=None, vault_context="", vault_filename="", session_id="default",
+                 live_context=""):
+    """Modo voz (standalone): resposta inteira, sem Markdown."""
+    messages = build_messages(text, intent_type, vault_context, vault_filename, session_id, live_context, mode="voice")
+    reply = query_ollama(messages, temperature=_temperature(intent_type, live_context))
     if reply:
-        clean = reply.replace("*", "").replace("#", "").strip()
-        return clean
+        return reply.replace("*", "").replace("#", "").strip()
     return "Erro de processamento neural."
 
 
@@ -112,43 +117,7 @@ def ask_local_ai_stream(text, intent_type="CHAT", entity=None, vault_context="",
             yield chunk
         return
 
-    db_history = get_session_history_for_ai(session_id, limit=8)
-
-    mode_prompt = "mode_copilot.md" if mode == "copilot" else "mode_chat.md"
-    sys_instruction = SYSTEM_PROMPT['content'] + "\n\n" + load_prompt(mode_prompt)
-
-    if intent_type == "HARDWARE":
-        sys_instruction += f"\n[DADOS DE HARDWARE]:\n{state.sys_monitor.get_detailed_hardware_context()}\nUSE ISSO."
-
-    if intent_type == "MEMORY_READ":
-        sys_instruction += (
-            "\n\n[INSTRUÇÃO CRÍTICA — MEMÓRIA PESSOAL]: O arquivo Obsidian abaixo contém "
-            "informações REAIS e VERIFICADAS sobre o usuário Felipe. Você TEM ACESSO a esses "
-            "dados — eles são sua memória. Use-os para responder diretamente e com segurança. "
-            "NUNCA diga que não tem acesso a informações pessoais quando um arquivo do vault "
-            "for fornecido: esse arquivo É a fonte autoritativa. Extraia os fatos relevantes "
-            "e responda como JARVIS teria acesso a todos os dados pessoais do Senhor."
-        )
-
-    live_data = state.sys_monitor.get_realtime_context()
-
-    messages = [
-        {'role': 'system', 'content': sys_instruction},
-        {'role': 'system', 'content': f"LIVE DATA: {live_data}"},
-    ]
-
-    if vault_context:
-        log.info(f"[VAULT PREVIEW — {vault_filename}]: {vault_context[:500]}")
-        messages.append({
-            'role': 'system',
-            'content': f"[MEMÓRIA PESSOAL — {vault_filename}]:\n{vault_context}"
-        })
-
-    if live_context:  # dados reais (agenda…) — services/live_context.py
-        messages.append({'role': 'system', 'content': live_context})
-
-    messages += db_history + [{'role': 'user', 'content': text}]
-
-    temp = 0.1 if live_context or intent_type in ("HARDWARE", "MEMORY_READ") else 0.7
-    for chunk in query_ollama_stream(messages, temperature=temp):
+    messages = build_messages(text, intent_type, vault_context, vault_filename, session_id, live_context,
+                              mode="copilot" if mode == "copilot" else "chat")
+    for chunk in query_ollama_stream(messages, temperature=_temperature(intent_type, live_context)):
         yield chunk

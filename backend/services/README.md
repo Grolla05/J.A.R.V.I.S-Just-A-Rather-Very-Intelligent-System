@@ -1,130 +1,45 @@
-# 🧠 Documentação do Módulo Services
+# `backend/services/` — roteamento, conversa, voz e rotinas
 
-Este diretório contém a lógica neural e sensorial do J.A.R.V.I.S., orquestrando **Input (Audição)**, **Processamento Cognitivo (Cérebro)** e **Output (Fala)**.
+Os serviços ficam entre a interface e o `core/`. Recebem texto (digitado ou falado), decidem o que fazer e devolvem texto em stream.
 
-## 📂 Estrutura de Arquivos
-
-| Arquivo | Função | Principais Dependências |
-|---|---|---|
-| **`brain.py`** | Núcleo Cognitivo. Coordena o pipeline completo de comando — desde o input até o despacho para skill, chat ou memória. | `core`, `services/intent`, `services/chat`, `services/memory` |
-| **`intent.py`** | Classificação de intenção via LLM (JSON mode) e verificação de skills habilitadas. | `core` (llm, database, skill_loader, prompts) |
-| **`chat.py`** | Montagem do prompt LLM com histórico, vault context (system role) e telemetria live. Serve voz e chat. | `core` (state, llm, database, prompts, obsidian) |
-| **`memory.py`** | Extração de fatos de falas do usuário e persistência no Obsidian vault. | `core` (llm, obsidian, prompts) |
-| **`listen.py`** | Entrada sensorial. Captura de áudio, detecção de Wake Word e transcrição (STT). | `core`, `speech_recognition`, `re` |
-| **`speak.py`** | Saída sensorial. Síntese de voz (TTS) híbrida com gerenciamento de concorrência (Thread-Safe). | `core`, `edge_tts`, `pygame`, `pyttsx3` |
-
----
-
-## ⚙️ Fluxo de Dados (Pipeline)
+## Pipeline
 
 ```
-listen.py           →  Captura áudio, detecta wake word, transcreve STT
-brain.py            →  Coordena o pipeline
-  intent.py         →  Classifica intenção via LLM (JSON mode)
-  ├─ SKILL          →  Despacha para manager.skills[intent].execute(entity)
-  ├─ HARDWARE       →  Injeta specs do SQLite → chat.py (temp=0.1)
-  ├─ MEMORY_READ    →  get_vault_context() → chat.py com vault como system msg (temp=0.1)
-  ├─ MEMORY_WRITE   →  memory.py → extrai fato → obsidian.save_memory()
-  ├─ CHAT           →  chat.py (temp=0.7) com histórico de sessão
-  └─ SHUTDOWN       →  retorna "PROTOCOL_SHUTDOWN"
-speak.py            →  Síntese TTS → áudio + typewriter no terminal
+texto (TUI ou voz)
+  └─ brain.execute_command_stream(texto, session_id, images, mode, on_route)
+       ├─ ação crítica pendente?  → confirm_pending_action (sim/não)
+       ├─ intent.classify_intent  → Ollama em JSON {intent, entity, confidence}
+       │     Chat: exclude_categories=("automation", "system")
+       ├─ MEMORY_WRITE            → memory.extract_fact_to_memory → Obsidian
+       ├─ skill ligada/permitida  → on_route(intent) → skill.execute(entity, texto)
+       └─ CHAT / HARDWARE / MEMORY_READ
+             → chat.ask_local_ai_stream(histórico + vault + live_context + telemetria)
 ```
 
----
+`execute_command` (sem stream) é a versão do modo voz standalone (`python -m services.brain`), sempre com todas as skills.
 
-## 1. `brain.py` (O Coordenador)
+## Módulos
 
-Ponto de entrada do processamento de comandos. Recebe o texto transcrito e orquestra todos os outros serviços.
-
-- `execute_command(text, session_id)` → `str` — modo voz (síncrono)
-- `execute_command_stream(text, session_id)` → `Generator[str]` — modo chat (streaming)
-- `start_brain()` — inicializa varredura de hardware no boot
-
-**Responsabilidades:**
-- Chamar `intent.py` para classificar o comando
-- Buscar vault context via `get_vault_context()` para intents MEMORY_READ
-- Delegar execução para skill, `chat.py` ou `memory.py`
-- Passar `intent_type` e `vault_context` para `chat.py`
-
----
-
-## 2. `intent.py` (O Classificador)
-
-Envia a frase do usuário para o Ollama em **JSON mode** e retorna a intenção estruturada.
-
-**Intenções possíveis:**
-
-| Intent | Trigger |
+| Módulo | Papel |
 |---|---|
-| `SHUTDOWN` | Pedido de encerramento |
-| `HARDWARE` | Perguntas sobre specs, temperatura, uso de CPU/GPU |
-| `MEMORY_READ` | Perguntas sobre fatos pessoais (família, trabalho, etc.) |
-| `MEMORY_WRITE` | Pedido para gravar uma informação |
-| `CHAT` | Conversa genérica |
-| `<SKILL_NAME>` | Qualquer intent registrado em `manager.skills` |
+| `brain.py` | Roteador. Modos `chat` (só skills fora de `automation`/`system`) e `copilot` (todas). `confirm_pending_action(approved)` executa `pending['on_confirm']` ou encerra o processo-alvo |
+| `intent.py` | `classify_intent(texto, skip_skills, exclude_categories)` com cache TTL (30 s, 64 entradas). Intents fixos: `HARDWARE`, `MEMORY_READ`, `MEMORY_WRITE`, `CHAT`, mais os `INTENT` das skills ligadas. `is_skill_enabled`, `skill_allowed_in_chat` |
+| `chat.py` | `build_messages` monta: `system_prompt.md` + regras do modo (`mode_chat.md`, `mode_copilot.md` ou `mode_voice.md`) + `hardware_context.md` (intent `HARDWARE`) ou `memory_read.md` (intent `MEMORY_READ`) + `live_data.md` (telemetria) + `vault_memory.md` (nota do vault) + `live_context` + últimas 8 mensagens da sessão. Nenhum texto de prompt no `.py`. Imagens vão para o modelo de visão (`vision_context.md`) |
+| `live_context.py` | Pergunta sobre agenda ("o que tenho amanhã?") → eventos reais do Google Agenda no prompt, com instrução de não inventar |
+| `memory.py` | Extrai chave/valor de "lembre que…" e grava em `🚀 Projetos/J.A.R.V.I.S/Memória/{chave}.md` |
+| `sessions.py` | Sessões e histórico (listar, renomear, fixar, apagar, editar a partir de uma mensagem). `to_local()` converte o UTC do SQLite |
+| `skill_settings.py` | Lista skills e liga/desliga skill ou categoria (`disabled_skills`, `disabled_categories` na tabela `config`) |
+| `user_prefs.py` | Preferências do `/config`: voz, velocidade, volume, sensibilidade do mic, janela de atenção, briefing automático, manchetes, monitor de clipboard, aviso de saída, silêncio em reunião/tela cheia, apresentação automática |
+| `integrations.py` | Cards de `/config` → INTEGRAÇÕES. Estados `on`/`wait`/`off`/`setup`; `connect`/`disconnect` devolvem texto e nunca levantam |
+| `listen.py` | Ouvido lazy (`get_ear()`): mic só abre com a voz ligada; wake word (`WAKE_WORDS`) por palavra inteira; Google STT; janela de atenção; `ear_pause`/`ear_resume`; nível do mic para a `VoiceBar` |
+| `speak.py` | TTS: edge-tts (voz da pref, padrão `pt-BR-AntonioNeural`) com fallback pyttsx3; `speech_lock`; limpa Markdown e símbolos e expande gírias (`SLANG_MAP`); no-op com a voz desligada ou em apresentação |
+| `focus.py` | `FocusManager`: Pomodoro (25/5, longa 15 a cada 4) e Não Perturbe (toasts do Windows off + backlog de alertas com resumo no fim) |
+| `presentation.py` | Modo Apresentação manual (`/silent`, skill) ou automático (PowerPoint, Canva, Google Slides, PDF em tela cheia) |
+| `notify_filter.py` | Prioridade do alerta (`critical`/`high`/`normal`) × contexto (apresentação, DND, reunião, tela cheia) → falar, guardar ou descartar; selo da linha de status |
 
-- `classify_intent(text, skip_skills=False)` → `dict` com chaves `intent: str`, `entity: str | None`, `confidence: float`
-- `is_skill_enabled(intent)` → `bool` — verifica se skill e sua categoria estão ativas no banco
+## Regras
 
----
-
-## 3. `chat.py` (O Motor de Chat)
-
-Monta e despacha o prompt para o LLM. Serve dois modos: **voz** (sem markdown) e **chat** (markdown completo).
-
-### Estrutura do prompt montado:
-
-```
-[system] SYSTEM_PROMPT + regras de modo (áudio ou chat)
-[system] instrução crítica MEMORY_READ ou HARDWARE (se aplicável)
-[system] LIVE DATA: telemetria em tempo real
-[system] [MEMÓRIA PESSOAL — arquivo.md]: conteúdo do vault  ← quando MEMORY_READ
-[user]   mensagem anterior 1
-[assistant] resposta anterior 1
-...
-[user]   mensagem atual
-```
-
-- **Vault como `role: system`** — evita que o modelo trate dados pessoais como "texto a analisar"
-- **Temperatura dinâmica:** `0.1` para HARDWARE e MEMORY_READ; `0.7` para CHAT
-- **Dedup de histórico:** `get_session_history_for_ai()` busca `limit+1` e descarta a última entrada `user` (já logada antes da chamada)
-
-**Funções:**
-- `ask_local_ai(text, intent_type, vault_context, vault_filename, session_id)` → `str`
-- `ask_local_ai_stream(text, intent_type, vault_context, vault_filename, session_id)` → `Generator[str]`
-
----
-
-## 4. `memory.py` (Gravação no Vault)
-
-Detecta fatos em falas do usuário e persiste no Obsidian vault via `obsidian.save_memory()`.
-
-- `extract_fact_to_memory(text)` → `str` — mensagem de confirmação ou erro
-- Usa LLM com prompt `extract_fact.md` para identificar chave/valor do fato
-- Grava em `Projetos/J.A.R.V.I.S/Memória/{key}.md` no vault
-
----
-
-## 5. `listen.py` (Os Ouvidos)
-
-Transcrição de áudio para texto (STT) com lógica de "Janela de Atenção".
-
-- **Wake Words:** `jarvis`, `jar`, `jair`, `javis`, `davis`, `gervis`, `jarbas`, `garvis`, `jefferson`, `jorge`
-- **Active Mode:** Timer de 60s após ouvir o nome — dispensa repetir "Jarvis"
-- **Controle de Loop:** `ear_pause()` / `ear_resume()` — mudo enquanto JARVIS está falando
-- **Calibração Automática:** ajusta limiar de ruído no primeiro segundo
-
----
-
-## 6. `speak.py` (A Voz)
-
-Síntese de voz (TTS) híbrida com thread safety.
-
-**Arquitetura Failover:**
-1. **Online (EdgeTTS):** `pt-BR-AntonioNeural` — alta qualidade
-2. **Offline (Pyttsx3):** fallback local automático se EdgeTTS falhar
-
-- **`speech_lock`:** `threading.Lock()` — impede sobreposição de falas (alerta vs. resposta)
-- **Typewriter effect:** exibição no terminal em thread separada, sincronizada com áudio
-- **Expansão de gírias:** `vc` → `você`, `tmj` → `tamo junto` (via Regex)
-- **UUID temp files:** sem conflitos de arquivo no Windows
+- `listen` e `speak` nunca são importados no topo de outros módulos (import dentro da função).
+- A `speech_lock` do `speak.py` não pode ser removida.
+- Ações do `FocusManager` devolvem texto; só troca de fase e fim de prazo anunciam sozinhas.
+- Dado pessoal que o Chat precisa responder entra como contexto (`live_context`), nunca deixado para o LLM adivinhar.

@@ -147,9 +147,6 @@ class Settings:
     # --- Trânsito (core/traffic.py): OSRM grátis; com chave TomTom = trânsito ao vivo ---
     TOMTOM_API_KEY: str = os.getenv("TOMTOM_API_KEY", "").strip()
 
-    # --- Briefing diário — pastas vigiadas p/ "arquivos recentes" (separadas por ';').
-    # Vazio = Desktop, Documentos e Downloads do usuário.
-    BRIEFING_DIRS: str = os.getenv("BRIEFING_DIRS", "").strip()
     SPOTIFY_SCOPES: str = (
         "user-read-playback-state "
         "user-modify-playback-state "

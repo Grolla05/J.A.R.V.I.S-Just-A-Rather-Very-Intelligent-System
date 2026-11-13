@@ -6,8 +6,8 @@ O arquivo `database.py` expõe a classe `DatabaseManager` e funciona puramente c
 
 1. **Auto-inicialização Robusta**: Garante que o banco `jarvis_memory.db` será criado integralmente no primeiro boot, caso não exista no computador do usuário, estabelecendo as quatro tabelas vitais: `config`, `history`, `hardware`, e `sessions`.
 2. **Auto-Migração de Schemas (Sem Alembic)**: Diferente de sistemas complexos de backend, o JARVIS faz migrações invisíveis por conta própria. Ele roda queries introspectivas (`PRAGMA table_info`) para detectar colunas faltantes de versões antigas e faz o `ALTER TABLE` dinâmico caso encontre um banco desatualizado.
-3. **Gerenciador de Estados (Tabela `config`)**: Armazena em formato Chave-Valor todas as configurações mutáveis via Interface Gráfica, como *Skills* desabilitadas, preferências do HUD e etc., serializando tudo em JSON.
-4. **Arquivo Vivo de Histórico (Tabelas `history` e `sessions`)**: Todo texto enviado por você e respondido pelo modelo é armazenado definitivamente. Esta dupla de tabelas viabiliza a Sidebar do frontend (para recarregar e pinar chats antigos), assim como possibilita correções de prompt nativas do usuário através do Frontend.
+3. **Gerenciador de Estados (Tabela `config`)**: Armazena em formato Chave-Valor todas as configurações mutáveis pela TUI — *skills* desabilitadas, preferências do `/config` (`pref_*`), fontes de notícias, locais do `/rota` etc. —, serializando tudo em JSON. Lista completa de chaves em [`database/README.md`](../../database/README.md).
+4. **Arquivo Vivo de Histórico (Tabelas `history` e `sessions`)**: Todo texto enviado por você e respondido pelo modelo é armazenado definitivamente. Esta dupla de tabelas alimenta os *save slots* da TUI (`Ctrl+O`: recarregar, fixar e apagar sessões) e a edição da última mensagem (`/edit`, `↑`).
 5. **Inventário do Hospedeiro (Tabela `hardware`)**: Mapeia as entranhas da máquina rodando o LLM para que o modelo possa ser alimentado no Prompt Sistêmico ("Anti-Alucinação"), evitando que o assistente afirme que roda em nuvem.
 
 ---
@@ -29,14 +29,14 @@ Graças a este comportamento nativo de *UPSERT* (Update or Insert), o código di
 
 - **`config`**: Estrutura `[key, value, updated_at]`. A camada lógica do Python realiza a coerção dinâmica: Se mandarmos um dicionário ao chamar `save_config()`, o código intercepta a estrutura e roda um `json.dumps()` para enfiar a string inteira no DB. E ao puxar (`get_config`), roda `json.loads()`. Isso permite salvar *States* aninhados de UI num registro só.
 - **`hardware`**: Estrutura `[component, description, detected_at]`. Contém métodos como `get_system_specs()` que puxam o texto formatado no formato de bala (bullet points) unicamente para alimentar diretamente o Prompt global da IA.
-- **`sessions` e `history`**: A base completa de contexto do chat. O banco é automaticamente auto-otimizado através de índices velozes de busca (`CREATE INDEX IF NOT EXISTS idx_history_session`) gerados para agilizar o recorte de blocos onde o Frontend só deseja visualizar mensagens da sessão X.
+- **`sessions` e `history`**: A base completa de contexto do chat. O banco é automaticamente auto-otimizado através de índices velozes de busca (`CREATE INDEX IF NOT EXISTS idx_history_session`) gerados para agilizar o recorte de blocos quando a TUI só quer as mensagens da sessão X.
 
 ### 4. Edição Cirúrgica de Diálogos
 
 Ao invés de tratar mensagens antigas como imutáveis, a interface necessita de funções profundas do SQLite:
 
 - **`delete_history_from(session, message_id)`**: Ao apagar uma mensagem num bloco, tudo a partir daquele ponto adiante para baixo (`id >= message_id`) é dizimado para garantir consistência contextual se o usuário bifurcar uma conversa.
-- **`update_history_message`**: Uma operação pura de `UPDATE history SET content...`, ativada quando o usuário clica para reeditar um *Prompt* no React, sobrescrevendo ativamente as "Memórias" da IA.
+- **`update_history_message`**: Uma operação pura de `UPDATE history SET content...`, usada quando o usuário edita a última mensagem na TUI, sobrescrevendo ativamente as "Memórias" da IA.
 
 ### 5. RAG Nativas via SQL (`search_relevant_context`)
 

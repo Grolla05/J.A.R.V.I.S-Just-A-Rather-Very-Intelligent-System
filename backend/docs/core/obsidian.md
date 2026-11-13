@@ -14,14 +14,14 @@ O arquivo `obsidian.py` atua como a ponte profunda de integração entre o Cére
 
 ### 1. Sistema de Memória Dedicada (REST Client)
 
-A constante global `MEMORY_NOTE_PATH = "Projetos/J.A.R.V.I.S/Memória/{key}.md"` dita onde memórias efêmeras criadas pela IA são salvas. **Regra Oculta**: Ela foi propositalmente criada sem emojis e com encoding cauteloso para o *urllib* não destruir o diretório no explorador de arquivos do Windows.
+A constante global `MEMORY_NOTE_PATH = "🚀 Projetos/J.A.R.V.I.S/Memória/{key}.md"` dita onde memórias efêmeras criadas pela IA são salvas. **Regra**: o caminho tem emoji e acento, então sempre passa por `urllib.parse.quote(..., encoding="utf-8")` antes de ir para a REST API — sem isso, 404. Notas existentes nunca são sobrescritas (preserva edições manuais).
 
 - O método `get_memory` ignora o bloco de "Frontmatter" (as propriedades com `---` no topo do arquivo Markdown) e pega estritamente a primeira linha de texto útil.
 - O método `save_memory` tem bloqueio de segurança: Se a nota `.md` já existe, a IA cruza os braços e diz *"nota já existe, mantendo versão do vault"*, abstendo-se de sobrescrevê-la. O sistema assume que se a nota existe, o "Senhor" pode ter editado ela na mão e inserido formatações preciosas que um simples re-salvamento em texto plano destruiria.
 
 ### 2. Bypass Assíncrono do MCP (`ObsidianMCPClient._run`)
 
-O protocolo MCP é massivamente baseado na biblioteca `asyncio`, porém o core do J.A.R.V.I.S trabalha bloqueado pelas threads do PyWebView que detestam corrotinas misturadas.
+O protocolo MCP é massivamente baseado na biblioteca `asyncio`, porém o J.A.R.V.I.S chama o vault de dentro de threads síncronas (workers da TUI e skills), que não podem misturar corrotinas.
 O método `_run(self, coro)` tenta usar `asyncio.run()`, mas possui um `except RuntimeError` vital. Se o Python reclamar que já existe um Event Loop rodando (como na tela do app), ele cria imediatamente um `concurrent.futures.ThreadPoolExecutor(max_workers=1)` para envelopar e rodar o MCP isoladamente de forma Síncrona, desengasgando o processo.
 
 ### 3. O Pipeline de RAG (`get_vault_context`)

@@ -54,45 +54,101 @@ class TestPersistence(unittest.TestCase):
         self.assertEqual(news.get_sources(db), news.DEFAULT_SOURCES)
 
 
+UTC = datetime.timezone.utc
+NOW = datetime.datetime(2026, 11, 13, 12, tzinfo=UTC)
+
+
+def _rss(*items):
+    body = "".join(f"<item><title>{t}</title><pubDate>{d}</pubDate></item>" for t, d in items)
+    return MagicMock(status_code=200, content=f"<rss><channel>{body}</channel></rss>".encode())
+
+
+class TestRelevance(unittest.TestCase):
+    def test_weights(self):
+        self.assertGreater(news.relevance("Morre o ator Fulano aos 80 anos"), 0)
+        self.assertGreater(news.relevance("Ibovespa despenca e dólar dispara"),
+                           news.relevance("Presidente visita feira"))
+        self.assertEqual(news.relevance("Receita de bolo de cenoura"), 0)
+
+    def test_pick_most_relevant_then_newest(self):
+        titles = [("Festival de música agita a cidade", NOW), ("Presidente visita feira agrícola", NOW),
+                  ("Morre cantor famoso aos 70", NOW)]
+        self.assertEqual(news.pick_relevant(titles, now=NOW), "Morre cantor famoso aos 70")
+        tie = [("Primeira notícia comum", NOW), ("Segunda notícia comum", NOW)]
+        self.assertEqual(news.pick_relevant(tie, now=NOW), "Primeira notícia comum")
+
+    def test_old_items_ignored(self):
+        old = NOW - datetime.timedelta(days=5)
+        self.assertIsNone(news.pick_relevant([("Morre alguém", old)], now=NOW))
+        self.assertEqual(news.pick_relevant([("Sem data", None)], now=NOW), "Sem data")
+
+    def test_portal_titles(self):
+        self.assertTrue(news._is_portal_title("g1 - O portal de notícias da Globo", "G1", "g1.globo.com"))
+        self.assertTrue(news._is_portal_title("U.S. News - WSJ.com", "WSJ", "wsj.com"))
+        self.assertTrue(news._is_portal_title("Google Scholar", "Google Acadêmico", "scholar.google.com"))
+        self.assertTrue(news._is_portal_title("The New York Times, US News, World News and Videos",
+                                              "New York Times", "nytimes.com"))
+        self.assertFalse(news._is_portal_title("Morre ex-presidente aos 90 anos - g1", "G1", "g1.globo.com"))
+        self.assertTrue(news._is_portal_title("Scientific Electronic Library Online", "SciELO", "scielo.org"))
+
+    def test_clean_title_strips_portal_suffix(self):
+        self.assertEqual(news.clean_title("Mercado recua - WSJ", "Wall Street Journal", "wsj.com"), "Mercado recua")
+        self.assertEqual(news.clean_title("Chuva forte | g1", "G1", "g1.globo.com"), "Chuva forte")
+        self.assertEqual(news.clean_title("Placar: 2 - 1", "G1", "g1.globo.com"), "Placar: 2 - 1")
+
+
+class TestFeed(unittest.TestCase):
+    def test_parses_rss_and_dates(self):
+        get = MagicMock(return_value=_rss(("Título  A", "Fri, 13 Nov 2026 10:00:00 GMT")))
+        out = news.fetch_feed("http://x/rss", get=get)
+        self.assertEqual(out[0][0], "Título A")
+        self.assertEqual(out[0][1], datetime.datetime(2026, 11, 13, 10, tzinfo=UTC))
+
+    def test_error_or_bad_xml_returns_empty(self):
+        self.assertEqual(news.fetch_feed("u", get=MagicMock(side_effect=OSError("off"))), [])
+        self.assertEqual(news.fetch_feed("u", get=MagicMock(return_value=MagicMock(status_code=200,
+                                                                                   content=b"<html"))), [])
+
+
 class TestHeadlines(unittest.TestCase):
-    DAY = datetime.date(2026, 11, 10)
+    def _search(self, query, max_results=5):
+        site = query.split("site:")[-1].split()[0]
+        return [{"title": f"{site} - Portal de notícias"}, {"title": f"Ministro anuncia plano para {site}"}]
 
-    def _search(self, query, max_results=2):
-        site = query.split("site:")[-1]
-        return [{"title": f"{site} 1"}, {"title": f"{site} 2"}]
+    def test_one_per_source_in_order_skipping_portal_titles(self):
+        out = news.headlines(["SciELO", "Estadão"], search=self._search)
+        self.assertEqual(out, [("SciELO", "Ministro anuncia plano para scielo.org"),
+                               ("Estadão", "Ministro anuncia plano para Estadão")])
 
-    def test_one_per_source_and_query_shape(self):
-        calls = []
-
-        def search(query, max_results=2):
-            calls.append(query)
-            return self._search(query)
-
-        out = news.headlines(["G1", "BBC"], limit=4, search=search, today=self.DAY)
-        self.assertEqual(sorted(out[:2]), ["bbc.com 1", "g1.globo.com 1"])  # 1ª rodada: uma de cada
-        self.assertEqual(len(out), 4)
-        self.assertIn("notícias hoje site:g1.globo.com", calls)
-
-    def test_rotates_start_by_day(self):
-        sources = ["G1", "BBC", "CNN"]
-        first = [news.headlines(sources, limit=1, search=self._search, today=self.DAY + datetime.timedelta(d))[0]
-                 for d in range(3)]
-        self.assertEqual(len(set(first)), 3)
+    def test_feed_first_then_search_fallback(self):
+        fresh = datetime.datetime.now(UTC).strftime("%a, %d %b %Y %H:%M:%S GMT")
+        get = MagicMock(return_value=_rss(("Chuva fecha estradas", fresh), ("Morre jornalista aos 88", fresh)))
+        search = MagicMock(side_effect=self._search)
+        out = news.headlines(["G1"], search=search, get=get)
+        self.assertEqual(out, [("G1", "Morre jornalista aos 88")])
+        search.assert_not_called()
+        undated = MagicMock(return_value=MagicMock(
+            status_code=200, content=b"<rss><channel><item><title>Sem data</title></item></channel></rss>"))
+        self.assertEqual(news.headlines(["G1"], search=search, get=undated),
+                         [("G1", "Ministro anuncia plano para g1.globo.com")])
+        stale = MagicMock(return_value=_rss(("Velha", "Mon, 01 Jan 2024 10:00:00 GMT")))
+        out = news.headlines(["G1"], search=search, get=stale)
+        self.assertEqual(out, [("G1", "Ministro anuncia plano para g1.globo.com")])
 
     def test_failing_source_is_skipped(self):
-        def search(query, max_results=2):
-            if "bbc" in query:
+        def search(query, max_results=5):
+            if "scielo" in query:
                 raise RuntimeError("caiu")
             return self._search(query)
 
-        out = news.headlines(["BBC", "G1"], limit=2, search=search, today=self.DAY)
-        self.assertEqual(out, ["g1.globo.com 1", "g1.globo.com 2"])
+        out = news.headlines(["SciELO", "Estadão"], search=search)
+        self.assertEqual([s for s, _ in out], ["Estadão"])
 
     def test_doi_source_uses_crossref(self):
         with patch.object(news, "doi_articles", return_value=["Paper X (doi.org/10.1/x)"]) as doi:
-            out = news.headlines(["DOI"], limit=2, search=self._search, today=self.DAY)
-        doi.assert_called_once()
-        self.assertEqual(out, ["Paper X (doi.org/10.1/x)"])
+            out = news.headlines(["DOI"], search=self._search)
+        doi.assert_called_once_with(limit=1)
+        self.assertEqual(out, [("DOI", "Paper X (doi.org/10.1/x)")])
 
 
 class TestCrossref(unittest.TestCase):
@@ -114,9 +170,9 @@ class TestCrossref(unittest.TestCase):
 
 class TestBriefingUsesSources(unittest.TestCase):
     def test_news_goes_through_sources(self):
-        with patch.object(news, "headlines", return_value=["Manchete G1"]) as h:
-            self.assertEqual(briefing._news(limit=3), ["Manchete G1"])
-        h.assert_called_once_with(limit=3)
+        with patch.object(news, "headlines", return_value=[("G1", "Manchete")]) as h:
+            self.assertEqual(briefing._news(), [("G1", "Manchete")])
+        h.assert_called_once_with()
 
 
 if __name__ == "__main__":

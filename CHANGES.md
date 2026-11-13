@@ -2,6 +2,59 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+**Data:** 2026-11-13 (4)
+**Escopo:** Fecha duas dívidas achadas na revisão da documentação: prompts do chat ainda em string Python e fallback de tokens fora do `.gitignore`.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | **Prompts do chat em `.md`**: as instruções que estavam no `services/chat.py` viraram arquivos — `mode_voice.md` (regras de áudio do modo voz standalone), `memory_read.md` (instrução crítica de memória pessoal, agora sem o nome "Felipe" fixo), `hardware_context.md` (`$hardware`), `live_data.md` (`$live_data`) e `vault_memory.md` (`$note`, `$content`) | `backend/prompts/*.md` |
+| 2 | **`build_messages()`** junta a montagem que estava duplicada em `ask_local_ai` e `ask_local_ai_stream` (mesma ordem: system + modo + HARDWARE/MEMORY_READ, telemetria, nota do vault, `live_context`, histórico, pergunta). `MODE_PROMPTS` mapeia `voice`/`chat`/`copilot`; `_temperature()` mantém 0.1 com dado real e 0.7 no resto. Comportamento igual ao anterior | `backend/services/chat.py` |
+| 3 | **`.gitignore`**: `backend/database/*.json` (fallback `integrations_secrets.json` e o antigo `spotify_token.json`) e os arquivos WAL do SQLite (`*.db-wal`, `*.db-shm`) | `.gitignore` |
+| 4 | Docs: `SECURITY.md` (fallback agora ignorado), `backend/services/README.md` (prompts do chat) | `SECURITY.md`, `backend/services/README.md` |
+
+**Testes novos:** `test_chat_prompts.py` — arquivos de prompt existem, nenhum texto de instrução sobrou no `chat.py`, `memory_read.md` sem nome fixo, ordem e conteúdo das mensagens, prompt por modo (voz/chat/copilot), instruções de HARDWARE e MEMORY_READ só no intent certo, nota do vault com `$` preservada, `ask_local_ai` limpa `*`/`#` e o stream usa o modo e a temperatura certos.
+
+**Fora do repositório:** nota do projeto no Obsidian (`🚀 Projetos/J.A.R.V.I.S/J.A.R.V.I.S.md`) reescrita com a stack, a arquitetura e o progresso atuais (sem `boot.bat` nem frontend JS).
+
+---
+
+**Data:** 2026-11-13 (3)
+**Escopo:** Documentação do projeto revisada contra o código: guia ponta a ponta novo, READMEs reescritos (a maioria ainda descrevia React/PyWebView, `boot.bat` e `execute(entity)` de 1 argumento) e docs por módulo corrigidas.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | **Novo `docs/arquitetura.md`**: como o JARVIS funciona do boot à resposta — diagrama dos dois processos (TUI e agente), boot, fluxo Chat/Copilot, ações críticas, tabela de todos os módulos (frontend, services, core, skills), rotinas (briefing, manchetes, foco/DND/apresentação, alertas, trânsito), comandos e atalhos, dados, agente/atualização/instalador e testes | `docs/arquitetura.md` |
+| 2 | **README da raiz** reescrito: o que faz, instalação, rodar do código (sem `boot.bat`, que não existe mais), testes, instalador e índice da documentação | `README.md` |
+| 3 | **READMEs de pasta** reescritos com os módulos atuais: backend (estrutura, entradas `main.py`/`agent.py`/`services.brain`), core (todos os ~40 módulos por grupo), services (pipeline e os 14 módulos), skills (contrato de 2 argumentos, Chat × Copilot por categoria, as 17 skills, confirmação de ação crítica), database (colunas `attachment_*`/`mode`, chaves da tabela `config`, local dev/instalado), frontend (modos, telas, comandos, linha de status) | `backend/README.md`, `backend/core/README.md`, `backend/services/README.md`, `backend/skills/README.md`, `backend/database/README.md`, `frontend/README.md` |
+| 4 | **Docs por módulo**: `main_orchestrator.md`, `brain.md` e `speak.md` reescritas (eram da era PyWebView/React); `config.md` (modo instalado `JARVIS_DATA_DIR`, grupos de variáveis), `listen.md` (mic lazy, janela de atenção configurável), `database.md`, `obsidian.md`, `skill_loader.md`, `SystemInfo.md` e `system_clear.md` sem referências a frontend web | `backend/docs/**` |
+| 5 | **CLAUDE.md / AGENTS.md**: estrutura com os módulos que faltavam (briefing, news, weather, github_client, spotify, web, clipboard, window_utils, ollama_server, boot, wt_profile, utils, user_prefs, skills productivity/web), `docs/`, `tests/`, CI `main.yml`; caminho real das memórias (`🚀 Projetos/…/Memória`); skill nova em productivity/web roda no Chat. AGENTS.md mantém o workflow e as boas práticas próprias e recebe o resto do CLAUDE.md (antes descrevia React/PyWebView) | `CLAUDE.md`, `AGENTS.md` |
+| 6 | **CONTRIBUTING.md**: sem Node/npm/`boot.bat`; checks iguais ao CI (`ruff` em backend e frontend, `compileall`, pytest); contrato de skill atualizado | `CONTRIBUTING.md` |
+| 7 | **SECURITY.md**: tokens no Cofre do Windows (fallback `integrations_secrets.json`, não ignorado pelo `.gitignore`), link do `env.example` corrigido | `SECURITY.md` |
+| 8 | Docstrings: `agent.py` (TUI fecha com Esc//quit, não Ctrl+Q) e `news.py` | `backend/agent.py`, `backend/core/news.py` |
+
+**Verificação:** todos os links relativos dos `.md` resolvem; afirmações conferidas no código (eventos do `presence`, cache do updater, limites do `SystemInfo`, chaves da tabela `config`, menu da bandeja, caminho das memórias).
+
+**Achados para depois (não alterados aqui):** `services/chat.py` tem instruções de prompt em string Python (regra do projeto pede `.md`); o `.gitignore` não cobre `backend/database/*.json` (fallback de tokens).
+
+---
+
+**Data:** 2026-11-13 (2)
+**Escopo:** Briefing em seções fixas (um tema por bloco, cada item na sua linha), sem "arquivos mexidos", com GPU e internet, e manchetes filtradas — a notícia mais relevante de cada portal.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | **Briefing em seções**: saudação, depois **Clima**, **Computador**, **GitHub**, **Agenda**, **Trânsito** (dias úteis) e **Manchetes e últimas notícias**, cada uma num bloco com o título em negrito e o conteúdo na linha de baixo (quebra dura `BR`). Seção sem dado não aparece | `backend/core/briefing.py` |
+| 2 | **O LLM não reescreve mais o corpo**: o texto montado vai igual para a tela; o Ollama só escreve **uma frase de fecho** (texto puro, ≤ 25 palavras, sem emojis). Sem Ollama, sai só o corpo | `backend/core/briefing.py`, `backend/prompts/briefing.md` |
+| 3 | **Computador**: `CPU → x%`, `RAM → x%`, `GPU → carga · temperatura` (some sem GPU dedicada), `INTERNET → ↓ download · ↑ upload` (amostra própria de 1 s com `psutil`, sem mexer nos contadores do `SystemInfo`) e `BATERIA` só em notebook | `backend/core/briefing.py` |
+| 4 | **Sem "Arquivos mexidos"**: sai a varredura de Desktop/Documentos/Downloads (`recent_files`, `briefing_dirs`) e a variável `BRIEFING_DIRS` | `backend/core/briefing.py`, `backend/core/config.py`, `env.example`, `backend/prompts/skills/daily_briefing.md` |
+| 5 | **Uma notícia por portal, a mais relevante**: G1, BBC, NYT, WSJ e CNN Brasil leem o **RSS oficial** (`FEEDS`) em vez da busca, que devolvia o título da página inicial ("g1 – O portal de notícias da Globo"). Entre as 15 mais novas das últimas 48 h, ganha a de maior peso (`relevance`: morte, guerra/ataque/desastre, bolsa/dólar/juros, queda/disparada/recorde, eleição/governo); empate → a mais nova. Item de feed sem data é ignorado (feed parado cai na busca). Fontes sem RSS usam a busca, descartando títulos de portal (`_is_portal_title`) e tirando o sufixo " - WSJ" (`clean_title`). Fontes em paralelo; cada linha diz a fonte (`- **G1:** …`) | `backend/core/news.py`, `backend/core/briefing.py` |
+
+**Testes:** `test_briefing.py` — ordem e formato das seções, linhas do Computador, sem bateria/arquivos, manchetes uma por linha, fecho do LLM anexado (e corpo intacto sem LLM ou com erro), `format_rate`, `_computer` com/sem GPU, rede e bateria. `test_news.py` — pesos de relevância, mais relevante/empate/notícia velha, títulos de portal, sufixo do portal, parse de RSS, feed primeiro e busca como reserva (feed sem data ou velho), fonte que falha, DOI.
+
+**Pendente (manual):** abrir a TUI no 1º boot do dia (ou `/briefing`) e conferir o visual; o RSS da CNN internacional está parado desde 2023, então "CNN" usa a busca e pode não trazer manchete (use "CNN Brasil" para RSS).
+
+---
+
 **Data:** 2026-11-13
 **Escopo:** Tela "ATUALIZAÇÃO DISPONÍVEL!!" ao abrir o JARVIS (logon, Win+J, bandeja, menu Iniciar) com instalação por qualquer tecla; versão nova substitui a antiga sem sobras; Modo Apresentação automático com Canva, Google Slides e PowerPoint aberto.
 
