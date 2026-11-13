@@ -2,7 +2,6 @@
 import datetime
 import os
 import tempfile
-import time
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -56,45 +55,18 @@ class TestDailyControl(unittest.TestCase):
         self.assertTrue(briefing.should_run_today(self.db))
 
 
-class TestRecentFiles(unittest.TestCase):
-    def test_finds_recent_skips_old_hidden_and_deep(self):
-        with tempfile.TemporaryDirectory() as root:
-            root = Path(root)
-            old = time.time() - 3 * 86400
-            (root / "novo.txt").write_text("x")
-            (root / "velho.txt").write_text("x")
-            os.utime(root / "velho.txt", (old, old))
-            (root / ".oculto").write_text("x")
-            (root / "node_modules").mkdir()
-            (root / "node_modules" / "lib.js").write_text("x")
-            deep = root / "a" / "b" / "c" / "d"
-            deep.mkdir(parents=True)
-            (deep / "fundo.txt").write_text("x")
-            (root / "a" / "perto.md").write_text("x")
-            names = [p.name for p in briefing.recent_files([root], limit=10)]
-        self.assertCountEqual(names, ["novo.txt", "perto.md"])
-
-    def test_missing_dir_is_ignored(self):
-        self.assertEqual(briefing.recent_files([Path("Z:/nao/existe")]), [])
-
-    def test_default_dirs_from_settings(self):
-        with patch.object(settings, "BRIEFING_DIRS", "C:/a; C:/b"):
-            self.assertEqual(briefing.briefing_dirs(), [Path("C:/a"), Path("C:/b")])
-        with patch.object(settings, "BRIEFING_DIRS", ""):
-            self.assertEqual(briefing.briefing_dirs()[0].name, "Desktop")
-
-
 class TestCollectAndBuild(unittest.TestCase):
     def _patches(self, **overrides):
-        values = dict(weather="22°C com céu limpo.", system="CPU 5%, RAM 40%",
-                      files=[Path("relatorio.docx")], github="1 PR(s) seus abertos",
+        values = dict(weather="22°C com céu limpo.",
+                      computer={"cpu": "5%", "ram": "40%", "gpu": "12% · 50°C",
+                                "net": "↓ 1.2 MB/s · ↑ 80.0 KB/s", "battery": None},
+                      github="1 PR(s) seus abertos",
                       agenda="2 eventos hoje: 09:00 Daily · 14:00 Dentista",
                       traffic="Casa → trabalho: 34 min (+9 pelo trânsito, TomTom).")
         values.update(overrides)
         return [
             patch.object(weather, "get_weather_context", side_effect=_maybe_raise(values["weather"])),
-            patch.object(briefing, "_system_line", side_effect=_maybe_raise(values["system"])),
-            patch.object(briefing, "recent_files", side_effect=_maybe_raise(values["files"])),
+            patch.object(briefing, "_computer", side_effect=_maybe_raise(values["computer"])),
             patch.object(github_client, "summary", side_effect=_maybe_raise(values["github"])),
             patch.object(google_calendar, "summary", side_effect=_maybe_raise(values["agenda"])),
             patch.object(traffic, "commute_line", side_effect=_maybe_raise(values["traffic"])),
@@ -115,11 +87,21 @@ class TestCollectAndBuild(unittest.TestCase):
         data = self._collect()
         self.assertEqual(data["greeting"], "Bom dia, Felipe.")
         self.assertEqual(data["weekday"], "segunda-feira")
-        self.assertEqual(data["files"], ["relatorio.docx"])
+        self.assertNotIn("files", data)
         self.assertNotIn("news", data)
         self.assertIn("Daily", data["agenda"])
-        self.assertIn("**Agenda:** 2 eventos hoje", briefing.to_markdown(data))
-        self.assertIn("**Trânsito:** Casa → trabalho: 34 min", briefing.to_markdown(data))
+
+    def test_markdown_sections_in_order_one_theme_per_block(self):
+        md = briefing.to_markdown(self._collect())
+        blocks = md.split("\n\n")
+        self.assertTrue(blocks[0].startswith("**Bom dia, Felipe.**"))
+        titles = [b.split(":**")[0] + ":**" for b in blocks[1:]]
+        self.assertEqual(titles, ["**Clima:**", "**Computador:**", "**GitHub:**", "**Agenda:**", "**Trânsito:**"])
+        self.assertIn("**Clima:**" + briefing.BR + "22°C com céu limpo.", md)
+        self.assertIn(briefing.BR.join(["CPU → 5%", "RAM → 40%", "GPU → 12% · 50°C",
+                                        "INTERNET → ↓ 1.2 MB/s · ↑ 80.0 KB/s"]), md)
+        self.assertNotIn("BATERIA", md)
+        self.assertNotIn("Arquivos", md)
 
     def test_traffic_only_on_weekdays(self):
         ps = self._patches()
@@ -141,13 +123,14 @@ class TestCollectAndBuild(unittest.TestCase):
         data = self._collect(weather=RuntimeError("offline"), github=RuntimeError("401"))
         self.assertIsNone(data["weather"])
         self.assertIsNone(data["github"])
-        self.assertEqual(data["system"], "CPU 5%, RAM 40%")
         md = briefing.to_markdown(data)
         self.assertNotIn("Clima", md)
-        self.assertIn("Sistema", md)
+        self.assertNotIn("GitHub", md)
+        self.assertIn("Computador", md)
 
-    def test_news_only_when_asked(self):
-        with patch.object(briefing, "_news", return_value=["Manchete A"]):
+    def test_news_section_one_line_per_source(self):
+        news = [("G1", "Ibovespa despenca 3%"), ("BBC", "Earthquake hits Japan")]
+        with patch.object(briefing, "_news", return_value=news):
             ps = self._patches()
             for p in ps:
                 p.start()
@@ -156,22 +139,53 @@ class TestCollectAndBuild(unittest.TestCase):
             finally:
                 for p in reversed(ps):
                     p.stop()
-        self.assertEqual(data["news"], ["Manchete A"])
-        self.assertIn("Manchete A", briefing.to_markdown(data))
+        md = briefing.to_markdown(data)
+        self.assertTrue(md.endswith("**Manchetes e últimas notícias:**\n\n"
+                                    "- **G1:** Ibovespa despenca 3%\n- **BBC:** Earthquake hits Japan"))
 
-    def test_build_uses_llm_and_falls_back(self):
+    def test_build_appends_llm_closing_and_keeps_body(self):
         data = self._collect()
-        with patch("core.llm.query_ollama", return_value="  Bom dia, Felipe. Tudo nominal.  ") as llm:
-            self.assertEqual(briefing.build(data), "Bom dia, Felipe. Tudo nominal.")
-        self.assertIn("relatorio.docx", llm.call_args[0][0][0]["content"])
+        body = briefing.to_markdown(data)
+        with patch("core.llm.query_ollama", return_value="  Leve um guarda-chuva,\n Senhor.  ") as llm:
+            self.assertEqual(briefing.build(data), body + "\n\nLeve um guarda-chuva, Senhor.")
+        self.assertIn("CPU → 5%", llm.call_args[0][0][0]["content"])
         with patch("core.llm.query_ollama", return_value=None):
-            fallback = briefing.build(data)
-        self.assertIn("**Bom dia, Felipe.**", fallback)
-        self.assertIn("relatorio.docx", fallback)
+            self.assertEqual(briefing.build(data), body)
+        with patch("core.llm.query_ollama", side_effect=RuntimeError("ollama off")):
+            self.assertEqual(briefing.build(data), body)
 
-    def test_no_recent_files_message(self):
-        md = briefing.to_markdown(self._collect(files=[]))
-        self.assertIn("nada modificado", md)
+
+class TestComputer(unittest.TestCase):
+    def test_format_rate(self):
+        self.assertEqual(briefing.format_rate(512), "512 B/s")
+        self.assertEqual(briefing.format_rate(1536), "1.5 KB/s")
+        self.assertEqual(briefing.format_rate(3 * 1024 ** 2), "3.0 MB/s")
+        self.assertEqual(briefing.format_rate(-5), "0 B/s")
+
+    def test_computer_reads_monitor(self):
+        import core.state as state
+        monitor = MagicMock()
+        monitor.get_cpu_usage.return_value = 31.0
+        monitor.get_ram_usage.return_value = {"percent": 85.4}
+        monitor.get_gpu_info.return_value = {"name": "RTX", "load": 7.0, "temp": 48}
+        monitor.get_battery_status.return_value = {"percent": 90, "plugged": True, "time_left": "x"}
+        with patch.object(state, "sys_monitor", monitor), patch.object(briefing, "_net_rate", return_value="↓ 1 KB/s · ↑ 2 KB/s"):
+            info = briefing._computer()
+        self.assertEqual(info, {"cpu": "31.0%", "ram": "85.4%", "gpu": "7.0% · 48°C",
+                                "net": "↓ 1 KB/s · ↑ 2 KB/s", "battery": "90% (na tomada)"})
+
+    def test_no_gpu_no_battery(self):
+        import core.state as state
+        monitor = MagicMock()
+        monitor.get_cpu_usage.return_value = 1
+        monitor.get_ram_usage.return_value = {"percent": 2}
+        monitor.get_gpu_info.return_value = {"name": "Integrada/N/A", "load": 0, "temp": 0}
+        monitor.get_battery_status.return_value = {"percent": 100, "time_left": "Desktop"}
+        with patch.object(state, "sys_monitor", monitor), patch.object(briefing, "_net_rate", side_effect=OSError("sem rede")):
+            info = briefing._computer()
+        self.assertIsNone(info["gpu"])
+        self.assertIsNone(info["net"])
+        self.assertIsNone(info["battery"])
 
 
 class TestSkill(unittest.TestCase):

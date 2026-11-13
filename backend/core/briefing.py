@@ -1,24 +1,21 @@
-"""Briefing diário: saudação, clima, agenda, trânsito, máquina, arquivos recentes, GitHub e notícias.
+"""Briefing diário: saudação, clima, computador, GitHub, agenda, trânsito e notícias.
 
 `collect()` junta as fontes — cada uma isolada em try, uma falha não derruba o
-resto. `build()` pede ao Ollama um texto curto no tom do JARVIS; sem LLM, monta
-uma lista em Markdown. `should_run_today()/mark_ran()` controlam o automático
-(1º boot do dia) pela chave `briefing_last_date` da tabela `config`.
+resto. `to_markdown()` monta o texto em seções fixas (um tema por bloco, cada
+item numa linha); `build()` só pede ao Ollama uma frase de fecho no tom do
+JARVIS — o corpo nunca passa pelo LLM, para a formatação não se perder.
+`should_run_today()/mark_ran()` controlam o automático (1º boot do dia) pela
+chave `briefing_last_date` da tabela `config`.
 """
 import datetime
-import os
-from pathlib import Path
+import time
 
-from core.config import settings
 from core.logger import log
 from core.prompts import load_prompt
 
 LAST_DATE_KEY = "briefing_last_date"
-RECENT_HOURS = 24
-RECENT_LIMIT = 5
-SCAN_DEPTH = 2         # pastas abaixo de cada raiz
-SCAN_MAX_ENTRIES = 4000  # teto de itens visitados (briefing não pode travar o boot)
-_SKIP_DIRS = {"node_modules", "__pycache__", "venv", ".venv", "site-packages", "AppData", "$RECYCLE.BIN"}
+NET_SAMPLE_S = 1.0  # janela da amostra de rede (o briefing roda em worker de thread)
+BR = "  \n"         # quebra de linha dura no Markdown (o Textual respeita)
 
 
 def _today():
@@ -44,44 +41,6 @@ def _db():
 
 
 # ------------------------------------------------------------------ fontes
-def briefing_dirs():
-    raw = settings.BRIEFING_DIRS
-    if raw:
-        return [Path(p.strip()).expanduser() for p in raw.split(";") if p.strip()]
-    home = Path.home()
-    return [home / "Desktop", home / "Documents", home / "Downloads"]
-
-
-def recent_files(dirs=None, hours=RECENT_HOURS, limit=RECENT_LIMIT, now=None):
-    """Arquivos modificados nas últimas `hours` horas, mais novos primeiro."""
-    cutoff = (now or datetime.datetime.now()).timestamp() - hours * 3600
-    found, visited = [], 0
-    stack = [(Path(d), 0) for d in (dirs if dirs is not None else briefing_dirs())]
-    while stack and visited < SCAN_MAX_ENTRIES:
-        folder, depth = stack.pop()
-        try:
-            entries = list(os.scandir(folder))
-        except OSError:
-            continue
-        for entry in entries:
-            visited += 1
-            name = entry.name
-            if name.startswith((".", "~$")) or name in _SKIP_DIRS:
-                continue
-            try:
-                if entry.is_dir(follow_symlinks=False):
-                    if depth < SCAN_DEPTH:
-                        stack.append((Path(entry.path), depth + 1))
-                elif entry.is_file(follow_symlinks=False):
-                    mtime = entry.stat().st_mtime
-                    if mtime >= cutoff:
-                        found.append((mtime, entry.path))
-            except OSError:
-                continue
-    found.sort(reverse=True)
-    return [Path(p) for _, p in found[:limit]]
-
-
 def _user_name():
     try:
         from core.obsidian import obsidian
@@ -90,22 +49,53 @@ def _user_name():
         return "Senhor"
 
 
-def _system_line():
+def format_rate(bps):
+    """Bytes/s → '1.2 MB/s' (base 1024, como o /status)."""
+    value = max(0.0, float(bps or 0))
+    for unit in ("B", "KB", "MB", "GB"):
+        if value < 1024 or unit == "GB":
+            return f"{value:.0f} {unit}/s" if unit == "B" else f"{value:.1f} {unit}/s"
+        value /= 1024
+    return f"{value:.1f} GB/s"
+
+
+def _net_rate(sample_s=NET_SAMPLE_S):
+    """Taxa de rede própria (não mexe nos contadores do SystemInfo)."""
+    import psutil
+    first = psutil.net_io_counters()
+    time.sleep(sample_s)
+    second = psutil.net_io_counters()
+    down = (second.bytes_recv - first.bytes_recv) / sample_s
+    up = (second.bytes_sent - first.bytes_sent) / sample_s
+    return f"↓ {format_rate(down)} · ↑ {format_rate(up)}"
+
+
+def _computer():
+    """{'cpu', 'ram', 'gpu', 'net', 'battery'} — item ausente = None."""
     import core.state as state
     monitor = state.sys_monitor
-    cpu = monitor.get_cpu_usage()
-    ram = monitor.get_ram_usage()
+    info = {"cpu": f"{monitor.get_cpu_usage()}%", "ram": f"{monitor.get_ram_usage()['percent']}%",
+            "gpu": None, "net": None, "battery": None}
+    try:
+        gpu = monitor.get_gpu_info()
+        if gpu.get("name") and "N/A" not in gpu["name"]:
+            info["gpu"] = f"{gpu.get('load', 0)}%" + (f" · {gpu['temp']}°C" if gpu.get("temp") else "")
+    except Exception as e:
+        log.debug(f"[BRIEFING] GPU indisponível: {e}")
+    try:
+        info["net"] = _net_rate()
+    except Exception as e:
+        log.debug(f"[BRIEFING] Rede indisponível: {e}")
     batt = monitor.get_battery_status()
-    line = f"CPU {cpu}%, RAM {ram['percent']}%"
     if batt and batt.get("percent") is not None and batt.get("time_left") != "Desktop":
-        line += f", bateria {batt['percent']}%" + (" (na tomada)" if batt.get("plugged") else "")
-    return line
+        info["battery"] = f"{batt['percent']}%" + (" (na tomada)" if batt.get("plugged") else "")
+    return info
 
 
-def _news(limit=4):
-    """Manchetes das fontes escolhidas em /config → SISTEMA (core/news.py)."""
+def _news():
+    """[(fonte, manchete)] — a mais relevante de cada fonte de /config → SISTEMA."""
     from core import news
-    return news.headlines(limit=limit)
+    return news.headlines()
 
 
 def collect(include_news=False, now=None):
@@ -117,10 +107,9 @@ def collect(include_news=False, now=None):
     sources = {
         "greeting": lambda: get_time_greeting(_user_name(), now),
         "weather": get_weather_context,
-        "agenda": lambda: google_calendar.summary(now.date()),
-        "system": _system_line,
-        "files": lambda: [p.name for p in recent_files(now=now)],
+        "computer": _computer,
         "github": github_client.summary,
+        "agenda": lambda: google_calendar.summary(now.date()),
     }
     if now.weekday() < 5:
         sources["traffic"] = lambda: traffic.commute_line(now)
@@ -140,35 +129,47 @@ _WEEKDAYS = ("segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "s
 
 
 # ------------------------------------------------------------------ texto
+def _section(title, lines):
+    lines = [line for line in lines if line]
+    return f"**{title}:**{BR}" + BR.join(lines) if lines else None
+
+
+def _computer_lines(info):
+    if not info:
+        return []
+    labels = (("cpu", "CPU"), ("ram", "RAM"), ("gpu", "GPU"), ("net", "INTERNET"), ("battery", "BATERIA"))
+    return [f"{label} → {info[key]}" for key, label in labels if info.get(key)]
+
+
 def to_markdown(data):
-    """Briefing montado sem LLM (também é o insumo do prompt)."""
-    lines = [f"**{data.get('greeting') or 'Bom dia.'}** {data['weekday'].capitalize()}, {data['date']}.", ""]
-    if data.get("weather"):
-        lines.append(f"- **Clima:** {data['weather']}")
-    if data.get("agenda"):
-        lines.append(f"- **Agenda:** {data['agenda']}")
-    if data.get("traffic"):
-        lines.append(f"- **Trânsito:** {data['traffic']}")
-    if data.get("system"):
-        lines.append(f"- **Sistema:** {data['system']}")
-    if data.get("github"):
-        lines.append(f"- **GitHub:** {data['github']}")
-    files = data.get("files")
-    if files:
-        lines.append(f"- **Arquivos mexidos nas últimas 24 h:** {', '.join(files)}")
-    elif files is not None:
-        lines.append("- **Arquivos:** nada modificado nas últimas 24 h.")
-    if data.get("news"):
-        lines.append("- **Manchetes:** " + " · ".join(data["news"]))
-    return "\n".join(lines)
+    """Briefing em seções fixas: saudação, Clima, Computador, GitHub, Agenda,
+    Trânsito e Manchetes — um tema por bloco, cada item na sua linha."""
+    head = f"**{data.get('greeting') or 'Bom dia.'}** {data['weekday'].capitalize()}, {data['date']}."
+    news_lines = [f"- **{source}:** {title}" for source, title in (data.get("news") or [])]
+    blocks = [
+        head,
+        _section("Clima", [data.get("weather")]),
+        _section("Computador", _computer_lines(data.get("computer"))),
+        _section("GitHub", [data.get("github")]),
+        _section("Agenda", [data.get("agenda")]),
+        _section("Trânsito", [data.get("traffic")]),
+        "**Manchetes e últimas notícias:**\n\n" +"\n".join(news_lines) if news_lines else None,
+    ]
+    return "\n\n".join(b for b in blocks if b)
 
 
 def build(data):
-    from core.llm import query_ollama
+    """Corpo fixo + frase de fecho do LLM (sem LLM, só o corpo)."""
     facts = to_markdown(data)
-    prompt = load_prompt("briefing.md", facts=facts)
-    answer = query_ollama([{"role": "user", "content": prompt}], temperature=0.5)
-    return answer.strip() if answer else facts
+    try:
+        from core.llm import query_ollama
+        prompt = load_prompt("briefing.md", facts=facts)
+        closing = query_ollama([{"role": "user", "content": prompt}], temperature=0.5)
+    except Exception as e:
+        log.warning(f"[BRIEFING] Fecho do LLM indisponível: {e}")
+        closing = None
+    closing = " ".join((closing or "").split())
+    return f"{facts}\n\n{closing}" if closing else facts
 
 
 def generate(include_news=False):
