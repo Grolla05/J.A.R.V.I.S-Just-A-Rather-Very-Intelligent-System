@@ -1,46 +1,93 @@
-# frontend — interface de terminal do J.A.R.V.I.S
+# frontend — a TUI do J.A.R.V.I.S
 
-TUI em [Textual](https://textual.textualize.io), 100% Python. Não tem build, Node.js nem WebView: roda no próprio terminal e chama o backend (`core/`, `services/`) por import direto.
+Interface de terminal em [Textual](https://textual.textualize.io), 100% Python. Sem build, Node.js nem WebView: roda no terminal e chama o backend (`core/`, `services/`) por import direto. O visual segue o canvas de design "JARVIS TUI".
 
-O visual segue o canvas de design aprovado ("JARVIS TUI": Chat, Copilot, Protocolo crítico e Trocar sessão).
+## Rodar
 
-## Como rodar
-
-O ponto de entrada continua sendo o backend, que põe a raiz do repositório no `sys.path` e importa este pacote:
+O ponto de entrada é o backend, que põe a raiz do repositório no `sys.path` e importa este pacote:
 
 ```bash
 cd backend
-python main.py
+python main.py             # abre no Chat, com tela de boot
+python main.py --copilot   # abre no Copilot, sem tela de boot (é o que o Win+J faz)
 ```
 
-Ou `boot.bat` na raiz (sobe o Ollama antes). Prefira o Windows Terminal.
+Prefira o Windows Terminal.
 
 ## Arquivos
 
 | Arquivo | Papel |
 |---|---|
-| `app.py` | `JarvisApp`: modos chat/copilot, atalhos, stream, sessões, anexos, voz, alertas, telemetria |
-| `widgets.py` | `MessageView`, `PromptInput`, `JarvisOrb`, `CopilotHero`, `VoiceBar`, `ConfirmScreen` (expira em 30 s), `format_slot_when` |
-| `orb.py` | Orb pixel-art 16×16 do Copilot: quadros de cada estado e conversão para meio-bloco (lógica pura) |
-| `commands.py` | Parser puro dos `/comandos` e entradas da paleta Ctrl+K |
-| `jarvis.tcss` | Tema. Todas as cores ficam aqui como variáveis `$j-*` |
-| `pyproject.toml` | Herda as regras do ruff de `backend/pyproject.toml` |
+| `app.py` | `JarvisApp`: modos, atalhos, worker de stream, sessões, anexos, voz, alertas, telemetria, briefing automático, atualização |
+| `widgets.py` | `MessageView`, `PromptInput`, `StatusLine`, `JarvisOrb`, `PixelSprite`, `CopilotHero`, `VoiceBar`, `ConfirmScreen` (30 s) |
+| `commands.py` | Parser puro dos `/comandos` (fonte única: `COMMANDS`, `ALIASES`, `NEEDS_ARG`) e paleta (`palette_entries`, `filter_entries`) |
+| `orb.py` | Orb pixel-art 16×16 (quadros por estado e meio-bloco) — lógica pura |
+| `sprites.py` | Sprites 16-bit e efeitos (▰▱, sparkline, barras, CRT, scanline) — lógica pura |
+| `jarvis.tcss` | Tema. Todas as cores como variáveis `$j-*` |
+| `screens/` | Telas cheias (abaixo) |
+| `pyproject.toml` | Herda o ruff de `backend/pyproject.toml` |
+
+## Modos
+
+| Modo | Entra com | Como funciona |
+|---|---|---|
+| **Chat** | `Shift+Tab` | Texto em Markdown. Roda só skills de `productivity` e `web` (agenda, GitHub, trânsito, busca, briefing, foco, apresentação), com o selo `[INTENT]`. Voz desligada |
+| **Copilot** | `Shift+Tab`, `Ctrl+T`, `Win+J` | Só voz: o input vira `VoiceBar` + orb (ouvindo → pensando → respondendo). Todas as skills; ações críticas pedem confirmação. A resposta é falada. Tudo em ciano |
+
+Comandos `/` só existem no Chat.
 
 ## Telas
 
-- **Chat:** barra superior azul (selo CHAT, título, "sessão N de M"), conversa em Markdown, barra de anexo, input e uma linha única com telemetria (esquerda) e atalhos (direita).
-- **Copilot (`Shift+Tab` ou `Ctrl+T`) — só voz:** tudo em ciano, "somente voz · skills ativas: N" no topo, orb pixel-art com o estado (ouvindo / pensando / respondendo) e barra "Ouvindo… diga "Jarvis"" no lugar do input. A resposta mostra o selo da skill (`[AUDIO_CONTROL] ✓`) e é falada.
-- **Protocolo crítico:** topo vermelho, confirmação `s`/`n` que expira sozinha em 30 s (= não) e barra de voz pedindo "sim" ou "não".
-- **Save slots (`Ctrl+O`):** tela cheia `CARREGAR` com um cartão por sessão em 2 colunas (nº do slot, título, `★` fixada, `quando · N msgs · modo`, última fala do JARVIS e barra do tamanho). Setas navegam, Enter carrega, `p` fixa, `Del Del` apaga, `/` busca por título ou trecho (`frontend/screens/save_slots.py`).
-- **Skills (`/skills`):** cartuchos retrô — aba na cor da categoria, etiqueta com ícone + INTENT, `■ categoria  ON` e contatos dourados; desligado fica apagado e 1 linha abaixo.
+| Tela | Abre com | Arquivo |
+|---|---|---|
+| Boot (BIOS, `[  OK  ]`) | início | `screens/boot.py` |
+| Atualização disponível | início, se houver Release novo | `screens/update.py` |
+| Dashboard (CPU, RAM, GPU, rede, processos, saúde) | `/status` | `screens/status.py` |
+| Cartuchos das skills | `/skills` | `screens/skills.py` |
+| Log de atividade + timeline do último turno | `/log` | `screens/log.py` |
+| Memória (vault do Obsidian) | `/vault` | `screens/vault.py` |
+| Configurações (VOZ, MICROFONE, ROTINAS, INTEGRAÇÕES, SISTEMA, MODELO, SOBRE) | `/config` | `screens/settings.py`, `screens/integrations_panel.py` |
+| Save slots (sessões) | `Ctrl+O`, `/sessions` | `screens/save_slots.py` |
+| Paleta de comandos | `Ctrl+K`, `/menu`, `/help` | `screens/palette.py` |
+| Desligamento CRT | `Esc`, `/quit` | `screens/shutdown.py` |
+| House Party (easter egg) | "house party" no Chat | `screens/house_party.py` |
+
+Todas herdam de `JarvisScreen` (`screens/base.py`): topo com selo, corpo e a linha de status; `Esc` volta.
+
+## Comandos
+
+| Comando | Faz |
+|---|---|
+| `/menu` | Paleta de comandos, skills e foco (`Ctrl+K`) |
+| `/new`, `/sessions`, `/rename <título>`, `/pin` | Sessões (`Ctrl+N`, `Ctrl+O`) |
+| `/regen`, `/edit` | Regenerar (`Ctrl+R`) / editar a última (`↑` com input vazio) |
+| `/attach <caminho>`, `/detach` | Imagem → modelo de visão; áudio → transcrição no input. Arrastar o arquivo para o terminal também anexa |
+| `/mode [chat\|copilot]`, `/voice` | Modo (`Shift+Tab`) e voz (`Ctrl+T`) |
+| `/skills [on\|off <skill\|categoria>]` | Cartuchos ou alterna direto |
+| `/status`, `/log`, `/vault [termo]`, `/config` | Telas cheias |
+| `/web <pergunta>` | Pesquisa na internet e resume com fontes |
+| `/gh [prs\|issues\|commit\|ci] [dono/repo]` | GitHub |
+| `/briefing` | Briefing do dia |
+| `/rota [<local> <endereço>]` | Cadastra um local fixo; sem argumento lista |
+| `/clip [explicar\|traduzir\|resumir\|hist]` | Age sobre o clipboard |
+| `/focus [min\|stop\|skip\|status]`, `/dnd [on\|off\|min]`, `/silent [on\|off]` | Pomodoro, Não Perturbe, Modo Apresentação |
+| `/clear` | Limpa a tela (`Ctrl+L`), sem apagar o histórico |
+| `/quit` | Sai (`Esc`) |
+
+`//texto` envia uma mensagem que começa com `/`.
+
+## Linha de status
+
+Uma única linha: telemetria (CPU, RAM, GPU, rede a cada 3 s) · selo de foco (`◷ FOCO 24m 1/4`, `☾ DND`, `[SILENT]`) · voz, e os atalhos à direita. Estado crítico pinta a conversa de vermelho (classe `-critical`); o Copilot usa a classe `-copilot`.
 
 ## Testes
 
-Os testes ficam em `backend/tests/` (`test_tui_app.py`, `test_tui_commands.py`, `test_tui_orb.py`) e usam `App.run_test()` com stream e voz falsos (`JarvisApp(stream_fn=..., voice=...)`), sem Ollama, microfone nem hardware:
+Ficam em `backend/tests/` (`test_tui_*.py`) e usam `App.run_test()` + Pilot com `stream_fn` e voz falsos (`JarvisApp(stream_fn=..., voice=FakeVoice(...), start_services=False)`):
 
 ```bash
 cd backend
 python -m pytest tests -q
+ruff check ../frontend
 ```
 
-> Se a variável `NO_COLOR` estiver definida, o Textual desenha tudo em tons de cinza. Não é bug do tema.
+> Com a variável `NO_COLOR` definida, o Textual desenha tudo em cinza. Não é bug do tema.

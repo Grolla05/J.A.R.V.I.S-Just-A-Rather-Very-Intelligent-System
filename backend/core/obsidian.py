@@ -10,8 +10,7 @@ from .logger import log
 
 # Subpasta de mem\u00f3ria dentro do projeto JARVIS no vault.
 # N\u00e3o usa emoji para garantir compatibilidade total com urllib no Windows.
-MEMORY_NOTE_PATH = "Projetos/J.A.R.V.I.S/Mem\u00f3ria/{key}.md"
-
+MEMORY_NOTE_PATH = "🚀 Projetos/J.A.R.V.I.S/Mem\u00f3ria/{key}.md"
 
 MEMORY_SAVED = "saved"  # nota criada agora
 MEMORY_KEPT = "kept"    # nota já existia: versão do vault mantida, valor novo descartado

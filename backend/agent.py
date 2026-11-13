@@ -4,7 +4,7 @@ Segura o atalho global (GLOBAL_HOTKEY, padrão Win+J) e fica na bandeja:
 - TUI fechada            -> abre a TUI já no Copilot;
 - TUI aberta, sem foco   -> traz a janela para frente e manda ao Copilot;
 - TUI em foco            -> volta ao Chat.
-Fechar a TUI (Ctrl+Q ou o X) não fecha o agente: o próximo Win+J reabre.
+Fechar a TUI (Esc, /quit ou o X) não fecha o agente: o próximo Win+J reabre.
 
 Também segura TRANSLATE_HOTKEY (padrão Ctrl+Alt+T): copia o texto selecionado
 em qualquer app, traduz no Ollama (pt → inglês, resto → pt-BR), põe a tradução

@@ -1,81 +1,57 @@
-# 📂 Backend J.A.R.V.I.S. (Just A Rather Very Intelligent System)
+# Backend do J.A.R.V.I.S.
 
-Este diretório contém o motor lógico, a cognição e a infraestrutura do assistente virtual. O projeto foi construído seguindo princípios de **Modularidade Dinâmica**, permitindo que a inteligência artificial, os sentidos (áudio/visão) e a memória de longo prazo operem de forma independente e altamente extensível.
+O backend é o cérebro do JARVIS: classifica cada mensagem com um LLM local (Ollama), executa skills, conversa com histórico e memória, cuida da voz, das rotinas (briefing, foco, apresentação, alertas) e das integrações. A interface (pacote `frontend/` na raiz) consome tudo por import direto — não existe API HTTP.
 
-## 🎯 Objetivo do Projeto
+Visão ponta a ponta: **[docs/arquitetura.md](../docs/arquitetura.md)**.
 
-O objetivo do J.A.R.V.I.S. é ser um assistente pessoal de **IA Local** de baixíssima latência. Ele prioriza a privacidade e a autonomia rodando o modelo `llama3.1` via Ollama diretamente no hardware do usuário. Ele oferece controle profundo do sistema operacional Windows, persistência de memória em Markdown (Cofre Obsidian) via protocolo MCP, e uma interface de terminal (TUI em Textual) com modos Chat e Copilot alternados por `Shift+Tab`.
+## Estrutura
 
----
+```
+backend/
+├── main.py        ← entrada: sanity check, Ollama no ar, JarvisApp(...).run()
+├── agent.py       ← agente residente (pythonw, bandeja): Win+J, Ctrl+Alt+T, atualização
+├── core/          ← infraestrutura: config, banco, LLM, logger, telemetria, integrações
+├── services/      ← roteador (brain), classificador, chat, voz, foco, filtros
+├── skills/        ← ações plug-and-play (automation, system, productivity, web)
+├── prompts/       ← prompts em .md (load_prompt), incluindo prompts/skills/
+├── database/      ← SQLite (jarvis_memory.db) em dev
+├── logs/          ← jarvis-AAAA-MM-DD.log e crash.log em dev
+├── tests/         ← pytest (backend + TUI)
+└── docs/          ← documentação por módulo
+```
 
-## 📚 Documentação Granular por Feature
+| Pasta | Leia |
+|---|---|
+| `core/` | [core/README.md](core/README.md) |
+| `services/` | [services/README.md](services/README.md) |
+| `skills/` | [skills/README.md](skills/README.md) |
+| `database/` | [database/README.md](database/README.md) |
 
-Para garantir a fácil manutenção e escalabilidade do backend, cada módulo principal possui sua própria documentação detalhada na pasta `docs/`. Recomendamos fortemente a leitura dos arquivos abaixo antes de alterar a arquitetura:
+### Documentação por módulo (`docs/`)
 
-### 🧩 Orquestração e Core
+- [main.py — boot](docs/main_orchestrator.md)
+- Core: [config](docs/core/config.md) · [database](docs/core/database.md) · [logger](docs/core/logger.md) · [obsidian](docs/core/obsidian.md) · [skill_loader](docs/core/skill_loader.md) · [SystemInfo](docs/core/SystemInfo.md)
+- Services: [brain](docs/services/brain.md) · [listen](docs/services/listen.md) · [speak](docs/services/speak.md)
+- Skills: [app_control](docs/skills/automation/app_control.md) · [audio_control](docs/skills/automation/audio_control.md) · [keyboard_control](docs/skills/automation/keyboard_control.md) · [screen_control](docs/skills/automation/screen_control.md) · [work_macros](docs/skills/automation/work_macros.md) · [status_report](docs/skills/system/status_report.md) · [system_clear](docs/skills/system/system_clear.md) · [system_security](docs/skills/system/system_security.md)
 
-- [O Orquestrador Principal (`main.py`)](docs/main_orchestrator.md)
-- [Configurações Globais (`config.py`)](docs/core/config.md)
-- [Motor de Telemetria (`SystemInfo.py`)](docs/core/SystemInfo.md)
-- [Integração Obsidian e MCP (`obsidian.py`)](docs/core/obsidian.md)
-- [Motor de Persistência SQLite (`database.py`)](docs/core/database.md)
-- [Sistema de Observabilidade (`logger.py`)](docs/core/logger.md)
-- [Carregador Dinâmico de Skills (`skill_loader.py`)](docs/core/skill_loader.md)
-- `llm.py` — wrapper de chamadas ao Ollama (streaming e síncrono)
-- `hardware.py` — varredura via PowerShell e persistência de specs no SQLite
-- `state.py` — container de estado global em runtime (`sys_monitor`, `pending_critical_action`)
-- `prompts.py` — carregamento e substituição de variáveis em templates `.md`
-- `alerts.py` — processamento de alertas de sistema com cache de julgamento de processos
-
-### 🧠 Serviços (Sentidos e Cognição)
-
-- [O Cérebro Cognitivo (`brain.py`)](docs/services/brain.md)
-- [Ouvidos e Transcrição (`listen.py`)](docs/services/listen.md)
-- [Voz e Sincronia (`speak.py`)](docs/services/speak.md)
-- `intent.py` — classificação de intenção via LLM (JSON mode) e verificação de skill habilitada
-- `chat.py` — montagem de prompt com histórico, contexto de vault e injeção de telemetria live
-- `memory.py` — extração de fatos de falas do usuário e gravação no Obsidian vault
-
-### 🚀 Skills Dinâmicas
-
-O J.A.R.V.I.S. suporta *Skills* Plug-and-Play. Adicionar um novo arquivo `.py` com o contrato correto em `skills/` fará o J.A.R.V.I.S aprender a habilidade no próximo boot.
-
-- **Automação:**
-  - [Controle de Aplicativos (`app_control.py`)](docs/skills/automation/app_control.md)
-  - [Controle de Áudio (`audio_control.py`)](docs/skills/automation/audio_control.md)
-  - [Controle de Teclado Fantasma (`keyboard_control.py`)](docs/skills/automation/keyboard_control.md)
-  - [Controle de Tela e Retina (`screen_control.py`)](docs/skills/automation/screen_control.md)
-  - [Macros de Ambiente (`work_macros.py`)](docs/skills/automation/work_macros.md)
-- **Sistema:**
-  - [Relatório de Status (`status_report.py`)](docs/skills/system/status_report.md)
-  - [Limpeza de Sistema (`system_clear.py`)](docs/skills/system/system_clear.md)
-  - [Segurança Física (`system_security.py`)](docs/skills/system/system_security.md)
-
----
-
-## 🏗️ Resumo da Arquitetura
-
-O backend é dividido em três blocos operacionais:
-
-1. **`core/` (A Fundição)**: Singletons e infraestrutura de baixo nível — SQLite, Ollama LLM, Monitoramento de CPU/GPU, Logging, MCP Client, sistema de alertas e carregamento de prompts.
-2. **`services/` (Os Sentidos e a Mente)**: Pipeline de processamento de comandos. `listen.py` capta áudio → `brain.py` coordena → `intent.py` classifica a intenção via LLM (JSON mode) → roteia para skill, `chat.py` (resposta LLM), ou `memory.py` (gravação no vault) → `speak.py` sintetiza em áudio com efeito "Typewriter" no terminal.
-3. **`skills/` (Os Membros)**: Comandos plug-and-play. Cada arquivo com contrato `INTENT + execute()` é carregado automaticamente no boot e mapeado para o roteador de intenção.
-
----
-
-## 🚀 Como Executar Localmente (Standalone)
-
-1. Certifique-se de ter o **Ollama** instalado e o modelo `llama3.1` (ou o definido no `.env`) baixado.
-2. Certifique-se de que o **uvx** (Astral UV) está instalado globalmente para o servidor MCP funcionar (`pip install uv`).
-3. Instale as dependências Python:
+## Rodar
 
 ```bash
+cd backend
 pip install -r requirements.txt
+python main.py                 # TUI (Chat)
+python main.py --copilot       # TUI já no modo voz, sem tela de boot
+python -m services.brain       # modo voz standalone, sem interface
+python agent.py                # agente residente (normalmente sobe com o Windows)
 ```
 
-4. Configure o arquivo `.env` na raiz (Caminhos de Banco de Dados, Obsidian Vault, etc).
-5. Inicie o sistema:
+O `.env` fica na raiz do repositório em dev (copie de `env.example`). Instalado, fica em `%APPDATA%\JARVIS` (`JARVIS_DATA_DIR`). Toda variável nova precisa de padrão em `core/config.py`.
+
+## Testes
 
 ```bash
-python main.py
+python -m pytest tests -q
+ruff check . && ruff check ../frontend
 ```
+
+Os testes não precisam de Ollama, microfone nem hardware: stubs em `tests/_stubs.py`, TUI com `App.run_test()`.

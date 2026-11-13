@@ -23,7 +23,8 @@ deste projeto.
 
 ## Configurando o ambiente local
 
-### Backend (Python 3.11)
+O JARVIS é 100% Python: o backend fica em `backend/` e a interface (TUI em
+Textual) em `frontend/`, importada pelo backend. Não há Node.js nem build.
 
 ```bash
 cd backend
@@ -31,49 +32,42 @@ python -m venv .venv
 .venv\Scripts\activate        # Windows
 # source .venv/bin/activate   # Linux/Mac
 pip install -r requirements.txt
-copy ..\.env.example ..\.env  # Windows — preencha com seus próprios valores
+copy ..\env.example ..\.env    # Windows — preencha com seus próprios valores
+python main.py                # abre a TUI (sobe o Ollama local se estiver fora)
 ```
 
-### Frontend (Node 20)
+Pré-requisitos: [Ollama](https://ollama.com) com um modelo baixado
+(`ollama pull llama3.2`) e, para a memória de longo prazo, o Obsidian com o
+plugin Local REST API e o `uv` (`uvx mcp-obsidian`). A arquitetura completa
+está em [docs/arquitetura.md](docs/arquitetura.md); as regras de código, em
+[CLAUDE.md](CLAUDE.md).
 
-```bash
-cd frontend
-npm i --legacy-peer-deps
-npm run dev
-```
-
-### Subindo tudo de uma vez (Windows)
-
-```cmd
-boot.bat
-```
-
-> O projeto foi desenvolvido primariamente para Windows (`boot.bat`,
-> `pyautogui`, controle de teclado/tela). Se você contribuir a partir de
-> Linux/Mac, teste com atenção redobrada os módulos que tocam o sistema
-> operacional — eles podem não ter um caminho equivalente ainda.
+> O projeto é feito para Windows (Win32, registro, `pyautogui`, controle de
+> teclado/tela, Windows Terminal). Se você contribuir a partir de Linux/Mac,
+> teste com atenção redobrada os módulos que tocam o sistema operacional —
+> eles podem não ter um caminho equivalente.
 
 ## Antes de abrir um Pull Request
 
-Rode localmente os mesmos checks que o CI (`.github/workflows/main.yml`)
-vai rodar:
+Rode localmente os mesmos checks do CI (`.github/workflows/main.yml`) e os
+testes:
 
 ```bash
-# Backend
 cd backend
 ruff check .
-python -m compileall .
-
-# Frontend
-cd frontend
-npm run lint
-npm run build
+ruff check ../frontend
+python -m compileall . ../frontend
+python -m pytest tests -q
 ```
+
+Os testes não precisam de Ollama, microfone nem hardware real (a TUI é
+testada com `App.run_test()` e stream/voz falsos).
 
 Confira também:
 
 - [ ] Nenhum arquivo `.env`, token ou credencial foi commitado
-- [ ] A documentação do módulo afetado (`README.md` da pasta) foi atualizada
+- [ ] A documentação do módulo afetado (`README.md` da pasta, `docs/arquitetura.md` se o fluxo mudou) foi atualizada
+- [ ] O `CHANGES.md` descreve a mudança
 - [ ] O PR está focado em uma única mudança lógica (PRs pequenos são
       revisados mais rápido)
 
@@ -98,8 +92,12 @@ skill segue regras extras:
 
 1. **Contrato obrigatório** — o módulo precisa expor:
    - `INTENT` (string única, não pode colidir com uma skill existente)
-   - `execute(...)` (função de entrada chamada pelo roteador de intenção)
-   - `PROMPT_TEXT` (opcional) — texto usado pelo classificador de intenção
+   - `execute(entity, command)` (dois argumentos: o alvo extraído e a frase original)
+   - `PROMPT_TEXT` — texto usado pelo classificador, carregado de
+     `backend/prompts/skills/*.md` com `load_prompt` (nada de prompt em string Python)
+   - a categoria vem da pasta (`automation` e `system` só rodam no
+     Copilot/voz; `productivity` e `web` também no Chat). Guia completo em
+     [backend/skills/README.md](backend/skills/README.md)
 
 2. **Declare acesso sensível explicitamente** — se a skill toca em
    qualquer um destes pontos, adicione um comentário no topo do arquivo:
