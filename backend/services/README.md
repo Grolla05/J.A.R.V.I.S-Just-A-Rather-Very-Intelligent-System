@@ -24,7 +24,7 @@ texto (TUI ou voz)
 |---|---|
 | `brain.py` | Roteador. Modos `chat` (só skills fora de `automation`/`system`) e `copilot` (todas). `confirm_pending_action(approved)` executa `pending['on_confirm']` ou encerra o processo-alvo |
 | `intent.py` | `classify_intent(texto, skip_skills, exclude_categories)` com cache TTL (30 s, 64 entradas). Intents fixos: `HARDWARE`, `MEMORY_READ`, `MEMORY_WRITE`, `CHAT`, mais os `INTENT` das skills ligadas. `is_skill_enabled`, `skill_allowed_in_chat` |
-| `chat.py` | Monta as mensagens: system prompt + regras do modo (`mode_chat.md`/`mode_copilot.md` ou voz) + `LIVE DATA` (telemetria) + nota do vault + `live_context` + últimas 8 mensagens da sessão. `HARDWARE` injeta as specs; imagens vão para o modelo de visão |
+| `chat.py` | `build_messages` monta: `system_prompt.md` + regras do modo (`mode_chat.md`, `mode_copilot.md` ou `mode_voice.md`) + `hardware_context.md` (intent `HARDWARE`) ou `memory_read.md` (intent `MEMORY_READ`) + `live_data.md` (telemetria) + `vault_memory.md` (nota do vault) + `live_context` + últimas 8 mensagens da sessão. Nenhum texto de prompt no `.py`. Imagens vão para o modelo de visão (`vision_context.md`) |
 | `live_context.py` | Pergunta sobre agenda ("o que tenho amanhã?") → eventos reais do Google Agenda no prompt, com instrução de não inventar |
 | `memory.py` | Extrai chave/valor de "lembre que…" e grava em `🚀 Projetos/J.A.R.V.I.S/Memória/{chave}.md` |
 | `sessions.py` | Sessões e histórico (listar, renomear, fixar, apagar, editar a partir de uma mensagem). `to_local()` converte o UTC do SQLite |

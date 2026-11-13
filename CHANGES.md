@@ -2,6 +2,22 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+**Data:** 2026-11-13 (4)
+**Escopo:** Fecha duas dívidas achadas na revisão da documentação: prompts do chat ainda em string Python e fallback de tokens fora do `.gitignore`.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | **Prompts do chat em `.md`**: as instruções que estavam no `services/chat.py` viraram arquivos — `mode_voice.md` (regras de áudio do modo voz standalone), `memory_read.md` (instrução crítica de memória pessoal, agora sem o nome "Felipe" fixo), `hardware_context.md` (`$hardware`), `live_data.md` (`$live_data`) e `vault_memory.md` (`$note`, `$content`) | `backend/prompts/*.md` |
+| 2 | **`build_messages()`** junta a montagem que estava duplicada em `ask_local_ai` e `ask_local_ai_stream` (mesma ordem: system + modo + HARDWARE/MEMORY_READ, telemetria, nota do vault, `live_context`, histórico, pergunta). `MODE_PROMPTS` mapeia `voice`/`chat`/`copilot`; `_temperature()` mantém 0.1 com dado real e 0.7 no resto. Comportamento igual ao anterior | `backend/services/chat.py` |
+| 3 | **`.gitignore`**: `backend/database/*.json` (fallback `integrations_secrets.json` e o antigo `spotify_token.json`) e os arquivos WAL do SQLite (`*.db-wal`, `*.db-shm`) | `.gitignore` |
+| 4 | Docs: `SECURITY.md` (fallback agora ignorado), `backend/services/README.md` (prompts do chat) | `SECURITY.md`, `backend/services/README.md` |
+
+**Testes novos:** `test_chat_prompts.py` — arquivos de prompt existem, nenhum texto de instrução sobrou no `chat.py`, `memory_read.md` sem nome fixo, ordem e conteúdo das mensagens, prompt por modo (voz/chat/copilot), instruções de HARDWARE e MEMORY_READ só no intent certo, nota do vault com `$` preservada, `ask_local_ai` limpa `*`/`#` e o stream usa o modo e a temperatura certos.
+
+**Fora do repositório:** nota do projeto no Obsidian (`🚀 Projetos/J.A.R.V.I.S/J.A.R.V.I.S.md`) reescrita com a stack, a arquitetura e o progresso atuais (sem `boot.bat` nem frontend JS).
+
+---
+
 **Data:** 2026-11-13 (3)
 **Escopo:** Documentação do projeto revisada contra o código: guia ponta a ponta novo, READMEs reescritos (a maioria ainda descrevia React/PyWebView, `boot.bat` e `execute(entity)` de 1 argumento) e docs por módulo corrigidas.
 

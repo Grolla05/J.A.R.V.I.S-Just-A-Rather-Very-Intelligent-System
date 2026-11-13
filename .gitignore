@@ -223,3 +223,9 @@ backend/uploads/
 
 # Presença TUI⇄agente (pid/hwnd em runtime) — nunca versionar
 backend/tui.json
+
+# Dados locais do banco: fallback de tokens OAuth (integrations_secrets.json,
+# spotify_token.json antigo) e arquivos WAL do SQLite — nunca versionar
+backend/database/*.json
+backend/database/*.db-wal
+backend/database/*.db-shm
