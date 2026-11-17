@@ -3,10 +3,10 @@ import json
 import time
 
 import pyautogui
-import requests
 
 from core import log
 from core.config import settings
+from core.llm import query_ollama
 from core.prompts import load_prompt
 
 _state = {"pending_keyboard_action": None}
@@ -40,22 +40,10 @@ def get_clipboard_text():
 
 def _ask_ollama_keyboard_expert(user_text):
     """Consulta o LLM para determinar a combinação de teclas."""
-    url = f"http://{settings.OLLAMA_HOST}/api/generate"
-    payload = {
-        "model": settings.OLLAMA_MODEL,
-        "prompt": user_text,
-        "system": KEYBOARD_EXPERT_PROMPT,
-        "stream": False,
-        "format": "json",
-        "options": {"temperature": 0.1} # Precisão cirúrgica
-    }
-    try:
-        response = requests.post(url, json=payload, timeout=5)
-        response.raise_for_status()
-        return response.json().get("response", "{}")
-    except Exception as e:
-        log.error(f"❌ [KEYBOARD SKILL] Erro no cérebro: {e}")
-        return None
+    # core.llm normaliza OLLAMA_HOST e trata erro (devolve None).
+    return query_ollama([{"role": "system", "content": KEYBOARD_EXPERT_PROMPT},
+                         {"role": "user", "content": user_text}],
+                        format="json", temperature=0.1, timeout=settings.TIMEOUT_API)
 
 def execute(entity, command_text):
     if not command_text:

@@ -2,15 +2,13 @@
 
 Frases comuns são entendidas sem LLM (`parse_fast`); o resto vai ao Ollama com
 `skills/github_decision.md` (JSON). Criar issue nunca executa direto: deixa a
-ação em `state.pending_critical_action['on_confirm']` e pergunta — o "sim" (voz)
+ação com `core.pending.arm(..., on_confirm)` e pergunta — o "sim" (voz)
 ou o ConfirmScreen da TUI (30 s) resolve via `brain.confirm_pending_action`.
 """
 import json
 import re
-import time
 
-import core.state as state
-from core import github_client
+from core import github_client, pending
 from core.config import settings
 from core.logger import log
 from core.prompts import load_prompt
@@ -78,13 +76,11 @@ def request_issue(repo, title, body=""):
     except github_client.GitHubError as e:
         return str(e)
     question = f"Criar a issue \"{title}\" em {repo_name}?"
-    state.pending_critical_action = {
-        "type": "GITHUB_CREATE_ISSUE",
-        "target": repo_name,
-        "question": question,
-        "timeout": time.time() + CONFIRM_TIMEOUT,
-        "on_confirm": lambda: github_client.create_issue(repo_name, title, body),
-    }
+    armed = pending.arm("GITHUB_CREATE_ISSUE", question,
+                        lambda: github_client.create_issue(repo_name, title, body),
+                        target=repo_name, timeout_s=CONFIRM_TIMEOUT)
+    if armed is None:
+        return pending.BUSY_REPLY
     return f"{question} Diga **sim** para confirmar."
 
 

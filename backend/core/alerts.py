@@ -1,13 +1,22 @@
 import re
 import time
 
-import core.state as state
+from core import pending
 from core.llm import query_ollama
 from core.logger import log
 from core.prompts import load_prompt
 
 PROCESS_JUDGEMENT_CACHE = {}
 JUDGEMENT_TTL = 3600  # 1h — evita leak de memória em sessões longas
+
+
+def _close_process(name):
+    """Confirmado pelo usuário: encerra pelo APP_CONTROL (nome exato, sem nova pergunta)."""
+    from core.skill_loader import manager
+    app_control = manager.skills.get("APP_CONTROL")
+    if app_control is None or not hasattr(app_control, "close_now"):
+        return f"Não consigo encerrar {name}: a skill APP_CONTROL não está disponível."
+    return app_control.close_now(name)
 
 
 def _announce(text):
@@ -59,13 +68,14 @@ def process_system_alert(message, is_proactive=False):
                     log.info(f"🔇 [KERNEL]: Silenciando alerta para '{culprit_app}'")
                     return
 
-                state.pending_critical_action = {
-                    'type': 'KILL_PROCESS',
-                    'target': culprit_app,
-                    'timeout': time.time() + 30
-                }
-
-                _announce(f"Alerta de sistema: O processo {culprit_app} está com consumo crítico. Deseja que eu o encerre?")
+                question = f"Alerta de sistema: O processo {culprit_app} está com consumo crítico. Deseja que eu o encerre?"
+                armed = pending.arm("KILL_PROCESS", question, lambda app=culprit_app: _close_process(app),
+                                    target=culprit_app)
+                if armed is None:
+                    # Já há outra confirmação aberta: avisa sem pergunta (não troca a ação dela).
+                    _announce(f"Alerta de sistema: O processo {culprit_app} está com consumo crítico.")
+                    return
+                _announce(question)
                 return
 
             # Alerta genérico sem culpado identificável

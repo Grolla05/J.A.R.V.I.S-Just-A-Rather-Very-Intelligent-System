@@ -1,7 +1,7 @@
 import time
 
 import core.state as state
-from core import log, manager, settings
+from core import log, manager, pending, settings
 from core.alerts import process_system_alert
 from core.obsidian import get_vault_context
 from services import live_context
@@ -18,47 +18,52 @@ MODE_COPILOT = "copilot"
 # scan_system_hardware() saiu do import: agora é chamado pelo boot (main.py).
 state.sys_monitor.brain_callback = process_system_alert
 
-_AFFIRMATION_WORDS = ["sim", "pode", "feche", "encerre", "faça", "ok", "confirmo", "autorizo", "vai"]
-_DENIAL_WORDS = {"não", "nao", "mantenha", "manter", "mantém", "deixa", "deixe", "cancela", "cancele", "negativo"}
+REPLACED_REPLY = "Essa confirmação foi substituída por outra; nada foi feito, Senhor."
 
 
-def confirm_pending_action(approved, explicit_decline=True):
+def confirm_pending_action(approved, explicit_decline=True, pending_id=None):
     """Resolve a ação crítica pendente (ex: encerrar processo pesado, criar issue).
     Retorna a resposta da skill, ou None se não havia ação válida/aprovada.
 
     Uma skill pode deixar a ação pronta em `pending['on_confirm']` (callable sem
-    argumentos); sem ela, o padrão é encerrar `pending['target']` (APP_CONTROL).
-    `pending['on_decline']` (opcional) roda quando o usuário recusa dentro do prazo."""
-    pending = state.pending_critical_action
-    state.pending_critical_action = None
-    if not pending or time.time() > pending['timeout']:
+    argumentos); sem ela, o padrão é encerrar `pending['target']` (APP_CONTROL.close_now).
+    `pending['on_decline']` (opcional) roda quando o usuário recusa dentro do prazo.
+    `pending_id` (o ConfirmScreen passa o da pergunta que mostrou): se a pendência foi
+    trocada por outra, nada é executado (core/pending.py)."""
+    action, status = pending.take(pending_id)
+    if status == pending.REPLACED:
+        return REPLACED_REPLY if (approved or explicit_decline) else None
+    if status != pending.OK:
         return None
     if not approved:
         # Recusa explícita dentro do prazo (não vale para o tempo esgotado): a skill
         # pode reagir — ex.: o vigia de rede passa a tratar o processo como conhecido.
         # `explicit_decline=False` (voz: a frase seguinte não foi um "não") só descarta.
-        on_decline = pending.get('on_decline')
+        on_decline = action.get('on_decline')
         return on_decline() if explicit_decline and callable(on_decline) else None
-    on_confirm = pending.get('on_confirm')
+    on_confirm = action.get('on_confirm')
     if callable(on_confirm):
-        log.info(f"✅ Autorização recebida: {pending.get('type', 'ação')}")
+        log.info(f"✅ Autorização recebida: {action.get('type', 'ação')}")
         return on_confirm()
-    target = pending['target']
+    target = action.get('target')
     log.info(f"✅ Autorização recebida para encerrar {target}")
-    if "APP_CONTROL" in manager.skills:
-        return manager.skills["APP_CONTROL"].execute(target, f"fechar {target}")
+    app_control = manager.skills.get("APP_CONTROL")
+    if target and app_control is not None and hasattr(app_control, "close_now"):
+        # O usuário já confirmou: encerra direto, sem nova pergunta nem LLM.
+        return app_control.close_now(target)
     return None
 
 
 def _check_pending_action(command):
-    """Se há ação crítica pendente, o próximo comando é a resposta a ela."""
-    if not state.pending_critical_action:
+    """Se há ação crítica pendente, o próximo comando é a resposta a ela.
+    Só uma frase de confirmação aprova (pending.parse_reply); a negação vence;
+    qualquer outra frase descarta a pendência e segue como comando normal."""
+    current = pending.active()
+    if not current:
         return None
-    words = [w.strip(".,!?;:") for w in command.lower().split()]
-    # A negação vence: "não, pode manter" tem "pode" mas é uma recusa.
-    denied = any(w in _DENIAL_WORDS for w in words)
-    approved = not denied and any(w in words for w in _AFFIRMATION_WORDS)
-    return confirm_pending_action(approved, explicit_decline=denied)
+    reply = pending.parse_reply(command, current.get("target"))
+    return confirm_pending_action(reply == pending.YES, explicit_decline=reply == pending.NO,
+                                  pending_id=current.get("id"))
 
 
 def execute_command(command, session_id='default'):

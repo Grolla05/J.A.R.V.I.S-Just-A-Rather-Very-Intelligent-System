@@ -15,7 +15,7 @@ A skill `app_control.py` pertence à categoria **Automation**. Diferente de *scr
 
 Analisar texto via Regex é frágil ("Jarvis, fecha esse Spotify pelo amor de Deus"). Para lidar com caos verbal, a skill cria um **Agente Especialista (Sub-Agent)**.
 
-- Ela desvia da função padrão de processamento e faz uma chamada direta via `requests.post` para a API do Ollama.
+- Ela chama o Ollama por `core.llm.query_ollama(..., format="json")` (nunca `requests.post` direto: o `core.llm` normaliza o `OLLAMA_HOST`).
 - Utiliza um *Prompt Rígido* (`APP_DECISION_PROMPT`) com `Temperatura = 0.1` que ordena que a IA só faça uma coisa: extrair o Verbo e o Alvo para um JSON enxuto.
 - Se a frase for "Mostra a calculadora", o agente cospe: `{"action": "focus", "target": "calculadora"}`, limpando toda a complexidade semântica para o código Python processar.
 
@@ -39,7 +39,10 @@ Para maximizar o UX, o sistema perdoa nomes errados:
 A Skill não executa comandos às cegas. Ela implementa as 3 chaves de estado de janela (Ação de `close`, `focus` ou `open`):
 
 - **Ação [OPEN] Inteligente**: Quando pedem para abrir, ela engatilha um `find_active_processes()`. Se o Spotify já existir rodando na barra de tarefas, **ela aborta a abertura** (para não gastar CPU criando processos clones) e força silenciosamente um comando de [FOCUS] na janela original. Se não estiver rodando, ela roda `os.startfile()` injetando `stdout=subprocess.DEVNULL` para silenciar apps (como o Discord/Notion) que dão _spam_ no terminal impedindo a visão de logs do Jarvis.
-- **Ação [CLOSE] Implacável**: Varre todos os PIDs vivos do Windows usando `psutil`. Mapeia o nome lógico para o executável físico (via `PROCESS_MAP`, ex: "calculadora" vira "CalculatorApp"). Se encontra instâncias, invoca impiedosamente `proc.terminate()` em um *loop*, matando sem piedade 10 abas do Chrome de uma vez só se necessário.
+- **Ação [CLOSE] com nome exato**: Varre os PIDs com `psutil` e compara o **nome exato** do executável (sem `.exe`, sem maiúsculas) com o alvo ou com o `PROCESS_MAP` (ex.: "calculadora" vira "CalculatorApp"). Nunca por substring ("code" não pega "vscode-helper"). Alvo com menos de 3 letras é recusado, e processos do sistema e o próprio JARVIS nunca entram (`core/processes.py`, `PROTECTED`).
+  - App **conhecido** (`PROCESS_MAP`/`ALIASES`) com um único executável: fecha direto, todas as instâncias (ex.: as abas do Chrome).
+  - App **desconhecido** ou vários executáveis diferentes: tira um snapshot (PID + nome + hora de criação) e pede confirmação por `core.pending.arm`. Após o "sim", só o snapshot é encerrado (`processes.terminate_if_same`; PID reaproveitado fica de fora).
+  - `close_now(target)`: encerra sem perguntar, para quem já confirmou (ex.: alerta de consumo crítico).
 - **Ação [FOCUS] Mágica**: Usa um script customizado em *PowerShell* para levantar o objeto `.ComObject WScript.Shell`. O comando `AppActivate($p.MainWindowTitle)` obriga o kernel gráfico do Windows a trazer aquela janela submersa diretamente para a cara do usuário.
 
 ---
@@ -47,4 +50,4 @@ A Skill não executa comandos às cegas. Ela implementa as 3 chaves de estado de
 ## 🛠️ Manutenção e Boas Práticas (Developer Guide)
 
 - **Expansão de Suporte de Nomes Específicos (`PROCESS_MAP`)**: Alguns aplicativos da Windows Store possuem um nome visível, mas um *Binary Name* completamente esotérico sob o capô da aba Detalhes no Gerenciador de Tarefas. Se você pedir para o Jarvis fechar o aplicativo "X" e ele disser "Fechei", mas o App continuar rodando, você deve descobrir o nome bruto daquele `.exe` e mapeá-lo manualmente no dicionário `PROCESS_MAP` no topo do código.
-- **O Fallback Suicida**: No processo de ABERTURA, se o app não constar na lista de atalhos e nem no Modern Apps, o `app_control.py` tenta rodar um último bloco `subprocess.Popen(target_raw)` direto no *cmd*. É uma tentativa desesperada de que o usuário falou o nome de um binário enraizado nas variáveis de ambiente `PATH` do Windows (Ex: usuário pede para abrir "Notepad" ou "Explorer"). Se este bloco explodir num Erro, o Jarvis finalmente desiste educadamente relatando busca negativa.
+- **Último recurso ao abrir (sem shell)**: se o app não está nos atalhos nem no Modern Apps, o alvo só é tentado como programa do `PATH` (ex.: "notepad") quando é um nome simples (`[\w .+-]`, sem barra, aspas nem `&|;<>`) **e** `shutil.which` o encontra; aí roda `Popen([caminho])`, em lista. O texto vindo do LLM **nunca** vai para `shell=True` (Security Advisory GHSA-8j53: o antigo `Popen(target_raw, shell=True)` executava qualquer coisa que a voz/LLM produzisse).

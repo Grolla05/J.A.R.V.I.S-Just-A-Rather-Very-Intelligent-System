@@ -5,10 +5,9 @@ import datetime
 import json
 import subprocess
 
-import requests
-
 from core import log
 from core.config import settings
+from core.llm import query_ollama
 from core.prompts import load_prompt
 from core.window_utils import (
     find_window_by_title,
@@ -51,14 +50,10 @@ def _ask_ollama_screen(user_text, monitors_context):
         current_hour = datetime.datetime.now().hour
         prompt_with_context = load_prompt("skills/screen_expert.md", monitors_info=monitors_context, current_hour=str(current_hour))
         
-        url = f"http://{settings.OLLAMA_HOST}/api/generate"
-        payload = {
-            "model": settings.OLLAMA_MODEL, "prompt": user_text, "system": prompt_with_context, 
-            "stream": False, "format": "json", "options": {"temperature": 0.1}
-        }
-        res = requests.post(url, json=payload, timeout=5)
-        res.raise_for_status()
-        return res.json().get("response", "{}")
+        # core.llm normaliza OLLAMA_HOST e trata erro (devolve None).
+        return query_ollama([{"role": "system", "content": prompt_with_context},
+                             {"role": "user", "content": user_text}],
+                            format="json", temperature=0.1, timeout=settings.TIMEOUT_API)
     except Exception as e:
         log.error(f"❌ [SCREEN] Erro IA: {e}")
         return None

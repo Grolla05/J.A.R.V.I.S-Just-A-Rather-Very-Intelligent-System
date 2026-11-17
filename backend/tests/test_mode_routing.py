@@ -15,6 +15,7 @@ sys.modules["services.speak"] = MagicMock()
 
 import core.state as state
 import services.brain as brain
+from core import pending
 
 
 class TestModeRouting(unittest.TestCase):
@@ -124,10 +125,33 @@ class TestModeRouting(unittest.TestCase):
         self.assertEqual(brain.ask_local_ai_stream.call_args.kwargs["mode"], "copilot")
 
     def test_confirm_pending_action_approved(self):
+        """Pendência sem on_confirm (legado): o "sim" encerra direto pelo close_now, sem LLM."""
+        self.skill.close_now.return_value = "Encerrando 1 instâncias do chrome.exe."
         state.pending_critical_action = {"target": "chrome.exe", "timeout": time.time() + 30}
-        self.assertEqual(brain.confirm_pending_action(True), "Spotify aberto.")
-        self.skill.execute.assert_called_once_with("chrome.exe", "fechar chrome.exe")
+        self.assertEqual(brain.confirm_pending_action(True), "Encerrando 1 instâncias do chrome.exe.")
+        self.skill.close_now.assert_called_once_with("chrome.exe")
+        self.skill.execute.assert_not_called()
         self.assertIsNone(state.pending_critical_action)
+
+    def test_unrelated_phrase_with_pode_does_not_approve(self):
+        """GHSA-48jx: "pode me dizer o clima?" descartava a pendência… aprovando-a."""
+        on_confirm = MagicMock(return_value="processo encerrado")
+        for text in ("pode me dizer o clima?", "vai chover amanhã", "ok, abre o spotify"):
+            with self.subTest(text=text):
+                pending.arm("KILL", "Encerrar chrome.exe?", on_confirm, target="chrome.exe")
+                self.assertIsNone(brain._check_pending_action(text))
+                self.assertIsNone(state.pending_critical_action)      # descartada, não aprovada
+        on_confirm.assert_not_called()
+
+    def test_replaced_action_is_not_executed(self):
+        """GHSA-x47w: o "s" dado à pergunta A nunca executa a ação B que tomou o lugar."""
+        first, second = MagicMock(return_value="A"), MagicMock(return_value="B")
+        old_id = pending.arm("A", "A?", first)
+        state.pending_critical_action = None                          # A venceu/foi resolvida
+        pending.arm("B", "B?", second)
+        self.assertEqual(brain.confirm_pending_action(True, pending_id=old_id), brain.REPLACED_REPLY)
+        second.assert_not_called()
+        self.assertEqual(state.pending_critical_action["type"], "B")
 
     def test_confirm_pending_action_denied_or_expired(self):
         state.pending_critical_action = {"target": "chrome.exe", "timeout": time.time() + 30}
