@@ -58,6 +58,49 @@ class TestCopySelection(unittest.TestCase):
         result, _ = self._copy(text="a" * 10_000)
         self.assertEqual(len(result), selection.MAX_CHARS)
 
+    def test_restore_puts_previous_clipboard_back(self):
+        clock = _Clock()
+        board = {"text": "o que eu já tinha copiado", "seq": 1}
+        written = []
+
+        def send():
+            board["text"], board["seq"] = "def f(): pass", board["seq"] + 1
+
+        def write(text):
+            written.append(text)
+            board["text"] = text
+
+        result = selection.copy_selection(send_copy=send, sequence=lambda: board["seq"],
+                                          read=lambda: board["text"], is_down=lambda vk: False,
+                                          sleep=clock.sleep, clock=clock, restore=True, write=write)
+        self.assertEqual(result, "def f(): pass")
+        self.assertEqual(written, ["o que eu já tinha copiado"])
+        self.assertEqual(board["text"], "o que eu já tinha copiado")
+
+    def test_restore_skips_when_clipboard_was_empty_or_nothing_selected(self):
+        for previous, changes in (("", True), ("antigo", False)):
+            with self.subTest(previous=previous, changes=changes):
+                clock = _Clock()
+                board = {"text": previous, "seq": 1}
+                written = []
+
+                def send():
+                    if changes:
+                        board["text"], board["seq"] = "seleção", board["seq"] + 1
+
+                selection.copy_selection(send_copy=send, sequence=lambda: board["seq"],
+                                         read=lambda: board["text"], is_down=lambda vk: False,
+                                         sleep=clock.sleep, clock=clock, restore=True, write=written.append)
+                self.assertEqual(written, [])
+
+    def test_max_chars_override(self):
+        clock = _Clock()
+        seq = {"n": 1}
+        result = selection.copy_selection(send_copy=lambda: seq.update(n=2), sequence=lambda: seq["n"],
+                                          read=lambda: "a" * 30_000, is_down=lambda vk: False,
+                                          sleep=clock.sleep, clock=clock, max_chars=20_000)
+        self.assertEqual(len(result), 20_000)
+
     def test_modifiers_timeout(self):
         clock = _Clock()
         self.assertFalse(selection.wait_modifiers_released(lambda vk: True, timeout=0.1,

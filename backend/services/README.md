@@ -22,14 +22,18 @@ texto (TUI ou voz)
 
 | Módulo | Papel |
 |---|---|
-| `brain.py` | Roteador. Modos `chat` (só skills fora de `automation`/`system`) e `copilot` (todas). `confirm_pending_action(approved)` executa `pending['on_confirm']` ou encerra o processo-alvo |
+| `brain.py` | Roteador. Modos `chat` (só skills fora de `automation`/`system`) e `copilot` (todas). `force_chat=True` manda direto ao LLM (trecho a explicar). `confirm_pending_action(approved, explicit_decline)` executa `pending['on_confirm']`, ou `pending['on_decline']` na recusa explícita, ou encerra o processo-alvo |
 | `intent.py` | `classify_intent(texto, skip_skills, exclude_categories)` com cache TTL (30 s, 64 entradas). Intents fixos: `HARDWARE`, `MEMORY_READ`, `MEMORY_WRITE`, `CHAT`, mais os `INTENT` das skills ligadas. `is_skill_enabled`, `skill_allowed_in_chat` |
 | `chat.py` | `build_messages` monta: `system_prompt.md` + regras do modo (`mode_chat.md`, `mode_copilot.md` ou `mode_voice.md`) + `hardware_context.md` (intent `HARDWARE`) ou `memory_read.md` (intent `MEMORY_READ`) + `live_data.md` (telemetria) + `vault_memory.md` (nota do vault) + `live_context` + últimas 8 mensagens da sessão. Nenhum texto de prompt no `.py`. Imagens vão para o modelo de visão (`vision_context.md`) |
 | `live_context.py` | Pergunta sobre agenda ("o que tenho amanhã?") → eventos reais do Google Agenda no prompt, com instrução de não inventar |
 | `memory.py` | Extrai chave/valor de "lembre que…" e grava em `🚀 Projetos/J.A.R.V.I.S/Memória/{chave}.md` |
+| `reminders.py` | Lembretes contextuais. Agenda: `due()` decide os avisos de cada evento (LEAD = antecedência, LEAVE = hora de sair com tempo de trajeto, FINAL = início iminente), dedup por `id|início|tipo`; `phrase()` pede a frase ao LLM (`reminder.md`) e cai no texto fixo se o horário não vier certo. Pedido: tabela `reminders`, `parse_when()` por regex. `collect()` junta tudo para a TUI |
+| `insights.py` | Registro de insights: `worth_checking()` filtra sem LLM, `extract()` pergunta ao modelo (`extract_insight.md`), `save()` anexa na nota mensal de 🧠 Brainstorms (dedup de 7 dias, fila `insights_pending` com o Obsidian fora) |
+| `clip_history.py` | Histórico do clipboard no SQLite (200 cópias, recopiar sobe o item): `add`, `recent`, `search`, `get(n)`, `clear`; `looks_secret()` descarta senhas/tokens |
+| `net_guard.py` | Guarda de rede: `judge()` (LLM, `judge_connection.md`), `handle()` (alerta + confirmação para encerrar o processo), `kill_process`, `block_ip` (só elevado), textos do `/rede` e do bloco PERÍMETRO do `/status` |
 | `sessions.py` | Sessões e histórico (listar, renomear, fixar, apagar, editar a partir de uma mensagem). `to_local()` converte o UTC do SQLite |
 | `skill_settings.py` | Lista skills e liga/desliga skill ou categoria (`disabled_skills`, `disabled_categories` na tabela `config`) |
-| `user_prefs.py` | Preferências do `/config`: voz, velocidade, volume, sensibilidade do mic, janela de atenção, briefing automático, manchetes, monitor de clipboard, aviso de saída, silêncio em reunião/tela cheia, apresentação automática |
+| `user_prefs.py` | Preferências do `/config`: voz, velocidade, volume, sensibilidade do mic, janela de atenção, briefing automático, manchetes, monitor de clipboard, registro de insights, aviso de saída, lembretes da agenda (antecedência e aviso final), vigia de rede, silêncio em reunião/tela cheia, apresentação automática |
 | `integrations.py` | Cards de `/config` → INTEGRAÇÕES. Estados `on`/`wait`/`off`/`setup`; `connect`/`disconnect` devolvem texto e nunca levantam |
 | `listen.py` | Ouvido lazy (`get_ear()`): mic só abre com a voz ligada; wake word (`WAKE_WORDS`) por palavra inteira; Google STT; janela de atenção; `ear_pause`/`ear_resume`; nível do mic para a `VoiceBar` |
 | `speak.py` | TTS: edge-tts (voz da pref, padrão `pt-BR-AntonioNeural`) com fallback pyttsx3; `speech_lock`; limpa Markdown e símbolos e expande gírias (`SLANG_MAP`); no-op com a voz desligada ou em apresentação |

@@ -18,6 +18,13 @@ print(soma(1, 2))"""
 JS = "const total = items.reduce((acc, x) => acc + x.price, 0);"
 ENGLISH = "The quick brown fox jumps over the lazy dog and it is not afraid of the hunter."
 PORTUGUES = "O relatório de vendas do mês passado está na pasta compartilhada da equipe."
+TRACEBACK = """Traceback (most recent call last):
+  File "main.py", line 12, in <module>
+    run()
+ValueError: invalid literal for int() with base 10: 'x'"""
+JS_ERROR = """TypeError: Cannot read properties of undefined (reading 'map')
+    at render (app.js:42:13)"""
+RUST_ERROR = "error[E0382]: borrow of moved value: `nomes`"
 
 
 class TestClassify(unittest.TestCase):
@@ -27,6 +34,9 @@ class TestClassify(unittest.TestCase):
             CODE: "code",
             JS: "code",
             ENGLISH: "english",
+            TRACEBACK: "error",
+            JS_ERROR: "error",
+            RUST_ERROR: "error",
             PORTUGUES: None,
             "curto": None,
             "": None,
@@ -38,6 +48,7 @@ class TestClassify(unittest.TestCase):
 
     def test_resolve_action(self):
         self.assertEqual(clipboard.resolve_action("code"), "explain")
+        self.assertEqual(clipboard.resolve_action("error"), "explain")
         self.assertEqual(clipboard.resolve_action("english"), "translate")
         self.assertEqual(clipboard.resolve_action("url"), "summarize")
         self.assertEqual(clipboard.resolve_action(None), "explain")
@@ -54,7 +65,22 @@ class TestMonitor(unittest.TestCase):
         results = [mon.check_once() for _ in range(6)]
         self.assertEqual(results, [None, "code", None, None, "english", None])
         self.assertEqual(seen, ["code", "english"])
-        self.assertEqual([k for k, _ in mon.history], ["code", "english"])
+
+    def test_capture_gets_every_new_text(self):
+        """O histórico recebe também o que não gera sugestão (tipo "text"); curto demais fica fora."""
+        feed = ["antigo", CODE, CODE, PORTUGUES, TRACEBACK]
+        captured = []
+        mon = clipboard.ClipboardMonitor(lambda k, t: None, read_fn=lambda: feed.pop(0) if feed else "",
+                                         on_capture=lambda k, t: captured.append((k, t)))
+        for _ in range(5):
+            mon.check_once()
+        self.assertEqual(captured, [("code", CODE), ("text", PORTUGUES), ("error", TRACEBACK)])
+
+    def test_capture_error_does_not_break(self):
+        def boom(kind, text):
+            raise RuntimeError("banco fora")
+        mon = clipboard.ClipboardMonitor(lambda k, t: None, read_fn=lambda: ENGLISH, on_capture=boom)
+        self.assertEqual(mon.check_once(), "english")
 
     def test_preexisting_content_is_ignored_on_start(self):
         seen = []
@@ -86,6 +112,26 @@ class TestMonitor(unittest.TestCase):
             raise RuntimeError("ui fechada")
         mon = clipboard.ClipboardMonitor(boom, read_fn=lambda: ENGLISH)
         self.assertEqual(mon.check_once(), "english")
+
+
+class TestRead(unittest.TestCase):
+    def test_win32_first_keeps_accents(self):
+        from core import selection
+        text = "Reunião às 15h — levar o relatório"
+        with patch.object(selection, "read_clipboard", return_value=f"  {text}\n"), \
+             patch.object(clipboard.subprocess, "run") as run:
+            self.assertEqual(clipboard.read(), text)
+        run.assert_not_called()
+
+    def test_powershell_fallback_forces_utf8(self):
+        from unittest.mock import MagicMock
+
+        from core import selection
+        with patch.object(selection, "read_clipboard", side_effect=OSError("sem user32")), \
+             patch.object(clipboard.subprocess, "run", return_value=MagicMock(stdout="relatório\n")) as run:
+            self.assertEqual(clipboard.read(), "relatório")
+        self.assertIn("UTF8", run.call_args[0][0][-1])
+        self.assertEqual(run.call_args.kwargs["encoding"], "utf-8")
 
 
 class TestAct(unittest.TestCase):

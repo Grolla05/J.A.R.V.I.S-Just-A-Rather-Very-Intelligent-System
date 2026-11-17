@@ -36,7 +36,13 @@ PREFS = {
     "briefing_auto": ("Briefing no 1º boot do dia", _ONOFF, True, _onoff_label),
     "briefing_news": ("Manchetes no briefing", _ONOFF, False, _onoff_label),
     "clipboard_monitor": ("Monitor de clipboard", _ONOFF, False, _onoff_label),
+    "auto_insights": ("Registro de insights", _ONOFF, True, _onoff_label),
     "commute_alert": ("Aviso de saída", COMMUTE_TIMES, 0, _time_label),
+    "event_reminders": ("Lembretes da agenda", _ONOFF, True, _onoff_label),
+    "reminder_lead": ("Antecedência do lembrete", (30, 60, 120, 180), 120, lambda v: f"{v} min antes"),
+    "reminder_final": ("Aviso final", (0, 5, 10, 15, 30), 15,
+                       lambda v: "desligado" if not v else f"{v} min antes"),
+    "net_monitor": ("Vigia de rede", _ONOFF, True, _onoff_label),
     "dnd_auto_meeting": ("Silenciar em reunião", _ONOFF, True, _onoff_label),
     "dnd_auto_fullscreen": ("Silenciar em tela cheia", _ONOFF, True, _onoff_label),
     "presentation_auto": ("Modo apresentação auto", _ONOFF, True, _onoff_label),
@@ -47,7 +53,8 @@ PREFS = {
 GROUPS = {
     "VOZ": ("tts_voice", "tts_rate", "tts_volume"),
     "MICROFONE": ("mic_threshold", "attention_window"),
-    "ROTINAS": ("briefing_auto", "briefing_news", "clipboard_monitor", "commute_alert",
+    "ROTINAS": ("briefing_auto", "briefing_news", "clipboard_monitor", "auto_insights", "commute_alert",
+                "event_reminders", "reminder_lead", "reminder_final", "net_monitor",
                 "dnd_auto_meeting", "dnd_auto_fullscreen", "presentation_auto", "presentation_open"),
 }
 

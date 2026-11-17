@@ -11,13 +11,17 @@ import ctypes
 import json
 import os
 import threading
+import time
 
 from .config import settings
 from .logger import log
 
 SUMMON = "SUMMON"    # ir ao Copilot
 TO_CHAT = "TO_CHAT"  # voltar ao Chat
-EVENTS = {SUMMON: "Local\\JARVIS_SUMMON", TO_CHAT: "Local\\JARVIS_TO_CHAT"}  # agente -> TUI
+EXPLAIN = "EXPLAIN"  # há um trecho em explain.json para explicar no Chat
+EVENTS = {SUMMON: "Local\\JARVIS_SUMMON", TO_CHAT: "Local\\JARVIS_TO_CHAT",
+          EXPLAIN: "Local\\JARVIS_EXPLAIN"}  # agente -> TUI
+EXPLAIN_MAX_AGE_S = 120  # trecho mais velho que isso é descartado (TUI não abriu a tempo)
 INSTALL_UPDATE = "INSTALL_UPDATE"  # tela de atualização: instalar já
 AGENT_EVENTS = {INSTALL_UPDATE: "Local\\JARVIS_INSTALL_UPDATE"}  # TUI -> agente
 _ALL_EVENTS = {**EVENTS, **AGENT_EVENTS}
@@ -74,6 +78,46 @@ def read_tui():
             pass
         return None
     return {"pid": int(data["pid"]), "hwnd": int(data.get("hwnd") or 0)}
+
+
+def explain_path():
+    return settings.DIR_DATA / "explain.json"
+
+
+def write_explain(text, clock=time.time):
+    """Agente: deixa o trecho selecionado para a TUI (os eventos não carregam dados).
+    Escrita atômica (arquivo temporário + replace). True se gravou."""
+    path = explain_path()
+    tmp = path.with_suffix(".tmp")
+    try:
+        tmp.write_text(json.dumps({"text": text, "ts": clock()}), encoding="utf-8")
+        os.replace(tmp, path)
+        return True
+    except OSError as e:
+        log.warning(f"Trecho para explicar não gravado: {e}")
+        return False
+
+
+def take_explain(max_age_s=EXPLAIN_MAX_AGE_S, clock=time.time):
+    """TUI: lê e apaga o trecho pendente. None se não há, está velho ou ilegível."""
+    path = explain_path()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    finally:
+        try:
+            path.unlink()
+        except OSError:
+            pass
+    if not isinstance(data, dict):
+        return None
+    text = str(data.get("text") or "").strip()
+    try:
+        fresh = clock() - float(data.get("ts", 0)) <= max_age_s
+    except (TypeError, ValueError):
+        fresh = False
+    return text if text and fresh else None
 
 
 def signal(name):

@@ -1,17 +1,18 @@
 """Clipboard inteligente: leitura, classificação, monitor em background e ações.
 
-- `read()`: texto do clipboard via PowerShell `Get-Clipboard` (sem dependência nova).
-- `classify(text)`: "url" | "code" | "english" | None — heurísticas puras.
+- `read()`: texto do clipboard pela API Win32 (Unicode; PowerShell em UTF-8 de reserva).
+- `classify(text)`: "url" | "error" | "code" | "english" | None — heurísticas puras.
 - `ClipboardMonitor`: thread daemon que observa o clipboard e chama
   `on_suggest(kind, text)` para conteúdo novo e relevante. Só sugere — o LLM
   roda apenas quando o usuário pede (`act`, via /clip ou skill CLIPBOARD).
+  Todo texto novo também vai para `on_capture(kind, text)` (tipo "text" quando
+  não classificado) — a TUI liga isso ao histórico em `services/clip_history`.
 - Privacidade: o conteúdo copiado nunca vai para o log (só tipo e tamanho).
 """
 import hashlib
 import re
 import subprocess
 import threading
-from collections import deque
 
 from core.logger import log
 from core.prompts import load_prompt
@@ -19,17 +20,17 @@ from core.prompts import load_prompt
 MIN_CHARS = 20
 MAX_CHARS = 20_000
 POLL_INTERVAL = 1.5  # s
-HISTORY_SIZE = 20
 
-KINDS = ("code", "english", "url")
+KINDS = ("error", "code", "english", "url")
 # Ação padrão por tipo e os verbos aceitos em /clip <ação>
-DEFAULT_ACTION = {"code": "explain", "english": "translate", "url": "summarize"}
+DEFAULT_ACTION = {"error": "explain", "code": "explain", "english": "translate", "url": "summarize"}
 ACTION_ALIASES = {
     "explicar": "explain", "explica": "explain", "explain": "explain",
     "traduzir": "translate", "traduz": "translate", "translate": "translate",
     "resumir": "summarize", "resume": "summarize", "summarize": "summarize",
 }
 SUGGESTION = {
+    "error": "Copiou um erro — `/clip` para eu diagnosticar.",
     "code": "Copiou código — `/clip` para eu explicar.",
     "english": "Copiou texto em inglês — `/clip` para traduzir.",
     "url": "Copiou um link — `/clip` para eu resumir a página.",
@@ -41,6 +42,19 @@ _CODE_KEYWORDS = re.compile(
     r"#include|using |package |return\b|if\s*\(|for\s*\(|while\s*\(|SELECT |CREATE |<\w+[ >])",
     re.M,
 )
+# Stack trace / mensagem de erro: Python, JS/Java ("at x (arq:1:2)"), Rust, .NET, Go
+_ERROR_RE = re.compile(
+    r"Traceback \(most recent call last\)"
+    r"|^\s*File \"[^\"]+\", line \d+"
+    r"|^\s*at \S.*[(:]\S*:\d+"
+    r"|^\w*(Error|Exception)\b.*:"
+    r"|\b[\w.]+(Error|Exception): "
+    r"|^error(\[\w+\])?: "
+    r"|^panic: "
+    r"|\bUnhandled (exception|rejection)\b"
+    r"|\bSegmentation fault\b",
+    re.M,
+)
 _EN_WORDS = {"the", "and", "is", "are", "of", "to", "in", "that", "it", "with", "for", "this",
              "you", "was", "be", "have", "not", "on", "as", "by", "from", "or", "can", "will"}
 _PT_WORDS = {"o", "a", "os", "as", "de", "do", "da", "que", "e", "é", "em", "um", "uma", "para",
@@ -48,10 +62,20 @@ _PT_WORDS = {"o", "a", "os", "as", "de", "do", "da", "que", "e", "é", "em", "um
 
 
 def read():
-    """Texto atual do clipboard ('' se vazio/erro)."""
+    """Texto atual do clipboard ('' se vazio/erro).
+
+    Win32 (CF_UNICODETEXT) primeiro: a saída do PowerShell vem na página de código
+    do console e perdia os acentos ("relatório" virava "relatrio"). O PowerShell,
+    forçado a UTF-8, só entra se a API não estiver disponível."""
+    try:
+        from core.selection import read_clipboard
+        return (read_clipboard() or "").strip()
+    except Exception as e:
+        log.debug(f"[CLIPBOARD] Leitura Win32 falhou, tentando PowerShell: {e}")
     try:
         result = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", "Get-Clipboard -Raw"],
+            ["powershell", "-NoProfile", "-Command",
+             "[Console]::OutputEncoding = [Text.Encoding]::UTF8; Get-Clipboard -Raw"],
             capture_output=True, text=True, encoding="utf-8", errors="ignore", timeout=5,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
@@ -68,6 +92,8 @@ def classify(text):
         return "url"
     if not (MIN_CHARS <= len(text) <= MAX_CHARS):
         return None
+    if _ERROR_RE.search(text):
+        return "error"
     lines = text.splitlines()
     symbols = sum(text.count(c) for c in "{};()=<>[]")
     indented = sum(1 for ln in lines if ln.startswith(("    ", "\t")))
@@ -143,11 +169,11 @@ def _digest(text):
 class ClipboardMonitor:
     """Observa o clipboard numa thread daemon e sugere ações para conteúdo novo."""
 
-    def __init__(self, on_suggest, read_fn=read, interval=POLL_INTERVAL):
+    def __init__(self, on_suggest, read_fn=read, interval=POLL_INTERVAL, on_capture=None):
         self.on_suggest = on_suggest
+        self.on_capture = on_capture  # (kind | "text", text) para todo texto novo — histórico
         self.read_fn = read_fn
         self.interval = interval
-        self.history = deque(maxlen=HISTORY_SIZE)  # [(kind, text)] mais novo à direita
         self._last = None
         self._stop = threading.Event()
         self._thread = None
@@ -188,9 +214,13 @@ class ClipboardMonitor:
             return None
         self._last = digest
         kind = classify(text)
+        if self.on_capture and (kind or MIN_CHARS <= len(text) <= MAX_CHARS):
+            try:
+                self.on_capture(kind or "text", text)
+            except Exception as e:
+                log.warning(f"[CLIPBOARD] Histórico falhou: {e}")
         if not kind:
             return None
-        self.history.append((kind, text))
         log.debug(f"[CLIPBOARD] Novo conteúdo: {kind}, {len(text)} caracteres")
         try:
             self.on_suggest(kind, text)

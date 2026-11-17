@@ -67,6 +67,8 @@ MODES = ("chat", "copilot")
 STREAM_FLUSH_S = 0.05  # re-render do Markdown no máx. a cada 50 ms durante o stream
 TELEMETRY_HISTORY = 40  # amostras guardadas p/ os sparklines (40 × 3 s = 2 min)
 NOTE_CONTEXT_MAX = 4000  # caracteres da nota do /vault que vão ao modelo
+REMINDER_INTERVAL = 30  # s entre checagens de lembretes (agenda + pedidos); a agenda tem cache próprio
+EXPLAIN_SNIPPET_MAX = 6000  # caracteres do trecho a explicar (cabe no contexto do modelo local)
 
 
 def _presentation_silent():
@@ -74,9 +76,18 @@ def _presentation_silent():
     return is_silent()
 
 
-def _default_stream(text, session_id, images, mode, on_route=None):
+def _default_stream(text, session_id, images, mode, on_route=None, force_chat=False):
     from services.brain import execute_command_stream
-    return execute_command_stream(text, session_id=session_id, images=images, mode=mode, on_route=on_route)
+    return execute_command_stream(text, session_id=session_id, images=images, mode=mode, on_route=on_route,
+                                  force_chat=force_chat)
+
+
+def _accepts(fn, name):
+    """A função aceita o argumento `name`? (fakes antigos dos testes não aceitam os novos)."""
+    try:
+        return name in inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return False
 
 
 class _DefaultVoice:
@@ -155,7 +166,11 @@ class JarvisApp(App, inherit_bindings=False):
         self._shutting_down = False
         self.voice = voice or _DefaultVoice()
         self._clip_monitor = None
+        self._net_watch = None
         self._clip_last_suggest = -1e9
+        # Registro de insights pós-turno: fn(mensagem, resposta, origem) -> título | None.
+        # Só com serviços (testes injetam um fake aqui).
+        self._insight_fn = self._default_insight if start_services else None
         self.session_id = sessions.new_session_id()
         self.session_title = sessions.DEFAULT_TITLE
         self.pending_image = None   # anexo aguardando a próxima mensagem
@@ -214,7 +229,9 @@ class JarvisApp(App, inherit_bindings=False):
             if not self._boot_fn:
                 self._poll_health()
             self._boot_greeting()
+            self.set_interval(REMINDER_INTERVAL, self._poll_reminders)
             self._sync_clipboard_monitor()
+            self._sync_net_watch()
             self._register_presence()
         else:
             self.add_system("`[  OK  ]` Sistemas online.")
@@ -300,9 +317,11 @@ class JarvisApp(App, inherit_bindings=False):
             self._poll_health()
 
     def _apply_start_mode(self):
+        """Fim do boot: entra no modo pedido e atende o atalho de explicar que abriu a TUI."""
         if self._start_mode and self._start_mode != self.mode:
             self.mode = self._start_mode
         self._start_mode = None
+        self._take_explain()
 
     # ------------------------------------------- agente residente (Win+J)
     def _register_presence(self):
@@ -336,6 +355,50 @@ class JarvisApp(App, inherit_bindings=False):
             self.mode = "copilot"
         elif name == "TO_CHAT":
             self.mode = "chat"
+        elif name == "EXPLAIN":
+            self._take_explain()
+
+    # ------------------------------------------ explicar seleção (Ctrl+Alt+E)
+    def _take_explain(self):
+        """Trecho deixado pelo agente (explain.json): vira um turno do Chat.
+        Chamado pelo sinal EXPLAIN e depois do boot (TUI aberta pelo atalho)."""
+        if not self._start_services or self._shutting_down:
+            return
+        try:
+            from core import presence
+            text = presence.take_explain()
+        except Exception as e:
+            log.debug(f"Trecho para explicar indisponível: {e}")
+            return
+        if not text:
+            return
+        while len(self.screen_stack) > 1 and not isinstance(self.screen, (ConfirmScreen, BootScreen, UpdateScreen)):
+            self.pop_screen()
+        self.explain_snippet(text, source="seleção")
+
+    def explain_snippet(self, text, source="seleção"):
+        """Explica um trecho (código, erro ou texto) como turno normal do Chat: fica
+        no histórico da sessão, então dá para continuar perguntando sobre ele.
+        Vai direto ao LLM (`force_chat`) — o conteúdo do trecho nunca vira skill."""
+        from core import clipboard
+        from core.prompts import load_prompt
+        snippet = (text or "").strip()[:EXPLAIN_SNIPPET_MAX]
+        if not snippet:
+            return False
+        if self.busy:
+            self.notify("Aguarde a resposta atual para eu explicar o trecho (Esc interrompe).", severity="warning")
+            return False
+        if self.mode != "chat":
+            self.mode = "chat"
+        kind = clipboard.classify(snippet)
+        is_error = kind == "error"
+        label = {"error": "erro", "code": "código"}.get(kind, "texto")
+        fence = "~~~" if "```" in snippet else "```"
+        shown = f"Explique este {'erro' if is_error else 'trecho'}:\n\n{fence}\n{snippet}\n{fence}"
+        model_text = load_prompt("explain_error.md" if is_error else "explain_code.md", snippet=snippet, question="")
+        reply = self._begin_turn(shown, user_meta=f"{_now_hhmm()} · {source} · {label}")
+        self._stream(shown, None, "chat", self.session_id, reply, model_text, True)
+        return True
 
     # ---------------------------------------------------------------- helpers
     @property
@@ -659,6 +722,12 @@ class JarvisApp(App, inherit_bindings=False):
             self._rota(arg)
         elif name == "clip":
             self._clip(arg)
+        elif name == "ideia":
+            self._idea(arg)
+        elif name == "lembrete":
+            self._lembrete(arg)
+        elif name == "rede":
+            self._rede(arg)
         elif name == "focus":
             self._focus_action(parse_focus_arg(arg), "Uso: /focus [minutos|stop|skip|status]")
         elif name == "dnd":
@@ -820,6 +889,49 @@ class JarvisApp(App, inherit_bindings=False):
             lines.append("- Sem dados de clima, trânsito ou agenda agora.")
         return "\n".join(lines)
 
+    # ---------------------------------------------------------------- lembretes
+    def _poll_reminders(self):
+        """Tick próprio (REMINDER_INTERVAL): a agenda faz HTTP, então nada disso roda na UI."""
+        if not self._shutting_down:
+            self.run_worker(self._check_reminders, thread=True, group="reminders", exclusive=True)
+
+    def _check_reminders(self, now=None):
+        from services import reminders
+        for item in reminders.collect(now):
+            self._deliver_reminder(item)
+
+    def _deliver_reminder(self, item):
+        """Thread de lembretes: mostra o aviso na conversa e fala. Aviso comum (LEAD)
+        respeita o silêncio — vai para o backlog do Não Perturbe; os urgentes (hora de
+        sair, início iminente, lembrete pedido) sempre aparecem, só sem voz no silêncio."""
+        from services import notify_filter
+        from services.focus import remember_alert
+        text = item["text"]
+        ctx = notify_filter.context()
+        prio = notify_filter.CRITICAL if item.get("urgent") else notify_filter.NORMAL
+        if notify_filter.decide(prio, ctx) == notify_filter.DEFER:
+            remember_alert(text)
+            return
+        self.call_from_thread(self.add_message, "assistant", text, f"lembrete · {_now_hhmm()}")
+        if not notify_filter.quiet_reason(ctx):
+            self._speak_always(text)
+
+    _LEMBRETE_RM = ("rm", "remover", "remove", "cancelar", "cancela", "apagar", "apaga")
+
+    def _lembrete(self, arg):
+        """/lembrete — sem argumento lista; `rm <n>` remove; o resto cria (`em 30 min …`, `às 18h …`)."""
+        from services import reminders
+        word, _, rest = arg.strip().partition(" ")
+        if not arg.strip() or word.lower() in ("lista", "list", "ls"):
+            self.tool_reply("lembretes", reminders.list_text)
+        elif word.lower() in self._LEMBRETE_RM:
+            if not rest.strip().isdigit():
+                self.notify("Uso: /lembrete rm <n> (número do /lembrete)", severity="warning")
+            else:
+                self.tool_reply("lembrete · remover", reminders.remove_text, int(rest))
+        else:
+            self.tool_reply("lembrete", reminders.create_from_text, arg.strip())
+
     def _maybe_daily_briefing(self):
         """1º boot do dia (pref `briefing_auto`): briefing sozinho, sempre falado (qualquer modo)."""
         from core import briefing
@@ -834,13 +946,58 @@ class JarvisApp(App, inherit_bindings=False):
         """Chamado pelo /config ao mudar uma preferência."""
         if key == "clipboard_monitor":
             self._sync_clipboard_monitor()
+        elif key == "net_monitor":
+            self._sync_net_watch()
+
+    # ------------------------------------------------------------ vigia de rede
+    def _sync_net_watch(self):
+        """Liga/desliga o vigia (pref `net_monitor`): core.netwatch fotografa, services.net_guard decide."""
+        from services import user_prefs
+        if user_prefs.get("net_monitor"):
+            if self._net_watch is None:
+                from core.netwatch import NetworkWatch
+                from services import net_guard
+                self._net_watch = NetworkWatch(net_guard.handle, net_guard.load_baseline, net_guard.save_baseline,
+                                               on_snapshot=net_guard.remember_snapshot)
+            self._net_watch.start()
+        elif self._net_watch is not None:
+            self._net_watch.stop()
+
+    _REDE_TRUST = ("confiar", "confia", "trust", "ok")
+    _REDE_BLOCK = ("bloquear", "bloqueia", "block")
+    REDE_USAGE = "Uso: /rede · /rede confiar <n> · /rede bloquear <ip> · /rede reset"
+
+    def _rede(self, arg):
+        """/rede — varredura agora; `confiar <n>` aceita um achado; `bloquear <ip>` e `reset` pedem confirmação."""
+        from services import net_guard
+        word, _, rest = arg.strip().partition(" ")
+        word, rest = word.lower(), rest.strip()
+        if not word:
+            self.tool_reply("rede · varredura", net_guard.scan_text)
+        elif word in self._REDE_TRUST and rest.isdigit():
+            self.tool_reply("rede · confiar", net_guard.trust_text, int(rest))
+        elif word in self._REDE_BLOCK and rest:
+            def answer(confirmed, ip=rest):
+                if confirmed:
+                    self.tool_reply(f"rede · bloquear {ip}", net_guard.block_ip, ip)
+            self.push_screen(ConfirmScreen(f"Bloquear toda saída desta máquina para {rest} no Firewall do Windows?",
+                                           title="FIREWALL", yes="Bloquear", no="Cancelar"), answer)
+        elif word == "reset" and not rest:
+            def answer(confirmed):
+                if confirmed:
+                    self.tool_reply("rede · reset", net_guard.reset_text)
+            self.push_screen(ConfirmScreen("Apagar a linha de base da rede e reaprender do zero?",
+                                           title="VIGIA DE REDE", yes="Reaprender", no="Manter"), answer)
+        else:
+            self.notify(self.REDE_USAGE, severity="warning")
 
     def _sync_clipboard_monitor(self):
         from services import user_prefs
         if user_prefs.get("clipboard_monitor"):
             if self._clip_monitor is None:
                 from core.clipboard import ClipboardMonitor
-                self._clip_monitor = ClipboardMonitor(self._on_clip_suggest)
+                from services import clip_history
+                self._clip_monitor = ClipboardMonitor(self._on_clip_suggest, on_capture=clip_history.add)
             self._clip_monitor.start()
         elif self._clip_monitor is not None:
             self._clip_monitor.stop()
@@ -854,33 +1011,106 @@ class JarvisApp(App, inherit_bindings=False):
         self._clip_last_suggest = now
         self._call_ui(self.add_system, SUGGESTION[kind])
 
+    CLIP_USAGE = "Uso: /clip [explicar|traduzir|resumir] [n] · hist · buscar <termo> · usar <n> · limpar"
+    _CLIP_HIST = ("hist", "historico", "histórico")
+    _CLIP_SEARCH = ("buscar", "busca", "search")
+    _CLIP_USE = ("usar", "usa", "copiar", "use")
+    _CLIP_CLEAR = ("limpar", "limpa", "clear")
+
     def _clip(self, arg):
+        """/clip — age sobre o clipboard atual ou sobre um item do histórico (número do /clip hist)."""
         from core import clipboard
-        arg = arg.strip().lower()
-        if arg in ("hist", "historico", "histórico"):
-            self.add_message("assistant", self._clip_history_markdown())
+        word, _, rest = arg.strip().partition(" ")
+        word, rest = word.lower(), rest.strip()
+        if word in self._CLIP_HIST:
+            self.tool_reply("clipboard · histórico", self._clip_history_markdown)
+        elif word in self._CLIP_SEARCH:
+            if not rest:
+                self.notify("Uso: /clip buscar <termo>", severity="warning")
+            else:
+                self.tool_reply(f"clipboard · busca · {rest[:30]}", self._clip_search_markdown, rest)
+        elif word in self._CLIP_USE:
+            if not rest.isdigit():
+                self.notify("Uso: /clip usar <n> (número do /clip hist)", severity="warning")
+            else:
+                self.tool_reply(f"clipboard · usar {rest}", self._clip_use, int(rest))
+        elif word in self._CLIP_CLEAR:
+            self.push_screen(ConfirmScreen("Apagar todo o histórico do clipboard?", title="HISTÓRICO",
+                                           yes="Apagar", no="Manter"), self._clip_clear)
+        elif word.isdigit() and not rest:
+            self._clip_run("", int(word))
+        elif (word and clipboard.resolve_action(None, word) is None) or (rest and not rest.isdigit()):
+            self.notify(self.CLIP_USAGE, severity="warning")
+        else:
+            self._clip_run(word, int(rest) if rest else None)
+
+    @work(thread=True, group="tools")
+    def _clip_run(self, word, index):
+        """Lê o alvo fora da thread da UI e decide: explicar vira turno do Chat
+        (dá para continuar perguntando); traduzir/resumir enchem uma bolha de ferramenta."""
+        from core import clipboard
+        text = self._clip_text(index)
+        action = clipboard.resolve_action(clipboard.classify(text), word)
+        if action == "explain" and text.strip():
+            source = f"clipboard · item {index}" if index else "clipboard"
+            self.call_from_thread(self.explain_snippet, text, source)
             return
-        if arg and clipboard.resolve_action(None, arg) is None:
-            self.notify("Uso: /clip [explicar|traduzir|resumir|hist]", severity="warning")
-            return
-        self.tool_reply(f"clipboard{' · ' + arg if arg else ''}", self._clip_act, arg)
+        meta = "clipboard" + (f" · {word}" if word else "") + (f" · item {index}" if index else "")
+        self.call_from_thread(self.tool_reply, meta, self._clip_act, word, index)
 
     @staticmethod
-    def _clip_act(arg):
+    def _clip_text(index=None):
+        """Texto alvo: o clipboard atual ou o item `index` do histórico ('' se não existe)."""
         from core import clipboard
-        text = clipboard.read()
+        if index is None:
+            return clipboard.read()
+        from services import clip_history
+        item = clip_history.get(index)
+        return item["text"] if item else ""
+
+    @classmethod
+    def _clip_act(cls, arg, index=None):
+        from core import clipboard
+        text = cls._clip_text(index)
+        if index is not None and not text:
+            return f"Não há item {index} no histórico, Senhor. `/clip hist` lista os números."
         return clipboard.act(clipboard.resolve_action(clipboard.classify(text), arg), text)
 
-    def _clip_history_markdown(self):
-        history = list(self._clip_monitor.history) if self._clip_monitor else []
-        if not history:
+    @staticmethod
+    def _clip_history_markdown():
+        from services import clip_history
+        items = clip_history.recent()
+        if not items:
             return "Nada no histórico. Ligue o **Monitor de clipboard** no `/config`."
-        names = {"code": "código", "english": "inglês", "url": "link"}
-        lines = ["**Últimas cópias detectadas:**", ""]
-        for kind, text in reversed(history):
-            preview = " ".join(text.split())[:70].replace("`", "'")
-            lines.append(f"- *{names[kind]}* · `{preview}`")
+        return clip_history.to_markdown(items, "Últimas cópias:")
+
+    @staticmethod
+    def _clip_search_markdown(term):
+        from services import clip_history
+        items = clip_history.search(term)
+        if not items:
+            return f"Nenhuma cópia com **{term}** no histórico, Senhor."
+        lines = [f"**Cópias com “{term}”:**", ""]
+        for item in items:
+            preview = " ".join(item["text"].split())[:200].replace("`", "'")
+            lines.append(f"- *{clip_history.KIND_LABELS.get(item['kind'], item['kind'])}* · `{preview}`")
         return "\n".join(lines)
+
+    @staticmethod
+    def _clip_use(index):
+        from core import selection
+        from services import clip_history
+        item = clip_history.get(index)
+        if not item:
+            return f"Não há item {index} no histórico, Senhor. `/clip hist` lista os números."
+        if not selection.write_clipboard(item["text"]):
+            return "Não consegui escrever no clipboard agora, Senhor."
+        return f"Item {index} de volta ao clipboard ({len(item['text'])} caracteres). É só colar."
+
+    def _clip_clear(self, confirmed):
+        if confirmed:
+            from services import clip_history
+            self.add_system(f"Histórico do clipboard apagado ({clip_history.clear()} cópias).")
 
     # ------------------------------------------------------------ attachments
     def _attach(self, path):
@@ -1002,15 +1232,16 @@ class JarvisApp(App, inherit_bindings=False):
         return reply
 
     @work(thread=True, exclusive=True, group="chat")
-    def _stream(self, text, image, mode, session_id, reply, model_text=None):
+    def _stream(self, text, image, mode, session_id, reply, model_text=None, force_chat=False):
         full = self._run_turn(text, image, mode, session_id, reply, worker=get_current_worker(),
-                              model_text=model_text)
+                              model_text=model_text, force_chat=force_chat)
         if full == "PROTOCOL_SHUTDOWN":
             self.call_from_thread(self.shutdown_jarvis)
         elif full and self._turn_was_briefing(text):
             self._speak_always(full)  # skill DAILY_BRIEFING no Chat: briefing é sempre falado
 
-    def _run_turn(self, text, image, mode, session_id, reply, worker=None, on_output=None, model_text=None):
+    def _run_turn(self, text, image, mode, session_id, reply, worker=None, on_output=None, model_text=None,
+                  force_chat=False):
         """Roda UMA mensagem pelo brain numa thread de fundo e pinta a resposta.
         Usado pelo Chat (worker) e pelo Copilot por voz. on_output() avisa o
         1º sinal de resposta (skill roteada ou 1º trecho) — a orb passa a 'respondendo'.
@@ -1043,7 +1274,8 @@ class JarvisApp(App, inherit_bindings=False):
             db.log_interaction("user", text, session_id, att_type, att_path, mode=mode)
 
             last_flush = 0.0
-            for chunk in self._stream_fn(model_text or text, session_id, images, mode, on_route=on_route):
+            extra = {"force_chat": True} if force_chat and _accepts(self._stream_fn, "force_chat") else {}
+            for chunk in self._stream_fn(model_text or text, session_id, images, mode, on_route=on_route, **extra):
                 if worker is not None and worker.is_cancelled:
                     full += "\n\n_(interrompido)_"
                     break
@@ -1064,6 +1296,8 @@ class JarvisApp(App, inherit_bindings=False):
                 self.call_from_thread(reply.set_meta, f"{base_meta} · ■ [{skill[0]}] ✓")
                 self._finish_skill_turn("ok", full)
             db.log_interaction("assistant", full, session_id, mode=mode)
+            if not skill and not force_chat and not image:
+                self._maybe_capture_insight(text, full)
         except Exception as e:
             log.error(f"Erro no stream do chat: {e}")
             self.call_from_thread(reply.set_text, f"**Erro:** `{e}`")
@@ -1074,6 +1308,39 @@ class JarvisApp(App, inherit_bindings=False):
         finally:
             self.call_from_thread(self._stream_done, session_id)
         return full
+
+    # ------------------------------------------------------ registro de insights
+    @staticmethod
+    def _default_insight(user_text, reply, origin):
+        from services import insights, user_prefs
+        if not user_prefs.get("auto_insights"):
+            return None
+        return insights.capture(user_text, reply, origin)
+
+    def _maybe_capture_insight(self, user_text, reply):
+        """Fim de um turno de conversa (sem skill): numa thread própria, o modelo diz
+        se o usuário trouxe uma ideia; se sim, ela vai para 🧠 Brainstorms no vault."""
+        if self._insight_fn is None or self._shutting_down:
+            return
+        self._call_ui(self._insight_worker, user_text, reply, self.session_title)
+
+    @work(thread=True, exclusive=True, group="insights")
+    def _insight_worker(self, user_text, reply, origin):
+        try:
+            title = self._insight_fn(user_text, reply, origin)
+        except Exception as e:
+            log.debug(f"Registro de insight falhou: {e}")
+            return
+        if title and not self._shutting_down:
+            self.call_from_thread(self.notify, title, title="Insight registrado em 🧠 Brainstorms")
+
+    def _idea(self, text):
+        """/ideia <texto> — anota na hora, sem passar pelo detector."""
+        if not text:
+            self.notify("Uso: /ideia <texto>", severity="warning")
+            return
+        from services import insights
+        self.tool_reply("ideia", insights.save_text, text, self.session_title)
 
     def _finish_skill_turn(self, status, result):
         turn = self.last_skill_turn
@@ -1264,6 +1531,8 @@ class JarvisApp(App, inherit_bindings=False):
         self._voice_stop.set()
         if self._clip_monitor is not None:
             self._clip_monitor.stop()
+        if self._net_watch is not None:
+            self._net_watch.stop()
         self._stop_focus()  # X do terminal/erro: notificações do Windows voltam
         self._unregister_presence()
 

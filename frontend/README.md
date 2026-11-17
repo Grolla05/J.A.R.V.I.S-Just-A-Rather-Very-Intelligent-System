@@ -69,7 +69,11 @@ Todas herdam de `JarvisScreen` (`screens/base.py`): topo com selo, corpo e a lin
 | `/gh [prs\|issues\|commit\|ci] [dono/repo]` | GitHub |
 | `/briefing` | Briefing do dia |
 | `/rota [<local> <endereço>]` | Cadastra um local fixo; sem argumento lista |
-| `/clip [explicar\|traduzir\|resumir\|hist]` | Age sobre o clipboard |
+| `/clip [explicar\|traduzir\|resumir] [n]` | Age sobre o clipboard (ou sobre o item `n` do histórico). Explicar vira um turno do Chat |
+| `/clip hist`, `/clip buscar <termo>`, `/clip usar <n>`, `/clip limpar` | Histórico persistente do clipboard: listar, buscar, recopiar, apagar |
+| `/ideia <texto>` | Anota uma ideia em 🧠 Brainstorms no Obsidian |
+| `/lembrete [<quando> <assunto> \| rm <n>]` | Lembrete com horário (`em 30 min …`, `às 18h …`); sem argumento lista |
+| `/rede [confiar <n> \| bloquear <ip> \| reset]` | Perímetro de rede: aparelhos, portas expostas, programas na internet |
 | `/focus [min\|stop\|skip\|status]`, `/dnd [on\|off\|min]`, `/silent [on\|off]` | Pomodoro, Não Perturbe, Modo Apresentação |
 | `/clear` | Limpa a tela (`Ctrl+L`), sem apagar o histórico |
 | `/quit` | Sai (`Esc`) |

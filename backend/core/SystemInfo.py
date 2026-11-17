@@ -92,7 +92,12 @@ class SystemInfo:
         net = psutil.net_io_counters()
         self.last_net_sent = net.bytes_sent
         self.last_net_recv = net.bytes_recv
-        
+        # Relógio e cache próprios da rede: a telemetria da TUI (3 s) e o contexto do
+        # chat chamam get_network_speed; sem isso um zerava a janela do outro.
+        self._net_last_time = self.last_time
+        self._net_cache = None
+        self._net_last_faults = self._net_faults(net)
+
         disk = psutil.disk_io_counters()
         self.last_disk_read = disk.read_bytes if disk else 0
         self.last_disk_write = disk.write_bytes if disk else 0
@@ -277,27 +282,45 @@ class SystemInfo:
         details["top_memory"] = sorted(procs, key=lambda p: p[1], reverse=True)[:top]
         return details
 
+    NET_MIN_SAMPLE_S = 1.0  # chamadas mais próximas que isso reaproveitam a última amostra
+
+    @staticmethod
+    def _net_faults(net):
+        """Contadores acumulados de erro/descarte da rede (0 onde o SO não informa)."""
+        return {key: int(getattr(net, key, 0) or 0) for key in ("errin", "errout", "dropin", "dropout")}
+
     def get_network_speed(self):
+        """Velocidade desde a última amostra DESTA função (relógio próprio: antes
+        dividia pelo tempo desde o boot e a velocidade encolhia com o uso).
+        errin/errout/dropin/dropout são os erros e descartes na mesma janela."""
         current_time = time.time()
-        time_delta = current_time - self.last_time
-        if time_delta <= 0: time_delta = 1 
+        time_delta = current_time - self._net_last_time
+        if self._net_cache is not None and 0 <= time_delta < self.NET_MIN_SAMPLE_S:
+            return dict(self._net_cache)
+        if time_delta <= 0: time_delta = 1
 
         net = psutil.net_io_counters()
-        
+
         sent_per_sec = (net.bytes_sent - self.last_net_sent) / time_delta
         recv_per_sec = (net.bytes_recv - self.last_net_recv) / time_delta
-        
+        faults = self._net_faults(net)
+        fault_delta = {key: max(0, faults[key] - self._net_last_faults.get(key, 0)) for key in faults}
+
         self.last_net_sent = net.bytes_sent
         self.last_net_recv = net.bytes_recv
+        self._net_last_faults = faults
+        self._net_last_time = current_time
 
-        return {
-            "upload_speed": self._get_size(sent_per_sec) + "/s",
-            "download_speed": self._get_size(recv_per_sec) + "/s",
+        self._net_cache = {
+            "upload_speed": self._get_size(max(0.0, sent_per_sec)) + "/s",
+            "download_speed": self._get_size(max(0.0, recv_per_sec)) + "/s",
             "upload_bps": max(0.0, sent_per_sec),    # números crus p/ o sparkline da TUI
             "download_bps": max(0.0, recv_per_sec),
             "total_sent": self._get_size(net.bytes_sent),
-            "total_recv": self._get_size(net.bytes_recv)
+            "total_recv": self._get_size(net.bytes_recv),
+            **fault_delta,
         }
+        return dict(self._net_cache)
 
     def get_disk_io(self):
         current_time = time.time()

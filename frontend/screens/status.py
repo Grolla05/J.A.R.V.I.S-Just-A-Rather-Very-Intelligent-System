@@ -205,6 +205,8 @@ class StatusScreen(JarvisScreen):
                 yield ProcessList(id="status-procs")
                 yield Label("saúde", classes="hint", id="status-health-title")
                 yield Static(health_text(getattr(self.app, "health", {})), id="status-health", markup=False)
+                yield Label("perímetro", classes="hint", id="status-net-title")
+                yield Static("aguardando…", id="status-net", markup=False)
                 yield Static(id="status-gap")
                 yield Label(self._threshold_text(), id="status-threshold", classes="hint")
 
@@ -273,14 +275,26 @@ class StatusScreen(JarvisScreen):
             info["uptime"] = uptime if isinstance(uptime, str) else ""
         except Exception as e:
             log.debug(f"Detalhes do /status indisponíveis: {e}")
+        info["perimeter"] = perimeter_text()
         self.app.call_from_thread(self._apply_details, info)
 
     def _apply_details(self, info):
         self._details = dashboard_texts(info)
+        self.query_one("#status-net", Static).update(info.get("perimeter") or "indisponível")
         self.query_one("#status-procs", ProcessList).set_items(top_processes(info))
         uptime = _uptime_text(info.get("uptime"))
         self.set_info(f"uptime {uptime}" if uptime else "")
         self.refresh_data()
+
+
+def perimeter_text():
+    """Bloco PERÍMETRO: última foto do vigia de rede (services.net_guard), sem varrer de novo."""
+    try:
+        from services import net_guard
+        return net_guard.perimeter_text()
+    except Exception as e:
+        log.debug(f"Perímetro de rede indisponível: {e}")
+        return "indisponível"
 
 
 def health_text(health):

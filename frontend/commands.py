@@ -24,7 +24,13 @@ COMMANDS = {
     "gh":       ("/gh [prs|issues|commit|ci] [dono/repo]", "GitHub: PRs, issues, último commit e CI"),
     "briefing": ("/briefing", "briefing do dia: clima, agenda, trânsito, máquina e GitHub"),
     "rota":     ("/rota [<local> <endereço>]", "cadastra um local fixo (casa, trabalho, faculdade…); sem argumento lista"),
-    "clip":     ("/clip [explicar|traduzir|resumir|hist]", "age sobre o que você copiou (monitor no /config)"),
+    "clip":     ("/clip [explicar|traduzir|resumir] [n] · hist · buscar <termo> · usar <n> · limpar",
+                 "age sobre o que você copiou ou sobre o histórico (monitor no /config)"),
+    "ideia":    ("/ideia <texto>", "anota uma ideia em 🧠 Brainstorms no Obsidian (a conversa também registra sozinha)"),
+    "lembrete": ("/lembrete [<quando> <assunto> | rm <n>]",
+                 "lembrete com horário (em 30 min…, às 18h…); sem argumento lista os pendentes"),
+    "rede":     ("/rede [confiar <n> | bloquear <ip> | reset]",
+                 "perímetro de rede: aparelhos, portas expostas e programas na internet (vigia no /config)"),
     "focus":    ("/focus [min|stop|skip|status]", "pomodoro 25/5 (liga o Não Perturbe no foco)"),
     "dnd":      ("/dnd [on|off|min]", "Não Perturbe: silencia notificações do Windows e alertas"),
     "silent":   ("/silent [on|off]", "Modo Apresentação: mic fechado, voz muda e alertas guardados"),
@@ -34,7 +40,7 @@ COMMANDS = {
 }
 
 # /help saiu (a paleta Ctrl+K lista tudo); quem digitar por hábito cai na paleta.
-ALIASES = {"q": "quit", "exit": "quit", "help": "menu", "h": "menu", "?": "menu", "s": "sessions", "n": "new"}
+ALIASES = {"net": "rede", "network": "rede", "lembretes": "lembrete", "lembrar": "lembrete", "remind": "lembrete", "idea": "ideia", "insight": "ideia", "q": "quit", "exit": "quit", "help": "menu", "h": "menu", "?": "menu", "s": "sessions", "n": "new"}
 
 
 @dataclass(frozen=True)
@@ -149,7 +155,7 @@ def dropped_paths(text):
 
 # ------------------------------------------------------------ paleta (Ctrl+K)
 # Comandos que não fazem sentido sem argumento: a paleta só preenche o input.
-NEEDS_ARG = {"rename", "attach", "web"}
+NEEDS_ARG = {"rename", "attach", "web", "ideia"}
 # Fora da paleta: ela mesma e os que já têm entrada própria (modo/foco).
 _PALETTE_SKIP = {"menu", "mode", "focus", "dnd"}
 

@@ -62,8 +62,9 @@ Importar `core` abre o banco, carrega as skills e prepara o cliente MCP. Por iss
 | `oauth.py` | OAuth Desktop genérico: PKCE + callback no loopback |
 | `secrets_store.py` | Tokens no Cofre de Credenciais do Windows (`keyring`); fallback JSON |
 | `web.py` | DuckDuckGo → leitura das páginas em paralelo → resumo no Ollama |
-| `clipboard.py` | Monitor de clipboard e ações (explicar, traduzir, resumir) |
-| `selection.py` | Copia a seleção de qualquer app e lê/escreve o clipboard (Win32) — atalho de tradução |
+| `clipboard.py` | Monitor de clipboard, classificação (link, erro, código, inglês) e ações (explicar, traduzir, resumir). `on_capture` entrega todo texto novo ao histórico |
+| `netwatch.py` | Vigia de rede: `snapshot()` (portas TCP expostas, processos com conexão a IP público, ARP, gateway), `diff()` contra a linha de base e `NetworkWatch` (thread daemon). Só leitura, sem admin |
+| `selection.py` | Copia a seleção de qualquer app e lê/escreve o clipboard (Win32) — atalhos de tradução e de explicar (`restore=True` devolve o clipboard anterior) |
 
 ## Agente residente e instalação
 

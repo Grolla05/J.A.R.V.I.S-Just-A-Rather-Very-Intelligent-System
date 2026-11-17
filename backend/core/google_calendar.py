@@ -37,6 +37,8 @@ NOT_CONNECTED = "A agenda não está conectada, Senhor. Conecte em /config → I
 
 _token_lock = threading.RLock()
 _busy_cache = {"at": 0.0, "value": False}
+UPCOMING_TTL = 300  # s — os lembretes perguntam a cada 30 s
+_upcoming_cache = {"at": -1e9, "items": [], "hours": 0}
 
 
 class CalendarError(Exception):
@@ -171,6 +173,7 @@ def disconnect():
             log.warning(f"Google Agenda: revogação falhou (token apagado mesmo assim): {e}")
     secrets_store.delete(SECRET_NAME)
     _busy_cache.update(at=0.0, value=False)
+    _upcoming_cache.update(at=-1e9, items=[], hours=0)
     return "Google Agenda desconectado."
 
 
@@ -194,7 +197,7 @@ def parse_event(item):
     start, all_day = when("start")
     end, _ = when("end")
     return {"title": (item.get("summary") or "(sem título)").strip(), "start": start, "end": end,
-            "all_day": all_day}
+            "all_day": all_day, "id": item.get("id") or "", "location": (item.get("location") or "").strip()}
 
 
 def events(day=None):
@@ -206,6 +209,28 @@ def events(day=None):
         "singleEvents": "true", "orderBy": "startTime", "maxResults": MAX_EVENTS,
     })
     return [parse_event(i) for i in data.get("items", []) if i.get("status") != "cancelled"]
+
+
+def upcoming(hours=24, now=None, clock=time.monotonic):
+    """Eventos das próximas `hours` horas (atravessa a meia-noite), para os lembretes.
+    Cache de UPCOMING_TTL s; nunca levanta: sem agenda devolve [] e, se o Google
+    falhar, a última lista conhecida."""
+    if not (is_configured() and is_connected()):
+        return []
+    if clock() - _upcoming_cache["at"] < UPCOMING_TTL and _upcoming_cache["hours"] >= hours:
+        return list(_upcoming_cache["items"])
+    start = (now or datetime.datetime.now()).astimezone()
+    try:
+        data = _get(f"{API_BASE}/calendars/primary/events", _access_token(), {
+            "timeMin": start.isoformat(), "timeMax": (start + datetime.timedelta(hours=hours)).isoformat(),
+            "singleEvents": "true", "orderBy": "startTime", "maxResults": MAX_EVENTS,
+        })
+        items = [parse_event(i) for i in data.get("items", []) if i.get("status") != "cancelled"]
+    except Exception as e:
+        log.debug(f"Google Agenda: próximos eventos indisponíveis: {e}")
+        return list(_upcoming_cache["items"])
+    _upcoming_cache.update(at=clock(), items=items, hours=hours)
+    return list(items)
 
 
 def format_events(items, label="hoje"):

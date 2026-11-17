@@ -229,3 +229,6 @@ backend/tui.json
 backend/database/*.json
 backend/database/*.db-wal
 backend/database/*.db-shm
+
+# Rascunhos e imagens dos posts de LinkedIn (material de divulgação, fora do código)
+posts_linkedin_JARVIS/

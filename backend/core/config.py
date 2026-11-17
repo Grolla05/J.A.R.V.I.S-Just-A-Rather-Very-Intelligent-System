@@ -177,6 +177,8 @@ class Settings:
     GLOBAL_HOTKEY: str = os.getenv("GLOBAL_HOTKEY", "win+j").strip().lower()
     # Traduz o texto selecionado em qualquer app (toast da bandeja). Vazio desliga.
     TRANSLATE_HOTKEY: str = os.getenv("TRANSLATE_HOTKEY", "ctrl+alt+t").strip().lower()
+    # Explica a seleção de qualquer app dentro do Chat da TUI (agente); vazio desliga
+    EXPLAIN_HOTKEY: str = os.getenv("EXPLAIN_HOTKEY", "ctrl+alt+e").strip().lower()
 
     # --- Atualização automática (core/updater.py): só no logon, só instalado ---
     # Padrão do toggle de /config → SISTEMA (o toggle grava no registro e vence).

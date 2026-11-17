@@ -3,7 +3,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from tests._stubs import install
 
@@ -201,18 +201,304 @@ class TestBriefingIsSpoken(ToolsAppCase):
         self.assertEqual(voice.forced, [True])
 
 
+class TestInsights(ToolsAppCase):
+    IDEA = "Tive uma ideia: um painel na cozinha que mostra a agenda da família inteira."
+
+    async def test_chat_turn_goes_to_detector_and_notifies(self):
+        seen = []
+        app = self._app()
+        app._insight_fn = lambda text, reply, origin: seen.append((text, reply, origin)) or "Painel da cozinha"
+        async with app.run_test() as pilot:
+            with patch.object(app, "notify") as notify:
+                await self._send(pilot, self.IDEA)
+                await pilot.app.workers.wait_for_complete()
+                await pilot.pause()
+            self.assertEqual(notify.call_args[0][0], "Painel da cozinha")
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(seen[0][0], self.IDEA)
+        self.assertIn("eco de", seen[0][1])
+
+    async def test_skill_and_explain_turns_are_not_checked(self):
+        seen = []
+
+        def stream(text, session_id, images, mode, on_route=None):
+            if on_route:
+                on_route("CALENDAR")
+            yield "Amanhã: reunião às 10h."
+
+        app = tui_app.JarvisApp(stream_fn=stream, start_services=False, voice=FakeVoice())
+        app._insight_fn = lambda *a: seen.append(a)
+        async with app.run_test() as pilot:
+            await self._send(pilot, "o que eu tenho amanhã na agenda do trabalho, por favor?")
+            app._stream_fn = _fake_stream
+            app.explain_snippet("def f():\n    return {1: (2)}")
+            await pilot.app.workers.wait_for_complete()
+            await pilot.pause()
+        self.assertEqual(seen, [])
+
+    async def test_no_detector_without_services_and_errors_are_swallowed(self):
+        app = self._app()
+        self.assertIsNone(app._insight_fn)
+        app._insight_fn = MagicMock(side_effect=RuntimeError("ollama fora"))
+        async with app.run_test() as pilot:
+            await self._send(pilot, self.IDEA)
+            await pilot.app.workers.wait_for_complete()
+            await pilot.pause()
+            self.assertIn("eco de", self._last_reply(app).text)
+
+    async def test_ideia_command(self):
+        from services import insights
+        app = self._app()
+        with patch.object(insights, "save_text", return_value="Ideia registrada") as save:
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/ideia vender o curso em módulos")
+                self.assertEqual(self._last_reply(app).text, "Ideia registrada")
+                await self._send(pilot, "/ideia")
+        save.assert_called_once()
+        self.assertEqual(save.call_args[0][0], "vender o curso em módulos")
+
+
+class TestReminders(ToolsAppCase):
+    QUIET = {"presentation": False, "dnd": True, "meeting": False, "fullscreen": False}
+    FREE = {"presentation": False, "dnd": False, "meeting": False, "fullscreen": False}
+
+    def setUp(self):
+        super().setUp()
+        self._backlog = list(state.dnd_backlog)
+        state.dnd_backlog.clear()
+
+    def tearDown(self):
+        state.dnd_backlog[:] = self._backlog
+        super().tearDown()
+
+    async def _run(self, items, ctx):
+        from services import notify_filter, reminders
+        app = self._app()
+        with patch.object(reminders, "collect", return_value=items), \
+             patch.object(notify_filter, "context", return_value=ctx):
+            async with app.run_test() as pilot:
+                app._poll_reminders()
+                await pilot.app.workers.wait_for_complete()
+                await pilot.pause()
+                replies = [(m.text, m.meta) for m in app.query(tui_app.MessageView) if m.role == "assistant"]
+        return app, replies
+
+    async def test_reminder_is_shown_and_spoken(self):
+        item = {"text": "Senhor, em 2 horas, às 14:00, o senhor tem Prova.", "kind": "lead", "urgent": False}
+        app, replies = await self._run([item], self.FREE)
+        self.assertEqual(replies[-1][0], item["text"])
+        self.assertTrue(replies[-1][1].startswith("lembrete · "))
+        self.assertEqual(app.voice.spoken, [item["text"]])
+        self.assertEqual(app.voice.forced, [True])  # fala mesmo no Chat, com a voz desligada
+
+    async def test_lead_waits_in_backlog_during_dnd(self):
+        item = {"text": "Senhor, em 2 horas, às 14:00, o senhor tem Prova.", "kind": "lead", "urgent": False}
+        app, replies = await self._run([item], self.QUIET)
+        self.assertEqual(replies, [])
+        self.assertEqual(app.voice.spoken, [])
+        self.assertEqual(len(state.dnd_backlog), 1)
+
+    async def test_urgent_shows_during_dnd_but_stays_silent(self):
+        item = {"text": "Senhor, saia agora para Prova às 14:00.", "kind": "leave", "urgent": True}
+        app, replies = await self._run([item], self.QUIET)
+        self.assertEqual(replies[-1][0], item["text"])
+        self.assertEqual(app.voice.spoken, [])
+        self.assertEqual(state.dnd_backlog, [])
+
+    async def test_no_timer_without_services(self):
+        from services import reminders
+        app = self._app()
+        with patch.object(reminders, "collect") as collect:
+            async with app.run_test() as pilot:
+                await pilot.pause(0.1)
+        collect.assert_not_called()
+
+    async def test_lembrete_command(self):
+        from services import reminders
+        app = self._app()
+        with patch.object(reminders, "create_from_text", return_value="criado") as create, \
+             patch.object(reminders, "list_text", return_value="lista") as listing, \
+             patch.object(reminders, "remove_text", return_value="removido") as remove:
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/lembrete em 30 min tirar a roupa")
+                self.assertEqual(self._last_reply(app).text, "criado")
+                await self._send(pilot, "/lembrete")
+                self.assertEqual(self._last_reply(app).text, "lista")
+                await self._send(pilot, "/lembrete rm 2")
+                self.assertEqual(self._last_reply(app).text, "removido")
+                await self._send(pilot, "/lembrete rm")
+        create.assert_called_once_with("em 30 min tirar a roupa")
+        listing.assert_called_once()
+        remove.assert_called_once_with(2)
+
+
+class TestRedeCommand(ToolsAppCase):
+    async def test_scan_trust_and_usage(self):
+        from services import net_guard
+        app = self._app()
+        with patch.object(net_guard, "scan_text", return_value="**Perímetro de rede**") as scan, \
+             patch.object(net_guard, "trust_text", return_value="anotado") as trust:
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/rede")
+                self.assertEqual(self._last_reply(app).text, "**Perímetro de rede**")
+                await self._send(pilot, "/rede confiar 2")
+                self.assertEqual(self._last_reply(app).text, "anotado")
+                await self._send(pilot, "/rede dançar")
+        scan.assert_called_once()
+        trust.assert_called_once_with(2)
+
+    async def test_block_and_reset_need_confirmation(self):
+        from services import net_guard
+        app = self._app()
+        with patch.object(net_guard, "block_ip", return_value="bloqueado") as block, \
+             patch.object(net_guard, "reset_text", return_value="apagada") as reset:
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/rede bloquear 185.10.10.10")
+                self.assertIsInstance(app.screen, tui_app.ConfirmScreen)
+                await pilot.press("n")
+                await pilot.pause()
+                block.assert_not_called()
+                await self._send(pilot, "/rede bloquear 185.10.10.10")
+                await pilot.press("s")
+                await pilot.app.workers.wait_for_complete()
+                await pilot.pause()
+                self.assertEqual(self._last_reply(app).text, "bloqueado")
+                await self._send(pilot, "/rede reset")
+                await pilot.press("s")
+                await pilot.app.workers.wait_for_complete()
+                await pilot.pause()
+                self.assertEqual(self._last_reply(app).text, "apagada")
+        block.assert_called_once_with("185.10.10.10")
+        reset.assert_called_once()
+
+    async def test_pref_toggles_watch_and_no_watch_without_services(self):
+        from core import netwatch
+        from services import user_prefs
+        app = self._app()
+        async with app.run_test():
+            self.assertIsNone(app._net_watch)
+            with patch.object(user_prefs, "get", return_value=True), \
+                 patch.object(netwatch.NetworkWatch, "check_once", return_value=[]):
+                app.on_pref_changed("net_monitor")
+                self.assertTrue(app._net_watch.running)
+            with patch.object(user_prefs, "get", return_value=False):
+                app.on_pref_changed("net_monitor")
+            self.assertFalse(app._net_watch.running)
+
+    async def test_status_screen_shows_perimeter(self):
+        from frontend.screens import status as status_screen
+        app = self._app()
+        with patch.object(status_screen, "perimeter_text", return_value="portas expostas  1"):
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/status")
+                await pilot.app.workers.wait_for_complete()
+                await pilot.pause()
+                self.assertEqual(str(app.screen.query_one("#status-net").content), "portas expostas  1")
+
+
+TRACE = 'Traceback (most recent call last):\n  File "main.py", line 3, in <module>\nValueError: x'
+
+
+class TestExplainSnippet(ToolsAppCase):
+    """Explicar = turno do Chat (histórico + follow-up), direto ao LLM (force_chat)."""
+
+    def _recording_app(self, calls):
+        def stream(text, session_id, images, mode, on_route=None, force_chat=False):
+            calls.append({"text": text, "mode": mode, "force_chat": force_chat})
+            yield "diagnóstico pronto"
+        return tui_app.JarvisApp(stream_fn=stream, start_services=False, voice=FakeVoice())
+
+    async def _settle(self, pilot):
+        await pilot.app.workers.wait_for_complete()
+        await pilot.pause()
+
+    async def test_error_uses_error_prompt_and_is_saved_in_session(self):
+        calls = []
+        app = self._recording_app(calls)
+        async with app.run_test() as pilot:
+            self.assertTrue(app.explain_snippet(TRACE, source="seleção"))
+            await self._settle(pilot)
+            self.assertEqual(self._last_reply(app).text, "diagnóstico pronto")
+            user = [m for m in app.query(tui_app.MessageView) if m.role == "user"][-1]
+            self.assertIn("seleção · erro", user.meta)
+            self.assertIn("ValueError: x", user.text)
+        self.assertEqual(len(calls), 1)
+        self.assertTrue(calls[0]["force_chat"])
+        self.assertEqual(calls[0]["mode"], "chat")
+        self.assertIn("Causa provável", calls[0]["text"])   # prompts/explain_error.md
+        self.assertIn("ValueError: x", calls[0]["text"])
+        rows = sessions.get_chat_history(app.session_id)
+        self.assertEqual([r["role"] for r in rows], ["user", "assistant"])
+        self.assertIn("ValueError: x", rows[0]["content"])   # o trecho fica na sessão: follow-up tem contexto
+        self.assertNotIn("Causa provável", rows[0]["content"])
+
+    async def test_code_uses_code_prompt_and_old_fakes_still_work(self):
+        app = self._app()  # _fake_stream não aceita force_chat
+        async with app.run_test() as pilot:
+            app.explain_snippet("def f():\n    return {1: (2)}", source="clipboard")
+            await self._settle(pilot)
+            self.assertIn("pontos de atenção", self._last_reply(app).text)  # eco do prompts/explain_code.md
+            user = [m for m in app.query(tui_app.MessageView) if m.role == "user"][-1]
+            self.assertIn("clipboard · código", user.meta)
+
+    async def test_busy_or_empty_does_nothing(self):
+        calls = []
+        app = self._recording_app(calls)
+        async with app.run_test() as pilot:
+            self.assertFalse(app.explain_snippet("   "))
+            app.busy = True
+            self.assertFalse(app.explain_snippet(TRACE))
+            app.busy = False
+            await self._settle(pilot)
+        self.assertEqual(calls, [])
+
+    async def test_agent_signal_takes_payload_closes_screens_and_goes_to_chat(self):
+        from core import presence
+        calls = []
+        app = self._recording_app(calls)
+        async with app.run_test() as pilot:
+            app._start_services = True  # só o caminho do agente; o on_mount já rodou sem serviços
+            await pilot.press("shift+tab")
+            self.assertEqual(app.mode, "copilot")
+            with patch.object(presence, "take_explain", side_effect=[TRACE, None]):
+                app._on_summon("EXPLAIN")
+                await self._settle(pilot)
+                app._on_summon("EXPLAIN")  # sem trecho pendente: nada acontece
+                await self._settle(pilot)
+            self.assertEqual(app.mode, "chat")
+            app._start_services = False
+        self.assertEqual(len(calls), 1)
+        self.assertTrue(calls[0]["force_chat"])
+
+
 class TestClipCommand(ToolsAppCase):
-    async def test_clip_acts_on_clipboard(self):
+    async def test_clip_explains_in_chat_and_translates_in_tool_bubble(self):
         from core import clipboard
         app = self._app()
         code = "def f():\n    return {1: (2)}"
         with patch.object(clipboard, "read", return_value=code), \
-             patch.object(clipboard, "act", return_value="explicado") as act:
+             patch.object(clipboard, "act", return_value="traduzido") as act:
             async with app.run_test() as pilot:
                 await self._send(pilot, "/clip")
-                self.assertEqual(self._last_reply(app).text, "explicado")
+                await pilot.app.workers.wait_for_complete()
+                await pilot.pause()
+                self.assertIn("eco de", self._last_reply(app).text)   # virou turno do Chat
+                self.assertIn("def f()", self._last_reply(app).text)
                 await self._send(pilot, "/clip traduzir")
-        self.assertEqual([c.args[0] for c in act.call_args_list], ["explain", "translate"])
+                await pilot.app.workers.wait_for_complete()
+                await pilot.pause()
+                self.assertEqual(self._last_reply(app).text, "traduzido")
+        self.assertEqual([c.args[0] for c in act.call_args_list], ["translate"])
+
+    async def test_clip_empty_clipboard_says_so(self):
+        from core import clipboard
+        app = self._app()
+        with patch.object(clipboard, "read", return_value=""):
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/clip")
+                await pilot.app.workers.wait_for_complete()
+                await pilot.pause()
+                self.assertIn("vazio", self._last_reply(app).text)
 
     async def test_clip_bad_action_and_empty_history(self):
         from core import clipboard
@@ -223,6 +509,67 @@ class TestClipCommand(ToolsAppCase):
                 await self._send(pilot, "/clip hist")
                 self.assertIn("Monitor de clipboard", self._last_reply(app).text)
         act.assert_not_called()
+
+    async def test_history_search_use_and_act_on_item(self):
+        from core import clipboard, selection
+        from services import clip_history
+        app = self._app()
+        with patch.object(clip_history, "db", self.db), \
+             patch.object(clipboard, "act", return_value="feito") as act, \
+             patch.object(selection, "write_clipboard", return_value=True) as write:
+            clip_history.add("text", "relatório de vendas do trimestre passado")
+            clip_history.add("code", "def f():\n    return {1: (2)}")
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/clip hist")
+                self.assertIn("1. *código*", self._last_reply(app).text)
+                self.assertIn("2. *texto*", self._last_reply(app).text)
+                await self._send(pilot, "/clip buscar vendas")
+                self.assertIn("relatório de vendas", self._last_reply(app).text)
+                self.assertNotIn("def f", self._last_reply(app).text)
+                await self._send(pilot, "/clip buscar nada-disso")
+                self.assertIn("Nenhuma cópia", self._last_reply(app).text)
+                await self._send(pilot, "/clip usar 2")
+                self.assertIn("de volta ao clipboard", self._last_reply(app).text)
+                await self._send(pilot, "/clip usar 9")
+                self.assertIn("Não há item 9", self._last_reply(app).text)
+                await self._send(pilot, "/clip resumir 2")
+                self.assertEqual(self._last_reply(app).text, "feito")
+                await self._send(pilot, "/clip explicar 9")
+                self.assertIn("Não há item 9", self._last_reply(app).text)
+        write.assert_called_once_with("relatório de vendas do trimestre passado")
+        act.assert_called_once_with("summarize", "relatório de vendas do trimestre passado")
+
+    async def test_clear_asks_confirmation(self):
+        from services import clip_history
+        app = self._app()
+        with patch.object(clip_history, "db", self.db):
+            clip_history.add("text", "relatório de vendas do trimestre passado")
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/clip limpar")
+                self.assertIsInstance(app.screen, tui_app.ConfirmScreen)
+                await pilot.press("n")
+                await pilot.pause()
+                self.assertEqual(len(clip_history.recent()), 1)
+                await self._send(pilot, "/clip limpar")
+                await pilot.press("s")
+                await pilot.pause()
+                self.assertEqual(clip_history.recent(), [])
+
+    async def test_monitor_writes_to_history(self):
+        from services import clip_history, user_prefs
+        app = self._app()
+        text = "O relatório de vendas do mês passado está na pasta."
+        async with app.run_test():
+            with patch.object(clip_history, "db", self.db), \
+                 patch.object(user_prefs, "get", return_value=True), \
+                 patch("core.clipboard.read", return_value=""):
+                app.on_pref_changed("clipboard_monitor")
+                try:
+                    app._clip_monitor.read_fn = lambda: text
+                    app._clip_monitor.check_once()
+                finally:
+                    app._clip_monitor.stop()
+                self.assertEqual(clip_history.recent()[0]["text"], text)
 
     async def test_pref_toggles_monitor_and_suggestion_cooldown(self):
         from services import user_prefs
