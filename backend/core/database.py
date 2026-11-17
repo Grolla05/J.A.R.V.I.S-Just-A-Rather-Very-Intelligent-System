@@ -91,6 +91,28 @@ class DatabaseManager:
                     )
                 ''')
 
+                # 5. Histórico do clipboard (services/clip_history.py) — digest único: recopiar só sobe o item
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS clipboard_history (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        kind TEXT NOT NULL,
+                        content TEXT NOT NULL,
+                        digest TEXT NOT NULL UNIQUE,
+                        copied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+
+                # 6. Lembretes por pedido (services/reminders.py) — due_at em hora local ISO
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS reminders (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        text TEXT NOT NULL,
+                        due_at TEXT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        fired_at TEXT
+                    )
+                ''')
+
                 # Migração automática e retrocompatível: garante que banco existente ganhe a coluna session_id
                 cursor.execute("PRAGMA table_info(history)")
                 columns = [col[1] for col in cursor.fetchall()]

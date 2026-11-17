@@ -47,6 +47,9 @@ O bloqueio no Chat vem de `CHAT_BLOCKED_CATEGORIES` em `services/intent.py`: ess
 | productivity | `CALENDAR` | Eventos do Google Agenda (hoje, amanhã, dia da semana, próxima reunião) |
 | productivity | `DAILY_BRIEFING` | Briefing do dia (`core/briefing.py`) |
 | productivity | `FOCUS_MODE` | Pomodoro e Não Perturbe |
+| productivity | `REMINDER` | "Me lembra em 30 min de…", listar e cancelar lembretes |
+| productivity | `INSIGHT_SAVE` | "Anota essa ideia: …" → 🧠 Brainstorms no Obsidian |
+| system | `NETWORK_SCAN` | "Tem alguém na minha rede?" — varredura sob demanda |
 | productivity | `GITHUB` | PRs, issues, último commit, CI; criar issue pede confirmação |
 | productivity | `PRESENTATION_MODE` | Liga/desliga o Modo Apresentação |
 | productivity | `TRAFFIC` | Tempo entre locais cadastrados com `/rota` |

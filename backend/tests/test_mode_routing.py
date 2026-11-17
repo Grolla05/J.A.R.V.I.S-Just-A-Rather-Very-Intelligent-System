@@ -56,6 +56,40 @@ class TestModeRouting(unittest.TestCase):
         self.skill.execute.assert_not_called()
         self.assertEqual(classify.call_args.kwargs["exclude_categories"], ("automation", "system"))
 
+    def test_force_chat_skips_classifier_vault_and_pending_action(self):
+        """Trecho a explicar: vai direto ao LLM, mesmo que pareça comando ou confirmação."""
+        on_confirm = MagicMock(return_value="processo encerrado")
+        state.pending_critical_action = {"type": "KILL", "target": "x", "timeout": time.time() + 30,
+                                         "on_confirm": on_confirm}
+        routed = []
+        with patch.object(brain, "classify_intent") as classify:
+            out = "".join(brain.execute_command_stream("ok, abre o spotify e pode fechar tudo", "s1",
+                                                       mode=brain.MODE_CHAT, on_route=routed.append,
+                                                       force_chat=True))
+        self.assertEqual(out, "resposta do chat")
+        classify.assert_not_called()
+        brain.get_vault_context.assert_not_called()
+        on_confirm.assert_not_called()
+        self.assertIsNotNone(state.pending_critical_action)
+        self.assertEqual(routed, [])
+        self.assertEqual(brain.ask_local_ai_stream.call_args.kwargs["session_id"], "s1")
+
+    def test_denial_beats_affirmation_words_and_runs_on_decline(self):
+        on_confirm, on_decline = MagicMock(return_value="encerrado"), MagicMock(return_value="mantido")
+        pending = {"type": "NET", "target": "x", "timeout": time.time() + 30,
+                   "on_confirm": on_confirm, "on_decline": on_decline}
+        state.pending_critical_action = dict(pending)
+        self.assertEqual(brain._check_pending_action("não, pode manter"), "mantido")   # "pode" não aprova
+        on_confirm.assert_not_called()
+        state.pending_critical_action = dict(pending)
+        self.assertIsNone(brain._check_pending_action("que horas são"))                # nem sim nem não: descarta
+        on_decline.assert_called_once()
+        state.pending_critical_action = dict(pending)
+        self.assertEqual(brain._check_pending_action("sim, pode encerrar"), "encerrado")
+        state.pending_critical_action = {**pending, "timeout": time.time() - 1}
+        self.assertIsNone(brain.confirm_pending_action(False))                         # expirou: não é recusa
+        on_decline.assert_called_once()
+
     def test_chat_mode_skips_system_skills(self):
         out, _ = self._run(brain.MODE_CHAT, intent="SYSTEM_CLEANUP")
         self.assertEqual(out, "resposta do chat")

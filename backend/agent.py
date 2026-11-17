@@ -10,6 +10,10 @@ Também segura TRANSLATE_HOTKEY (padrão Ctrl+Alt+T): copia o texto selecionado
 em qualquer app, traduz no Ollama (pt → inglês, resto → pt-BR), põe a tradução
 no clipboard e mostra num toast da bandeja.
 
+E EXPLAIN_HOTKEY (padrão Ctrl+Alt+E): copia a seleção (devolvendo o clipboard
+anterior), grava em explain.json e manda a TUI explicar no Chat — abrindo-a se
+estiver fechada (core/presence.py: write_explain + evento EXPLAIN).
+
 Subindo com o Windows (`--logon`, gravado no valor do HKCU\\...\\Run), verifica
 se há Release novo no GitHub; havendo, abre a TUI, que mostra a tela
 "ATUALIZAÇÃO DISPONÍVEL!!" (core/updater.py). Qualquer tecla ali dispara o
@@ -29,6 +33,8 @@ from pathlib import Path
 MUTEX_NAME = "Local\\JARVIS_AGENT"
 ERROR_ALREADY_EXISTS = 183
 TRANSLATE_HOTKEY_ID = 0x4A54  # 'JT' — o Win+J usa 0x4A41
+EXPLAIN_HOTKEY_ID = 0x4A45    # 'JE'
+EXPLAIN_MAX_CHARS = 20_000    # a TUI corta de novo no que cabe no modelo
 TOAST_CHARS = 240
 LOGON_FLAG = "--logon"
 INSTALL_FLAG = "--install-update"  # mesmo valor de core/updater.py
@@ -91,6 +97,30 @@ def translate_selection(copy, translate, write, notify):
     short = translation if len(translation) <= TOAST_CHARS else translation[:TOAST_CHARS - 1] + "…"
     notify(short, f"Tradução para {target} (copiada)")
     return "ok"
+
+
+def explain_selection(copy, write_payload, read_tui, launch, focus, signal, notify):
+    """Fluxo do atalho de explicar: a seleção vai para o Chat da TUI (a resposta
+    não cabe num toast e lá dá para continuar perguntando). Dependências injetadas.
+    Retorna 'empty', 'failed', 'launch' (TUI fechada: ela lê o trecho ao subir) ou 'sent'."""
+    title = "J.A.R.V.I.S — explicar"
+    text = copy()
+    if not text:
+        notify("Selecione um código ou erro antes de usar o atalho, Senhor.", title)
+        return "empty"
+    if not write_payload(text):
+        notify("Não consegui passar o trecho para o J.A.R.V.I.S.", title)
+        return "failed"
+    tui = read_tui()
+    if not tui:
+        launch()
+        return "launch"
+    if tui.get("hwnd"):
+        focus(tui["hwnd"])
+    if not signal("EXPLAIN"):
+        notify("O J.A.R.V.I.S está aberto mas não respondeu ao atalho.", title)
+        return "failed"
+    return "sent"
 
 
 def run_update_check(from_logon, updater, notify, tui_open, sleep, launch_tui):
@@ -189,8 +219,27 @@ def main():
             log.info(f"Atalho de tradução: {result}")
         threading.Thread(target=run, daemon=True, name="jarvis-translate").start()
 
+    def on_explain():
+        from core import selection
+
+        def run():
+            result = explain_selection(
+                lambda: selection.copy_selection(restore=True, max_chars=EXPLAIN_MAX_CHARS),
+                presence.write_explain, presence.read_tui, lambda: launcher.launch_tui(copilot=False),
+                force_foreground, presence.signal, notify)
+            log.info(f"Atalho de explicar: {result}")
+        threading.Thread(target=run, daemon=True, name="jarvis-explain").start()
+
     hotkey = None
     translate_hotkey = None
+    explain_hotkey = None
+    if settings.EXPLAIN_HOTKEY:
+        try:
+            explain_hotkey = GlobalHotkey(settings.EXPLAIN_HOTKEY, on_explain,
+                                          hotkey_id=EXPLAIN_HOTKEY_ID, name="EXPLAIN_HOTKEY")
+            explain_hotkey.start()
+        except ValueError as e:
+            log.warning(f"EXPLAIN_HOTKEY inválido: {e}")
     if settings.TRANSLATE_HOTKEY:
         try:
             translate_hotkey = GlobalHotkey(settings.TRANSLATE_HOTKEY, on_translate,
@@ -252,7 +301,7 @@ def main():
         autostart.set_enabled(not autostart.is_enabled())
 
     def quit_agent(icon, _item):
-        for listener in (hotkey, translate_hotkey):
+        for listener in (hotkey, translate_hotkey, explain_hotkey):
             if listener:
                 listener.stop()
         icon.stop()
@@ -261,6 +310,7 @@ def main():
         pystray.MenuItem("Abrir J.A.R.V.I.S", open_tui, default=True),
         pystray.MenuItem("Iniciar com o Windows", toggle_autostart, checked=lambda _i: autostart.is_enabled()),
         pystray.MenuItem(f"Traduzir seleção: {settings.TRANSLATE_HOTKEY or 'desligado'}", None, enabled=False),
+        pystray.MenuItem(f"Explicar seleção: {settings.EXPLAIN_HOTKEY or 'desligado'}", None, enabled=False),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Sair do agente", quit_agent),
     )

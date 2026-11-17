@@ -38,6 +38,11 @@ class TestExtractText(unittest.TestCase):
 
 
 class TestSearch(unittest.TestCase):
+    def setUp(self):
+        self._pause = patch.object(web, "SEARCH_RETRY_PAUSE_S", 0)
+        self._pause.start()
+        self.addCleanup(self._pause.stop)
+
     def test_maps_ddgs_results(self):
         fake = MagicMock()
         fake.DDGS.return_value.text.return_value = [
@@ -53,6 +58,22 @@ class TestSearch(unittest.TestCase):
         fake.DDGS.return_value.text.side_effect = RuntimeError("rate limit")
         with patch.dict(sys.modules, {"ddgs": fake}):
             self.assertEqual(web.search("python"), [])
+
+    def test_retries_with_fixed_backends_when_auto_fails(self):
+        """Visto no teste real: o 'auto' sorteou o Startpage e deu erro de DNS."""
+        fake = MagicMock()
+        fake.DDGS.return_value.text.side_effect = [RuntimeError("DNSError"),
+                                                   [{"title": "B", "href": "https://b.example", "body": "b"}]]
+        with patch.dict(sys.modules, {"ddgs": fake}):
+            self.assertEqual([r["url"] for r in web.search("python")], ["https://b.example"])
+        backends = [c.kwargs["backend"] for c in fake.DDGS.return_value.text.call_args_list]
+        self.assertEqual(backends, list(web.SEARCH_BACKENDS[:2]))
+
+    def test_empty_first_answer_also_retries(self):
+        fake = MagicMock()
+        fake.DDGS.return_value.text.side_effect = [[], [{"title": "C", "href": "https://c.example", "body": ""}]]
+        with patch.dict(sys.modules, {"ddgs": fake}):
+            self.assertEqual(len(web.search("python")), 1)
 
     def test_blank_query(self):
         self.assertEqual(web.search("   "), [])

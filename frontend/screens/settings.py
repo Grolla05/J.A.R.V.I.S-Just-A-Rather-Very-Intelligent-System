@@ -34,7 +34,12 @@ QUIPS = {
     "briefing_auto": "Briefing matinal ajustado. Prometo ser breve. Quase sempre.",
     "briefing_news": "Manchetes ajustadas. Filtrar o drama fica por sua conta.",
     "clipboard_monitor": "De olho no clipboard. Só sugiro — não leio seus segredos em voz alta.",
+    "auto_insights": "Suas ideias vão para 🧠 Brainstorms no vault. As ruins também, Senhor.",
     "commute_alert": "Aviso de saída ajustado: clima, trânsito e o 1º compromisso, só em dias úteis.",
+    "event_reminders": "Eu olho a sua agenda e aviso antes. Chegar na hora continua sendo com o senhor.",
+    "reminder_lead": "Antecedência ajustada. Tempo de sobra para inventar uma desculpa melhor.",
+    "reminder_final": "Aviso final ajustado. Com local e rota conhecidos, vira aviso de saída.",
+    "net_monitor": "De guarda no perímetro: porta nova, programa estranho, aparelho intruso. Eu aviso; o senhor decide.",
     "dnd_auto_meeting": "Em reunião eu seguro os alertas. Os críticos passam, claro.",
     "dnd_auto_fullscreen": "Tela cheia é sagrada. Guardo os alertas para depois.",
     "presentation_auto": "Slides em tela cheia — PowerPoint, PDF, Canva: fecho o mic, calo a voz e mostro [SILENT].",
@@ -198,7 +203,10 @@ class SettingsScreen(JarvisScreen):
                     "reabre o JARVIS direto no Copilot.")
         if self.group == "ROTINAS":
             return ("Briefing: /briefing força a qualquer hora. Fontes das manchetes em SISTEMA.\n"
-                    "Clipboard: só sugere (/clip); nada copiado vai para o log.\n"
+                    "Clipboard: só sugere (/clip); guarda o histórico, nada copiado vai para o log.\n"
+                    "Insights: ideias da conversa vão para 🧠 Brainstorms (/ideia anota na hora).\n"
+                    "Lembretes: aviso antes dos eventos do Google Agenda; /lembrete cria os seus.\n"
+                    "Vigia de rede: aprende a rede e avisa o que mudar (/rede varre na hora).\n"
                     "Aviso de saída usa /rota casa|trabalho. Silêncio: alertas críticos sempre passam.")
         return ""
 

@@ -12,6 +12,9 @@ from .logger import log
 # N\u00e3o usa emoji para garantir compatibilidade total com urllib no Windows.
 MEMORY_NOTE_PATH = "🚀 Projetos/J.A.R.V.I.S/Mem\u00f3ria/{key}.md"
 
+# Ideias/brainstorms registrados pelo JARVIS (services/insights.py): uma nota por mês.
+INSIGHTS_NOTE_PATH = "🧠 Brainstorms/J.A.R.V.I.S — Insights {month}.md"
+
 MEMORY_SAVED = "saved"  # nota criada agora
 MEMORY_KEPT = "kept"    # nota já existia: versão do vault mantida, valor novo descartado
 
@@ -113,6 +116,30 @@ class ObsidianClient:
         encoded = urllib.parse.quote(path, safe="", encoding="utf-8")
         r = self._req("PUT", f"/vault/{encoded}", data=content.encode("utf-8"))
         return MEMORY_SAVED if r is not None else None
+
+    def note_exists(self, path: str) -> Optional[bool]:
+        """True/False, ou None se o Obsidian não respondeu (não dá para saber).
+        `_req` devolve None tanto para 404 quanto para falha — aqui a diferença importa."""
+        encoded = urllib.parse.quote(path, safe="", encoding="utf-8")
+        try:
+            r = requests.request("GET", f"{self.base}/vault/{encoded}", headers=self.headers, timeout=5)
+        except requests.RequestException as e:
+            log.warning(f"Obsidian inacessível: {e}")
+            return None
+        if r.status_code == 404:
+            return False
+        return True if r.status_code == 200 else None
+
+    def append_note(self, path: str, text: str, header: str = "") -> bool:
+        """Anexa `text` ao fim da nota; se ela ainda não existe, cria com `header` antes.
+        Sempre POST (append do plugin): nunca reescreve o que já está na nota. Sem
+        resposta do Obsidian não escreve nada e devolve False (quem chama enfileira)."""
+        exists = self.note_exists(path)
+        if exists is None:
+            return False
+        body = text if exists else f"{header}{text}"
+        encoded = urllib.parse.quote(path, safe="", encoding="utf-8")
+        return self._req("POST", f"/vault/{encoded}", data=body.encode("utf-8")) is not None
 
 
 obsidian = ObsidianClient()

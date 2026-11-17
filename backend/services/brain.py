@@ -19,18 +19,26 @@ MODE_COPILOT = "copilot"
 state.sys_monitor.brain_callback = process_system_alert
 
 _AFFIRMATION_WORDS = ["sim", "pode", "feche", "encerre", "faça", "ok", "confirmo", "autorizo", "vai"]
+_DENIAL_WORDS = {"não", "nao", "mantenha", "manter", "mantém", "deixa", "deixe", "cancela", "cancele", "negativo"}
 
 
-def confirm_pending_action(approved):
+def confirm_pending_action(approved, explicit_decline=True):
     """Resolve a ação crítica pendente (ex: encerrar processo pesado, criar issue).
     Retorna a resposta da skill, ou None se não havia ação válida/aprovada.
 
     Uma skill pode deixar a ação pronta em `pending['on_confirm']` (callable sem
-    argumentos); sem ela, o padrão é encerrar `pending['target']` (APP_CONTROL)."""
+    argumentos); sem ela, o padrão é encerrar `pending['target']` (APP_CONTROL).
+    `pending['on_decline']` (opcional) roda quando o usuário recusa dentro do prazo."""
     pending = state.pending_critical_action
     state.pending_critical_action = None
-    if not pending or time.time() > pending['timeout'] or not approved:
+    if not pending or time.time() > pending['timeout']:
         return None
+    if not approved:
+        # Recusa explícita dentro do prazo (não vale para o tempo esgotado): a skill
+        # pode reagir — ex.: o vigia de rede passa a tratar o processo como conhecido.
+        # `explicit_decline=False` (voz: a frase seguinte não foi um "não") só descarta.
+        on_decline = pending.get('on_decline')
+        return on_decline() if explicit_decline and callable(on_decline) else None
     on_confirm = pending.get('on_confirm')
     if callable(on_confirm):
         log.info(f"✅ Autorização recebida: {pending.get('type', 'ação')}")
@@ -46,8 +54,11 @@ def _check_pending_action(command):
     """Se há ação crítica pendente, o próximo comando é a resposta a ela."""
     if not state.pending_critical_action:
         return None
-    approved = any(w in command.lower().split() for w in _AFFIRMATION_WORDS)
-    return confirm_pending_action(approved)
+    words = [w.strip(".,!?;:") for w in command.lower().split()]
+    # A negação vence: "não, pode manter" tem "pode" mas é uma recusa.
+    denied = any(w in _DENIAL_WORDS for w in words)
+    approved = not denied and any(w in words for w in _AFFIRMATION_WORDS)
+    return confirm_pending_action(approved, explicit_decline=denied)
 
 
 def execute_command(command, session_id='default'):
@@ -83,10 +94,18 @@ def _skill_allowed(intent, mode):
     return mode == MODE_COPILOT or skill_allowed_in_chat(intent)
 
 
-def execute_command_stream(command, session_id='default', images=None, mode=MODE_CHAT, on_route=None):
+def execute_command_stream(command, session_id='default', images=None, mode=MODE_CHAT, on_route=None,
+                           force_chat=False):
     """Pipeline de texto (TUI). mode=chat só roda skills fora de automation/system;
     mode=copilot roda todas. on_route(intent) é chamado quando a mensagem vira
-    uma skill (badge na TUI)."""
+    uma skill (badge na TUI). force_chat=True (trecho de código/erro a explicar)
+    vai direto ao LLM: sem classificador, sem vault e sem responder a ação pendente
+    — o conteúdo de um trecho não pode virar skill nem um "ok" de confirmação."""
+    if force_chat:
+        log.info(f"🧠 [CHAT DIRETO/{mode}]: {len(command)} caracteres, sem classificador.")
+        yield from ask_local_ai_stream(command, intent_type="CHAT", session_id=session_id, mode=mode)
+        return
+
     res = _check_pending_action(command)
     if res:
         yield res

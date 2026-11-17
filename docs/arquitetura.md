@@ -171,8 +171,9 @@ Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub
 | `oauth.py` | OAuth Desktop genérico: PKCE + callback no loopback |
 | `secrets_store.py` | Tokens no Cofre de Credenciais do Windows (`keyring`); fallback JSON |
 | `web.py` | Busca DuckDuckGo + leitura das páginas + resumo no Ollama |
-| `clipboard.py` | Monitor de clipboard e ações (explicar, traduzir, resumir) |
-| `selection.py` | Copia a seleção de qualquer app e lê/escreve o clipboard (Win32) |
+| `clipboard.py` | Monitor de clipboard, classificação (link, erro, código, inglês) e ações (explicar, traduzir, resumir) |
+| `netwatch.py` | Vigia de rede: foto das portas expostas, processos na internet e tabela ARP; linha de base e diff |
+| `selection.py` | Copia a seleção de qualquer app (devolvendo o clipboard anterior, se pedido) e lê/escreve o clipboard (Win32) |
 | `transcription.py` | Whisper local (faster-whisper) para áudio anexado |
 | `uploads.py` | Valida e grava anexos (imagem/áudio) |
 | `notifications.py` | Liga/desliga os toasts do Windows (HKCU) |
@@ -194,6 +195,9 @@ Cada skill expõe `INTENT`, `PROMPT_TEXT`, `CATEGORY` (herdada da pasta) e `exec
 | automation | `APP_CONTROL` | Abre, foca e fecha apps | não |
 | automation | `AUDIO_CONTROL` | Volume e mudo (pycaw) | não |
 | automation | `CLIPBOARD` | Explica/traduz/resume o clipboard | não |
+| productivity | `REMINDER` | Cria, lista e cancela lembretes com horário | sim |
+| productivity | `INSIGHT_SAVE` | Anota uma ideia em 🧠 Brainstorms no Obsidian | sim |
+| system | `NETWORK_SCAN` | Varredura da rede: aparelhos, portas expostas, programas na internet | não |
 | automation | `KEYBOARD_CONTROL` | Teclado fantasma (pyautogui) | não |
 | automation | `SCREEN_CONTROL` | Brilho, gamma ("retina") e janelas | não |
 | automation | `SPOTIFY_CONTROL` | Tocar, pausar, buscar no Spotify | não |
@@ -251,11 +255,12 @@ Os sinais `CRITICAL_START`/`CRITICAL_END` pintam a TUI de vermelho (classe `-cri
 | `/attach <caminho>`, `/detach` | Imagem → modelo de visão; áudio → Whisper (arrastar arquivo também anexa) |
 | `/mode [chat\|copilot]` (`Shift+Tab`), `/voice` (`Ctrl+T`) | Modo e voz |
 | `/skills`, `/status`, `/log`, `/vault`, `/config` | Telas cheias |
-| `/web`, `/gh`, `/briefing`, `/rota`, `/clip` | Ferramentas |
+| `/web`, `/gh`, `/briefing`, `/rota`, `/clip` | Ferramentas (`/clip` também busca e reusa o histórico do clipboard) |
+| `/ideia <texto>`, `/lembrete`, `/rede` | Anotar ideia no vault, lembretes com horário, perímetro de rede |
 | `/focus`, `/dnd`, `/silent` | Foco, Não Perturbe e Apresentação |
 | `/clear` (`Ctrl+L`), `/quit` (`Esc`) | Limpar tela, sair |
 
-Atalhos globais (agente): `Win+J` abre/foca a TUI no Copilot (em foco, volta ao Chat); `Ctrl+Alt+T` traduz o texto selecionado em qualquer app (toast + clipboard).
+Atalhos globais (agente): `Win+J` abre/foca a TUI no Copilot (em foco, volta ao Chat); `Ctrl+Alt+T` traduz o texto selecionado em qualquer app (toast + clipboard); `Ctrl+Alt+E` explica o código ou erro selecionado dentro do Chat (abre a TUI se preciso).
 
 ## 7. Dados
 

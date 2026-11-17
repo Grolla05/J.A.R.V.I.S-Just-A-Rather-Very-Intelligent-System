@@ -100,9 +100,10 @@ def wait_modifiers_released(is_down, timeout=RELEASE_TIMEOUT, sleep=time.sleep, 
 
 
 def copy_selection(send_copy=None, sequence=None, read=read_clipboard, is_down=None,
-                   sleep=time.sleep, clock=time.monotonic):
+                   sleep=time.sleep, clock=time.monotonic, restore=False, write=None, max_chars=MAX_CHARS):
     """Copia a seleção da janela em foco e devolve o texto — None se nada foi copiado.
-    Dependências injetáveis para teste (sem Win32)."""
+    `restore=True` devolve ao clipboard o texto que estava lá antes (atalho de explicar:
+    o usuário não perde o que tinha copiado). Dependências injetáveis para teste (sem Win32)."""
     user32 = None
     if send_copy is None or sequence is None or is_down is None:
         user32 = ctypes.windll.user32
@@ -111,6 +112,7 @@ def copy_selection(send_copy=None, sequence=None, read=read_clipboard, is_down=N
     send_copy = send_copy or (lambda: _send_ctrl_c(user32))
 
     wait_modifiers_released(is_down, sleep=sleep, clock=clock)
+    previous = (read() or "") if restore else ""
     before = sequence()
     send_copy()
     deadline = clock() + COPY_TIMEOUT
@@ -119,9 +121,14 @@ def copy_selection(send_copy=None, sequence=None, read=read_clipboard, is_down=N
             sleep(0.05)  # alguns apps escrevem em 2 etapas
             text = (read() or "").strip()
             log.debug(f"Seleção copiada: {len(text)} caracteres.")
-            return text[:MAX_CHARS] or None
+            if restore and previous:  # clipboard sem texto antes (imagem, vazio): nada a devolver
+                try:
+                    (write or write_clipboard)(previous)
+                except Exception as e:
+                    log.debug(f"Clipboard anterior não restaurado: {e}")
+            return text[:max_chars] or None
         sleep(0.02)
-    log.info("Atalho de tradução: nada selecionado (clipboard não mudou).")
+    log.info("Atalho de seleção: nada selecionado (clipboard não mudou).")
     return None
 
 

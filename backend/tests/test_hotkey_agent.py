@@ -56,6 +56,28 @@ class TestPresence(unittest.TestCase):
         presence.presence_path().write_text("{oops", encoding="utf-8")
         self.assertIsNone(presence.read_tui())
 
+    def test_explain_payload_round_trip_is_consumed_once(self):
+        self.assertTrue(presence.write_explain("def f():\n    pass  # ação", clock=lambda: 1000.0))
+        self.assertEqual(presence.take_explain(clock=lambda: 1010.0), "def f():\n    pass  # ação")
+        self.assertFalse(presence.explain_path().exists())
+        self.assertIsNone(presence.take_explain(clock=lambda: 1010.0))
+
+    def test_explain_payload_expires_and_is_removed(self):
+        presence.write_explain("trecho velho", clock=lambda: 1000.0)
+        self.assertIsNone(presence.take_explain(max_age_s=120, clock=lambda: 1200.0))
+        self.assertFalse(presence.explain_path().exists())
+
+    def test_explain_payload_garbage(self):
+        for content in ("{oops", "[1, 2]", json.dumps({"text": "  ", "ts": 1}), json.dumps({"text": "x", "ts": "?"})):
+            with self.subTest(content=content):
+                presence.explain_path().write_text(content, encoding="utf-8")
+                self.assertIsNone(presence.take_explain(clock=lambda: 2.0))
+                self.assertFalse(presence.explain_path().exists())
+
+    def test_explain_is_a_tui_event(self):
+        self.assertIn(presence.EXPLAIN, presence.EVENTS)
+        self.assertNotIn(presence.EXPLAIN, presence.AGENT_EVENTS)
+
 
 class FakeWinreg:
     HKEY_CURRENT_USER, KEY_SET_VALUE, REG_SZ = "HKCU", 2, 1
@@ -197,6 +219,59 @@ class TestTranslateHotkey(unittest.TestCase):
 
     def test_setting_has_default(self):
         self.assertEqual(settings.TRANSLATE_HOTKEY, "ctrl+alt+t")
+
+
+class TestExplainHotkey(unittest.TestCase):
+    def setUp(self):
+        import agent
+        self.agent = agent
+        self.payloads, self.notified = [], []
+        self.launch, self.focus = MagicMock(), MagicMock()
+        self.signal = MagicMock(return_value=True)
+
+    def _run(self, text, tui=None, write_ok=True):
+        def write(payload):
+            self.payloads.append(payload)
+            return write_ok
+        return self.agent.explain_selection(lambda: text, write, lambda: tui, self.launch, self.focus,
+                                            self.signal, lambda msg, title: self.notified.append((msg, title)))
+
+    def test_empty_selection_only_notifies(self):
+        self.assertEqual(self._run(None), "empty")
+        self.assertEqual(self.payloads, [])
+        self.assertIn("Selecione", self.notified[0][0])
+        self.launch.assert_not_called()
+        self.signal.assert_not_called()
+
+    def test_tui_open_gets_focus_and_signal(self):
+        self.assertEqual(self._run("def f(): pass", tui={"pid": 1, "hwnd": 50}), "sent")
+        self.assertEqual(self.payloads, ["def f(): pass"])
+        self.focus.assert_called_once_with(50)
+        self.signal.assert_called_once_with("EXPLAIN")
+        self.launch.assert_not_called()
+        self.assertEqual(self.notified, [])
+
+    def test_tui_closed_is_launched_with_payload_waiting(self):
+        self.assertEqual(self._run("Traceback…", tui=None), "launch")
+        self.assertEqual(self.payloads, ["Traceback…"])
+        self.launch.assert_called_once()
+        self.signal.assert_not_called()
+
+    def test_payload_or_signal_failure_notifies(self):
+        self.assertEqual(self._run("x = 1", tui={"pid": 1, "hwnd": 50}, write_ok=False), "failed")
+        self.signal.assert_not_called()
+        self.signal.return_value = False
+        self.assertEqual(self._run("x = 1", tui={"pid": 1, "hwnd": 0}), "failed")
+        self.focus.assert_not_called()
+        self.assertEqual(len(self.notified), 2)
+
+    def test_hotkey_id_and_default(self):
+        from core.hotkey import GlobalHotkey
+        ids = {GlobalHotkey("win+j", lambda: None).hotkey_id, self.agent.TRANSLATE_HOTKEY_ID,
+               self.agent.EXPLAIN_HOTKEY_ID}
+        self.assertEqual(len(ids), 3)
+        self.assertEqual(settings.EXPLAIN_HOTKEY, "ctrl+alt+e")
+        self.assertEqual(parse_hotkey(settings.EXPLAIN_HOTKEY), (MOD_CONTROL | MOD_ALT, ord("E")))
 
 
 

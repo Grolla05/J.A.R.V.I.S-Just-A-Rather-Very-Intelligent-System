@@ -6,6 +6,7 @@ Fluxo de `research(query)`:
 Tudo aqui é chamado de threads (worker da TUI ou skill no Copilot): nada toca
 em widget. Erros de rede viram listas/strings vazias + log, nunca exceção.
 """
+import time
 from concurrent.futures import ThreadPoolExecutor
 from html.parser import HTMLParser
 
@@ -86,17 +87,30 @@ def extract_text(html, max_chars=PAGE_CHARS):
     return "\n".join(parser.blocks)[:max_chars]
 
 
+# O `ddgs` sorteia o buscador no modo "auto" e resolve DNS por conta própria (Rust);
+# em algumas redes ~1 em 3 pedidos falha com DNSError intermitente. Em vez de desistir,
+# tenta de novo (fixando buscadores conhecidos) com uma pausa curta entre as tentativas.
+SEARCH_BACKENDS = ("auto", "duckduckgo, bing, brave", "auto")
+SEARCH_RETRY_PAUSE_S = 0.8
+
+
 def search(query, max_results=MAX_RESULTS):
     """Resultados do DuckDuckGo: [{'title', 'url', 'snippet'}]. Falha → []."""
     query = (query or "").strip()
     if not query:
         return []
-    try:
-        from ddgs import DDGS  # import tardio: só quem pesquisa paga o custo
-        raw = DDGS().text(query, region="br-pt", max_results=max_results) or []
-    except Exception as e:
-        log.warning(f"[WEB] Busca falhou: {e}")
-        return []
+    raw = []
+    for attempt, backend in enumerate(SEARCH_BACKENDS):
+        if attempt:
+            time.sleep(SEARCH_RETRY_PAUSE_S)
+        try:
+            from ddgs import DDGS  # import tardio: só quem pesquisa paga o custo
+            raw = DDGS().text(query, region="br-pt", max_results=max_results, backend=backend) or []
+        except Exception as e:
+            log.warning(f"[WEB] Busca falhou ({backend}): {e}")
+            raw = []
+        if raw:
+            break
     results = []
     for item in raw:
         url = item.get("href") or item.get("url") or ""

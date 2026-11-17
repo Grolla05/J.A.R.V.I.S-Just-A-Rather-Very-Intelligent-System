@@ -361,6 +361,8 @@ BarChart > .chart--alta { color: $j-danger-soft; }
 #status-health { width: 1fr; height: auto; color: $j-text-soft; }
 ProcessList > .procs--name { color: $j-white; }
 ProcessList > .procs--size { color: $j-muted; }
+#status-net-title { margin-top: 1; }
+#status-net { width: 1fr; height: auto; color: $j-text-soft; }
 #status-gap { height: 1fr; }
 
 /* --- /skills: grid de cartuchos --- */

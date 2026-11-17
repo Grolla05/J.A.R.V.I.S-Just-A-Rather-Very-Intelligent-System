@@ -55,7 +55,7 @@ J.A.R.V.I.S/
 │   │   ├── health.py        ← Saúde de Ollama/Obsidian/mic/SQLite (boot + linha de status)
 │   │   ├── notifications.py ← Toasts do Windows on/off (winreg HKCU)
 │   │   ├── hotkey.py        ← Atalho global (RegisterHotKey) do agente
-│   │   ├── presence.py      ← Ponte TUI⇄agente: tui.json + eventos nomeados (SUMMON/TO_CHAT)
+│   │   ├── presence.py      ← Ponte TUI⇄agente: tui.json + eventos nomeados (SUMMON/TO_CHAT/EXPLAIN) + explain.json (trecho a explicar)
 │   │   ├── autostart.py     ← Valor JARVIS em HKCU Run (com --logon) + detecção/início do agente
 │   │   ├── updater.py       ← Auto-update: Release do GitHub mais novo → tela ATUALIZAÇÃO DISPONÍVEL → tecla → setup silencioso (SHA-256 conferido)
 │   │   ├── launcher.py      ← Abre a TUI numa janela nova (wt ou console)
@@ -63,12 +63,12 @@ J.A.R.V.I.S/
 │   │   ├── uploads.py       ← load_local_file() + save_base64_upload() (/attach)
 │   │   ├── transcription.py ← Whisper local (faster-whisper)
 │   │   ├── config.py        ← Settings Singleton (.env, paths)
-│   │   ├── database.py      ← DatabaseManager SQLite (4 tabelas)
+│   │   ├── database.py      ← DatabaseManager SQLite (6 tabelas)
 │   │   ├── logger.py        ← JarvisLogger (console fora da TUI, arquivo sempre)
 │   │   ├── obsidian.py      ← RAG sobre vault Obsidian via MCP
 │   │   ├── oauth.py         ← OAuth Desktop genérico: PKCE + callback no loopback (Google Agenda, Spotify)
 │   │   ├── secrets_store.py ← Cofre de Credenciais do Windows (keyring) p/ tokens OAuth (Google e Spotify); fallback JSON
-│   │   ├── google_calendar.py ← Google Agenda (REST, só leitura): briefing, skill CALENDAR, is_busy()
+│   │   ├── google_calendar.py ← Google Agenda (REST, só leitura): briefing, skill CALENDAR, is_busy(), upcoming() p/ os lembretes
 │   │   ├── traffic.py       ← Trânsito entre locais fixos (/rota <local> <endereço>): Nominatim + OSRM (grátis) ou TomTom (ao vivo)
 │   │   ├── news.py          ← Manchetes do briefing (/config → SISTEMA): 1 por fonte, a mais relevante (RSS oficial ou busca; Crossref p/ DOI)
 │   │   ├── briefing.py      ← Briefing diário em seções fixas (Clima, Computador, GitHub, Agenda, Trânsito, Manchetes); LLM só no fecho
@@ -76,13 +76,14 @@ J.A.R.V.I.S/
 │   │   ├── github_client.py ← PyGithub: PRs, issues, commit, CI, create_issue (confirmação fica com quem chama)
 │   │   ├── spotify.py       ← Spotify: OAuth PKCE, Web API e player
 │   │   ├── web.py           ← Pesquisa DuckDuckGo + leitura das páginas + resumo no Ollama
-│   │   ├── clipboard.py     ← Monitor de clipboard e ações (/clip, skill CLIPBOARD)
+│   │   ├── clipboard.py     ← Monitor de clipboard, classificação (url/erro/código/inglês) e ações (/clip, skill CLIPBOARD)
+│   │   ├── netwatch.py      ← Vigia de rede: foto (portas expostas, processos na internet, ARP), linha de base e diff
 │   │   ├── window_utils.py  ← Win32: monitores, janela em foco, tela cheia, detecção de apresentação
 │   │   ├── ollama_server.py ← Sobe `ollama serve` no boot se o Ollama local estiver fora
 │   │   ├── boot.py          ← Etapas da tela de boot (run_boot)
 │   │   ├── wt_profile.py    ← Fragmento do perfil JARVIS do Windows Terminal (logo na aba)
 │   │   ├── utils.py         ← TTLCache
-│   │   ├── selection.py     ← Copia a seleção (Ctrl+C) e lê/escreve o clipboard via Win32 (agente)
+│   │   ├── selection.py     ← Copia a seleção (Ctrl+C; `restore=True` devolve o clipboard anterior) e lê/escreve o clipboard via Win32 (agente)
 │   │   ├── skill_loader.py  ← Auto-discovery de skills (plug-and-play)
 │   │   └── SystemInfo.py    ← psutil — monitoramento de hardware
 │   ├── services/            ← Serviços cognitivos
@@ -93,6 +94,10 @@ J.A.R.V.I.S/
 │   │   ├── skill_settings.py← Liga/desliga skills e categorias (/skills)
 │   │   ├── user_prefs.py    ← Preferências do /config (chaves pref_* na tabela config)
 │   │   ├── focus.py         ← Pomodoro + Não Perturbe (FocusManager: /focus, /dnd, skill FOCUS_MODE)
+│   │   ├── reminders.py     ← Lembretes: avisos antes dos eventos da agenda (com tempo de trajeto) e lembretes por pedido (/lembrete, skill REMINDER)
+│   │   ├── insights.py      ← Registro de insights: ideias da conversa → nota mensal em 🧠 Brainstorms (/ideia, skill INSIGHT_SAVE)
+│   │   ├── clip_history.py  ← Histórico persistente do clipboard (tabela clipboard_history): busca, reuso, filtro de segredos
+│   │   ├── net_guard.py     ← Guarda de rede: julga achados do netwatch, alerta, encerra processo/bloqueia IP com confirmação (/rede)
 │   │   ├── presentation.py  ← Modo Apresentação: /silent, skill PRESENTATION_MODE ou slides em tela cheia (PowerPoint, PDF, Canva, Google Slides no navegador) / PowerPoint aberto (pref) → mic fechado, TTS mudo, selo [SILENT]
 │   │   ├── notify_filter.py ← Filtro de interrupções: prioridade × contexto (DND, reunião, tela cheia)
 │   │   ├── integrations.py  ← Registro dos cards de /config → INTEGRAÇÕES (estado, conectar, desconectar)
@@ -103,9 +108,9 @@ J.A.R.V.I.S/
 │   ├── skills/
 │   │   ├── automation/      ← app_control, audio_control, clipboard_assistant, keyboard_control,
 │   │   │                       screen_control, spotify_control, work_macros  (só Copilot/voz)
-│   │   ├── system/          ← status_report, system_clear, system_security       (só Copilot/voz)
-│   │   ├── productivity/    ← calendar_agenda, daily_briefing, focus_mode, github_control,
-│   │   │                       presentation_mode, traffic_commute               (Chat e Copilot)
+│   │   ├── system/          ← network_guard, status_report, system_clear, system_security (só Copilot/voz)
+│   │   ├── productivity/    ← calendar_agenda, daily_briefing, focus_mode, github_control, insight_note,
+│   │   │                       presentation_mode, reminder, traffic_commute     (Chat e Copilot)
 │   │   └── web/             ← web_search                                          (Chat e Copilot)
 │   ├── prompts/             ← Arquivos .md de prompt (system_prompt, classify_intent, mode_chat, mode_copilot, briefing...; skills/ p/ PROMPT_TEXT)
 │   ├── tests/               ← pytest (backend + TUI)
@@ -172,16 +177,17 @@ J.A.R.V.I.S/
 
 - Toda operação SQL **deve** terminar com `conn.close()` em bloco `finally`
 - Novas colunas: sempre adicionar fallback `PRAGMA table_info` + `ALTER TABLE` para bancos antigos
-- Arquivo gerado em `backend/database/jarvis_memory.db` com 4 tabelas: `config`, `history`, `sessions`, `hardware`
+- Arquivo gerado em `backend/database/jarvis_memory.db` com 6 tabelas: `config`, `history`, `sessions`, `hardware`, `clipboard_history`, `reminders`
 - UPSERT via `ON CONFLICT(key) DO UPDATE SET` — nunca checar existência manualmente antes de inserir
 - Acesso: `from core.database import db` → `db.log_interaction()`, `db.get_config()`, `db.save_config()`, `db.update_hardware_spec()`
-- Sessões/histórico do chat: `from services import sessions` (não escrever SQL de sessão na TUI)
+- Sessões/histórico do chat: `from services import sessions` (não escrever SQL de sessão na TUI). O mesmo vale para `services/clip_history.py` e `services/reminders.py`: a TUI só chama as funções
 
 ### Banco de Dados — Obsidian (Memória de Longo Prazo)
 
 - O Obsidian funciona como cofre semântico de **longo prazo** — não substitui o SQLite, complementa
 - Memórias efêmeras da IA ficam em `🚀 Projetos/J.A.R.V.I.S/Memória/{key}.md` (`MEMORY_NOTE_PATH`; o path sempre passa por `urllib.parse.quote`)
 - **Nunca sobrescreve** notas existentes — preserva edições manuais do usuário no vault
+- Ideias e brainstorms vão para `🧠 Brainstorms/J.A.R.V.I.S — Insights AAAA-MM.md` (`INSIGHTS_NOTE_PATH`), sempre por `obsidian.append_note()` (POST = append; `note_exists()` distingue 404 de Obsidian fora do ar). Com o Obsidian fora, `services/insights.py` enfileira em `insights_pending` e grava depois
 - RAG em 2 camadas via `core/obsidian.py`:
   - **Camada 1**: palavras de perfil pessoal (`_PROFILE_KEYWORDS`) → puxa `Sobre mim.md` inteiro
   - **Camada 2**: busca semântica via MCP `obsidian_simple_search` → retorna arquivo de maior score
@@ -236,12 +242,16 @@ O modo vai para `execute_command_stream(..., mode=)` e escolhe o prompt `mode_ch
 
 ### Atalhos e comandos
 
-- `Shift+Tab` modo · `Ctrl+N` nova sessão · `Ctrl+O` sessões · `Ctrl+R` regenerar · `Ctrl+T` vai para o Copilot (voz) — some do rodapé dentro dele · `Esc` cancela a edição → interrompe o stream → sem nada em andamento, sai (CRT; Esc de novo sai já) — fora do rodapé · `↑` com input vazio edita a última mensagem · `Ctrl+K` paleta (`/menu`; binding com `priority=True` porque o `Input` usa Ctrl+K) · `Win+J` (global, via `agent.py`) abre/foca a TUI no Copilot · `Ctrl+Alt+T` (global, `TRANSLATE_HOTKEY`) traduz o texto selecionado em qualquer app (toast da bandeja + clipboard)
+- `Shift+Tab` modo · `Ctrl+N` nova sessão · `Ctrl+O` sessões · `Ctrl+R` regenerar · `Ctrl+T` vai para o Copilot (voz) — some do rodapé dentro dele · `Esc` cancela a edição → interrompe o stream → sem nada em andamento, sai (CRT; Esc de novo sai já) — fora do rodapé · `↑` com input vazio edita a última mensagem · `Ctrl+K` paleta (`/menu`; binding com `priority=True` porque o `Input` usa Ctrl+K) · `Win+J` (global, via `agent.py`) abre/foca a TUI no Copilot · `Ctrl+Alt+T` (global, `TRANSLATE_HOTKEY`) traduz o texto selecionado em qualquer app (toast da bandeja + clipboard) · `Ctrl+Alt+E` (global, `EXPLAIN_HOTKEY`) explica o código/erro selecionado em qualquer app dentro do Chat (abre a TUI se estiver fechada; o clipboard anterior é devolvido)
 - Telemetria e atalhos dividem **uma** linha: o `Footer` vive dentro do `#statusbar` (classe `.statusbar`); o `ConfirmScreen` tem a sua própria linha igual (o Footer só enxerga a Screen dele)
 - `JarvisApp` usa `inherit_bindings=False` para "Sair" ficar no fim do rodapé — não volte a herdar sem reordenar
 - Telas cheias: `/status` (dashboard), `/skills` (cartuchos), `/log` (buffer do logger + timeline do último turno com skill), `/vault` (Obsidian; "usar no chat" manda a nota como contexto via `prompts/vault_note_context.md`), `/config` (preferências em `services/user_prefs.py`; a fala do JARVIS é a linha `#cfg-quip` no pé do painel — sem caixa de diálogo; SISTEMA tem o campo "Fontes de notícias" com botão Salvar → `core/news.py`; INTEGRAÇÕES = cards de `services/integrations.py`: Enter conecta em worker de thread, card fica AGUARDANDO, Del desconecta com `ConfirmScreen`). Nova integração = uma entrada em `integrations._build()` com `status()`/`connect()`/`disconnect()` que devolvem texto e nunca levantam. Boot: `JarvisApp(boot_fn=core.boot.run_boot)`; `Esc` na conversa toca o CRT (`Esc` de novo sai já). Labels com `[  OK  ]` precisam de `markup=False`. `JarvisScreen._merge_bindings` põe `esc Voltar` no fim do rodapé, como no canvas. Dentro delas os atalhos da conversa ficam desativados; widgets da conversa são sempre buscados em `app.main_screen`
 - Não existe `/help`: a paleta `Ctrl+K` lista os comandos (`/`, `/help`, `/h` e `/?` abrem a paleta). `frontend/commands.py` é a fonte única — novo comando entra em `COMMANDS` e em `JarvisApp.run_command`
 - `//texto` envia uma mensagem que começa com `/`
+- Explicar (`JarvisApp.explain_snippet`): o trecho vira um turno normal do Chat (fica na sessão → dá para continuar perguntando) e vai ao modelo com `force_chat=True` — `execute_command_stream` pula classificador, vault e ação pendente, porque o conteúdo de um trecho nunca pode virar skill nem um "ok" de confirmação. Prompts `explain_code.md` / `explain_error.md` (stack trace → causa, onde olhar, correção, como confirmar). Chegam por ali: o atalho global (agente → `presence.write_explain` + evento `EXPLAIN`; `_take_explain` no sinal e no fim do boot) e `/clip explicar [n]`
+- `/clip`: sem argumento age sobre o clipboard atual; `hist` lista o histórico persistente (numerado), `buscar <termo>`, `usar <n>` recopia, `<ação> <n>` age sobre um item, `limpar` apaga (com `ConfirmScreen`). O histórico só enche com o **Monitor de clipboard** ligado e nunca guarda o que tem cara de senha/token (`clip_history.looks_secret`)
+- `/ideia <texto>` anota em 🧠 Brainstorms; `/lembrete [<quando> <assunto> | rm <n>]` cria/lista/remove lembretes; `/rede [confiar <n> | bloquear <ip> | reset]` varre o perímetro (bloquear e reset pedem `ConfirmScreen`)
+- Rotinas em segundo plano (só com `start_services`): lembretes num `set_interval(REMINDER_INTERVAL)` próprio (agenda é HTTP: nunca no tick da telemetria) → `reminders.collect()` em worker de thread → `_deliver_reminder` (aviso comum respeita o silêncio e vai ao backlog; `urgent` sempre aparece, sem voz no silêncio); insights no fim de um turno de conversa sem skill (`_insight_fn`, worker `exclusive`); vigia de rede (`core.netwatch.NetworkWatch`, pref `net_monitor`). Testes injetam `app._insight_fn` e fazem patch de `reminders.collect`
 - Arrastar arquivo para o terminal = `/attach`: o Windows Terminal cola o caminho; `PromptInput._on_paste` usa `commands.dropped_paths()` (só quando **todo** o texto é caminho de imagem/áudio existente) e emite `FilesDropped`. Não chame `super()._on_paste` — o Textual já roda o handler do `Input` pelo MRO (colaria 2×)
 - Linha de status: telemetria · selo de foco (`◷ FOCO 24m 1/4` / `☾ DND` / `[SILENT]`, resolução de minutos, sem timer próprio) · voz. Sem modelo (fica no `/config` → MODELO) e sem "Sair" no rodapé. A saúde (`core.health`, a cada `HEALTH_INTERVAL`, só depois do boot) não aparece no rodapé: fica no `/status` e falha nova vira notificação
 - PortAudio não é thread-safe: enumerar o microfone só via `health.check_microphone()` (lock + cache). Crash nativo grava stack em `logs/crash.log` (faulthandler no `main.py`)
@@ -266,6 +276,7 @@ O modo vai para `execute_command_stream(..., mode=)` e escolhe o prompt `mode_ch
 
 - O `SystemInfo` chama `JarvisApp._on_system_alert`; nunca omitir `is_status_signal=True` nos sinais `CRITICAL_START`/`CRITICAL_END` → evita o TTS pronunciar o código
 - `process_system_alert` passa pelo `services/notify_filter.py`: alerta crítico (disco CRÍTICO, bateria crítica, GPU superaquecendo) sempre fala; com Não Perturbe, reunião na agenda ou app em tela cheia (prefs `dnd_auto_meeting`/`dnd_auto_fullscreen`) o resto vai para o backlog. O prefixo `[SISTEMA CRÍTICO]` vem em todo alerta — não use para classificar
+- Vigia de rede: a 1ª foto e os 10 min seguintes só aprendem (linha de base em `net_baseline`). Depois, processo novo com porta exposta ou falando com a internet é julgado pelo LLM (`judge_connection.md`, cache 1 h): SEGURO entra na base em silêncio; SUSPEITO arma `pending_critical_action` com `on_confirm` (encerra por PID, conferindo nome e hora de criação) e `on_decline` ("Manter" = passa a ser conhecido). Aparelho novo e troca do MAC do gateway só avisam. Sem resposta do modelo nada é decidido. `brain.confirm_pending_action(approved, explicit_decline)`: `on_decline` só roda em recusa explícita dentro do prazo — tempo esgotado não é recusa; na voz a negação vence ("não, pode manter" recusa)
 - Com o Não Perturbe ligado (`state.dnd_active`, dono: `services/focus.py`), `process_system_alert` só guarda no `state.dnd_backlog` — sem fala, notify nem `pending_critical_action`; o resumo sai quando o DND desliga. Ações do `FocusManager` devolvem texto (quem chama mostra/fala); só troca de fase e fim de prazo anunciam sozinhas
 
 ### Agente residente (`backend/agent.py`)
@@ -311,6 +322,7 @@ O modo vai para `execute_command_stream(..., mode=)` e escolhe o prompt `mode_ch
 2. Declarar `INTENT`, `PROMPT_TEXT`, `CATEGORY` e `execute(entity, command)`
 3. A skill é **auto-descoberta** pelo `SkillLoader` no próximo boot — sem registro manual
 4. Ela aparece em `/skills`. Categorias `automation`/`system` só rodam no Copilot (ou voz); `productivity`/`web` rodam também no Chat
+   - Skill com intent parecido com outro precisa de um exemplo em `prompts/classify_intent.md` e de um "NÃO use para…" no próprio `PROMPT_TEXT` (ex.: `INSIGHT_SAVE` × `MEMORY_WRITE`, `REMINDER` × `CALENDAR`)
 5. Guia completo (contrato, confirmação de ação crítica, testes): `backend/skills/README.md`. Visão ponta a ponta do projeto: `docs/arquitetura.md`
 
 ---
@@ -329,6 +341,7 @@ MIC_INDEX=1
 WAKE_WORDS=jarvis,javis,jarbas   # vírgula separa; vazio = lista padrão
 GLOBAL_HOTKEY=win+j              # atalho do agente residente; vazio desliga
 TRANSLATE_HOTKEY=ctrl+alt+t      # traduz a seleção (agente); vazio desliga
+EXPLAIN_HOTKEY=ctrl+alt+e        # explica a seleção no Chat da TUI (agente); vazio desliga
 AUTO_UPDATE=True                 # atualiza no logon pelo Release do GitHub (só instalado)
 UPDATE_REPO=                     # dono/nome dos Releases; vazio = repositório oficial
 GOOGLE_CLIENT_ID=                # client OAuth "App para computador" do próprio usuário (+ GOOGLE_CLIENT_SECRET)

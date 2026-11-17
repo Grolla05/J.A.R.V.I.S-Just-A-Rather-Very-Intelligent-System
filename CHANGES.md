@@ -2,6 +2,86 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+**Data:** 2026-11-16
+**Escopo:** Cinco itens do roadmap fechados: histórico do clipboard persistente com busca, explicar código/erro por atalho global, registro automático de insights no vault, lembretes contextuais (agenda, trajeto e por pedido) e vigia de rede com ação confirmada.
+
+### 1. Histórico do clipboard — persistência e busca
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | **Histórico no SQLite** (tabela `clipboard_history`, 200 cópias): sobrevive ao fechamento da TUI; recopiar o mesmo texto só o sobe para o topo. O que tem cara de senha/token (`looks_secret`) não é gravado; o conteúdo nunca vai para o log | `backend/services/clip_history.py`, `backend/core/database.py` |
+| 2 | **Monitor grava tudo que é texto**: `ClipboardMonitor(on_capture=)` entrega toda cópia nova (≥ 20 caracteres) ao histórico, não só o que gera sugestão. O deque em memória de 20 itens saiu | `backend/core/clipboard.py`, `frontend/app.py` |
+| 3 | **Tipo `error`** no `classify()` (Traceback do Python, `at x (arq:1:2)`, `error[E…]`, `panic:`…), testado antes de `code`; sugestão "Copiou um erro — `/clip` para eu diagnosticar" | `backend/core/clipboard.py` |
+| 4 | **`/clip`**: `hist` (numerado, com hora), `buscar <termo>`, `usar <n>` (recopia), `explicar\|traduzir\|resumir <n>` (age sobre um item) e `limpar` (com `ConfirmScreen`) | `frontend/app.py`, `frontend/commands.py` |
+
+### 2. Explicação de código — atalho global `Ctrl+Alt+E`
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | **Selecionar e apertar `Ctrl+Alt+E`** em qualquer app: o agente copia a seleção (devolvendo o clipboard que estava lá), grava `explain.json` e manda a TUI explicar — abrindo-a se estiver fechada. Sem copiar e sem digitar comando | `backend/agent.py`, `backend/core/selection.py`, `backend/core/presence.py` |
+| 2 | **A explicação é um turno do Chat**: fica na sessão, então dá para continuar perguntando ("e como evito isso?"). Vale também para `/clip explicar`, que antes era um tiro único fora do histórico | `frontend/app.py` |
+| 3 | **`force_chat`** em `execute_command_stream`: o trecho vai direto ao LLM, sem classificador, sem vault e sem responder a ação pendente — o conteúdo de um trecho não pode virar skill nem um "ok" de confirmação | `backend/services/brain.py` |
+| 4 | **Prompt próprio para erro**: o que aconteceu, causa provável, onde olhar, como corrigir e como confirmar; código segue com linguagem + até 3 pontos de atenção | `backend/prompts/explain_error.md`, `backend/prompts/explain_code.md` |
+| 5 | Variável **`EXPLAIN_HOTKEY`** (padrão `ctrl+alt+e`, vazio desliga), item na bandeja | `backend/core/config.py`, `env.example` |
+
+### 3. Registro de insights — ideias vão sozinhas para `🧠 Brainstorms`
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | **Detecção pós-turno**: depois de uma conversa (sem skill), uma thread pergunta ao modelo se o usuário trouxe uma ideia, decisão ou brainstorm; se sim, anexa em `🧠 Brainstorms/J.A.R.V.I.S — Insights AAAA-MM.md` e mostra um toast. Mensagem curta, comando ou trecho de código nem chegam ao modelo | `backend/services/insights.py`, `backend/prompts/extract_insight.md`, `frontend/app.py` |
+| 2 | **Nunca reescreve a nota**: `ObsidianClient.append_note()` usa POST (append) e `note_exists()` separa "não existe" de "Obsidian fora do ar". Fora do ar, o registro vai para a fila `insights_pending` e é gravado depois, na ordem. O mesmo resumo não entra duas vezes em 7 dias | `backend/core/obsidian.py`, `backend/services/insights.py` |
+| 3 | **`/ideia <texto>`** e skill **`INSIGHT_SAVE`** ("anota essa ideia: …") gravam na hora, no Chat e no Copilot | `frontend/app.py`, `frontend/commands.py`, `backend/skills/productivity/insight_note.py` |
+| 4 | Preferência **Registro de insights** em `/config` → ROTINAS (padrão ligado) | `backend/services/user_prefs.py`, `frontend/screens/settings.py` |
+
+### 4. Lembretes contextuais
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | **O JARVIS avisa sozinho antes dos compromissos** do Google Agenda: `LEAD` (padrão 2 h antes — "em 2 horas o senhor tem a prova…"), `LEAVE` (evento com local e rota: avisa 15 min antes da hora de sair, com os minutos de trajeto) e `FINAL` (sem rota: 15 min antes do início). Cada aviso sai uma vez (`id\|início\|tipo`); mudar o horário do evento rearma; evento de dia inteiro é ignorado | `backend/services/reminders.py` |
+| 2 | **Frase viva, fatos fixos**: o LLM reescreve o aviso no tom do JARVIS (`reminder.md`, timeout de 8 s); se a resposta não trouxer o horário certo, ou o modelo falhar, sai o texto determinístico | `backend/services/reminders.py`, `backend/prompts/reminder.md` |
+| 3 | **Tempo de deslocamento**: de casa até o local salvo com `/rota` citado no evento, ou até o endereço do evento (geocodificação com cache); reunião online não tem trajeto | `backend/services/reminders.py` |
+| 4 | **Agenda**: `parse_event` guarda `id` e `location`; `upcoming(hours)` lê as próximas horas atravessando a meia-noite, com cache de 5 min | `backend/core/google_calendar.py` |
+| 5 | **Lembrete por pedido**: `/lembrete em 30 min tirar a roupa`, `/lembrete às 18h …`, `/lembrete` (lista), `/lembrete rm <n>`; skill **`REMINDER`** ("me lembra em 30 min de…"). Tabela `reminders`; os que venceram com a TUI fechada saem num resumo na próxima abertura | `backend/services/reminders.py`, `backend/skills/productivity/reminder.py`, `backend/core/database.py`, `frontend/app.py`, `frontend/commands.py` |
+| 6 | **Entrega**: tick próprio de 30 s numa thread (a agenda é HTTP). Aviso comum respeita Não Perturbe/reunião/tela cheia (vai para o backlog); hora de sair, início iminente e lembrete pedido sempre aparecem, sem voz no silêncio | `frontend/app.py` |
+| 7 | Preferências **Lembretes da agenda**, **Antecedência do lembrete** (30/60/120/180 min) e **Aviso final** em `/config` → ROTINAS | `backend/services/user_prefs.py`, `frontend/screens/settings.py` |
+
+### 5. Monitoramento de rede
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | **Vigia de rede** (thread daemon, a cada 60 s): fotografa as portas TCP expostas desta máquina, os processos falando com IPs públicos e os aparelhos da rede local (tabela ARP). A primeira foto e os 10 min seguintes só aprendem a linha de base; depois, o que for novo vira achado. Só leitura, sem administrador | `backend/core/netwatch.py` |
+| 2 | **Julgamento e ação**: processo novo é julgado pelo LLM (`judge_connection.md`, cache de 1 h). Seguro entra na base em silêncio; suspeito gera alerta falado + `ConfirmScreen` para **encerrar o processo** (por PID, conferindo nome e hora de criação). "Manter" passa a tratá-lo como conhecido; deixar o tempo esgotar não | `backend/services/net_guard.py`, `backend/prompts/judge_connection.md` |
+| 3 | **Aparelho novo na rede** e **troca do MAC do roteador** (sinal de ARP spoofing — prioridade crítica, passa pelo Não Perturbe) avisam sem ação automática | `backend/services/net_guard.py` |
+| 4 | **`/rede`**: varredura na hora; `confiar <n>`; `bloquear <ip>` (regra de saída no Firewall do Windows — só com o JARVIS elevado; sem isso devolve o comando) e `reset`, os dois com confirmação. Skill **`NETWORK_SCAN`** ("tem alguém na minha rede?") no Copilot | `frontend/app.py`, `frontend/commands.py`, `backend/skills/system/network_guard.py` |
+| 5 | **`/status`** ganha o bloco PERÍMETRO; preferência **Vigia de rede** em `/config` → ROTINAS | `frontend/screens/status.py`, `frontend/jarvis.tcss`, `backend/services/user_prefs.py` |
+| 6 | **`on_decline`** nas ações críticas: `confirm_pending_action(approved, explicit_decline)`. Na voz, a negação vence — "não, pode manter" recusa (antes o "pode" aprovava) | `backend/services/brain.py` |
+| 7 | **Correção — velocidade da rede**: `get_network_speed` dividia pelo tempo desde o boot (o valor encolhia com o uso) e a telemetria da TUI e o contexto do chat zeravam a janela um do outro. Agora tem relógio e cache próprios e devolve `errin/errout/dropin/dropout` da janela, que o `analyze_semantic_state` já lia (e recebia sempre 0) | `backend/core/SystemInfo.py` |
+
+**Limites conhecidos:** o vigia de rede detecta mudança em relação à linha de base — não é um IDS; celular com MAC aleatório aparece como aparelho novo a cada rede "esquecida". O bloqueio por firewall exige rodar o JARVIS como administrador. Lembretes e insights só rodam com a TUI aberta (o agente da bandeja não avisa sozinho).
+
+**Testes novos:** `test_clip_history.py`, `test_insights.py`, `test_reminders.py`, `test_netwatch.py`, `test_net_guard.py`; casos novos em `test_clipboard.py`, `test_selection.py`, `test_hotkey_agent.py`, `test_mode_routing.py` e `test_tui_tools.py` (explicar, `/clip` com histórico, `/ideia`, `/lembrete`, `/rede`, entrega de lembretes com e sem Não Perturbe, bloco PERÍMETRO).
+
+### 6. Correções achadas no teste real (17/11/2026)
+
+A TUI rodou de verdade (Ollama, Google Agenda, GitHub, DuckDuckGo, Nominatim/OSRM, Obsidian, clipboard e rede reais; banco temporário) para gerar as fotos dos posts. O teste achou:
+
+| # | Problema | Correção | Arquivos |
+|---|---|---|---|
+| 1 | **Acentos sumiam do clipboard**: `clipboard.read()` lia pelo PowerShell, na página de código do console ("relatório" virava "relatrio") — e o histórico persistente gravava o texto estragado | Lê pela API Win32 (Unicode); PowerShell forçado a UTF-8 só como reserva | `backend/core/clipboard.py` |
+| 2 | **Timeout do Nominatim virava "endereço inexistente" para sempre** no cache de geocodificação dos lembretes (o evento ficava sem trajeto) | Só o acerto entra no cache; a nova tentativa já é limitada pelo cache de 10 min do trajeto | `backend/services/reminders.py` |
+| 3 | **Frase do lembrete perdia o essencial**: o modelo trocava "em 2 horas" por "está agendada", sumia com o "saia" e chegou a inventar "Sai em 15 minutos" num aviso de 2 h | A frase do LLM só vale se mantiver horário, tempo relativo ("em 2 horas"), a ordem de sair (no aviso de saída) e nenhum número fora dos fatos; senão sai o texto fixo | `backend/services/reminders.py`, `backend/prompts/reminder.md` |
+| 4 | **Título de insight ruim**: a skill usava a 1ª frase crua ("Estive pensando: o JARVIS podia…") e o modelo às vezes respondia "INSIGHT: Modo viagem" | A skill pede o título ao modelo e guarda o texto nas palavras do usuário; prefixos tipo "INSIGHT:" são removidos | `backend/skills/productivity/insight_note.py`, `backend/services/insights.py` |
+| 5 | **`/rede` quebrava** com IP que não fosse IPv4 numérico na tabela de aparelhos | Ordenação tolerante (`_ip_key`) | `backend/services/net_guard.py` |
+| 6 | **`/web` falhava ~1 em 3 vezes** nesta rede: o `ddgs` resolve DNS por conta própria e dá `DNSError` intermitente | Até 3 tentativas, com buscadores fixos na 2ª e pausa de 0,8 s | `backend/core/web.py` |
+
+**Testes novos:** `test_clipboard.py::TestRead`, `test_reminders.py` (cache sem falha, tempo relativo, ordem de sair, número inventado), `test_insights.py` (título do modelo, prefixo), `test_net_guard.py` (IP estranho), `test_web.py` (nova tentativa).
+
+**Fora do código:** `posts_linkedin_JARVIS/` (no `.gitignore`) guarda os 7 posts de 08/11 a 16/11 com 25 screenshots reais da TUI.
+
+**Pendente (manual):** apertar `Ctrl+Alt+E` com o agente rodando e receber o aviso de um evento de verdade do Google Agenda.
+
+---
+
 **Data:** 2026-11-13 (4)
 **Escopo:** Fecha duas dívidas achadas na revisão da documentação: prompts do chat ainda em string Python e fallback de tokens fora do `.gitignore`.
 
