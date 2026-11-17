@@ -1,3 +1,4 @@
+# ⚠️ ACESSO SENSÍVEL: lê as conexões de rede de todos os processos (psutil) e roda `arp -a` e `route print` (só leitura); encerrar processo e bloquear IP ficam no services/net_guard, sempre com confirmação do usuário
 """Skill NETWORK_SCAN — "tem alguém na minha rede?": varredura sob demanda.
 
 Só leitura: aparelhos na rede local, portas expostas e programas falando com a
