@@ -1374,16 +1374,20 @@ class JarvisApp(App, inherit_bindings=False):
         pending = state.pending_critical_action
         if pending and not isinstance(self.screen, ConfirmScreen):
             self.main_screen.query_one("#voicebar", VoiceBar).set_awaiting(True)
-            self.push_screen(ConfirmScreen(text, deadline=pending.get("timeout")), self._resolve_critical)
+            # O id vai junto: se a pendência for trocada enquanto a pergunta está na
+            # tela, o "s" não executa a ação nova (core/pending.py).
+            pending_id = pending.get("id")
+            self.push_screen(ConfirmScreen(text, deadline=pending.get("timeout")),
+                             lambda approved, pid=pending_id: self._resolve_critical(approved, pid))
 
-    def _resolve_critical(self, approved):
+    def _resolve_critical(self, approved, pending_id=None):
         self.main_screen.query_one("#voicebar", VoiceBar).set_awaiting(False)
-        self._confirm_worker(bool(approved))
+        self._confirm_worker(bool(approved), pending_id)
 
     @work(thread=True, group="confirm")
-    def _confirm_worker(self, approved):
+    def _confirm_worker(self, approved, pending_id=None):
         from services.brain import confirm_pending_action
-        result = confirm_pending_action(approved)
+        result = confirm_pending_action(approved, pending_id=pending_id)
         self.call_from_thread(self.add_system, result or ("Ação cancelada." if not approved else "Nada a fazer."))
 
     def _on_system_alert(self, message, is_proactive=False, is_status_signal=False):

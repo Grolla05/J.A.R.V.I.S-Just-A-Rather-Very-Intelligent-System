@@ -3,13 +3,15 @@
 import difflib
 import json
 import os
+import re
+import shutil
 import subprocess
 
 import psutil
-import requests  # Conexão direta
 
-from core import log
+from core import log, pending, processes
 from core.config import settings
+from core.llm import query_ollama
 from core.prompts import load_prompt
 from core.window_utils import find_window_by_pid, force_foreground
 
@@ -45,28 +47,23 @@ PROCESS_MAP = {
     "firefox": ["firefox"],
     "calculator": ["CalculatorApp", "Calculator"],
     "code": ["Code"],
-    "visual studio code": ["Code"]
+    "visual studio code": ["Code"],
+    "opera gx": ["opera"],
+    "whatsapp": ["WhatsApp"],
 }
+
+# Alvo de "fechar" com menos letras que isso é recusado ("s", "e"… pegariam metade do PC).
+MIN_TARGET_LEN = 3
+# Fallback de "abrir" por nome de programa no PATH: só letras, números, espaço, . + -
+_SAFE_COMMAND = re.compile(r"[\w .+-]{2,60}")
 
 # --- FUNÇÃO LOCAL DE LLM ---
 def _ask_ollama_app_expert(user_text):
     """Consulta o LLM para decidir o que fazer com o app."""
-    url = f"http://{settings.OLLAMA_HOST}/api/generate"
-    payload = {
-        "model": settings.OLLAMA_MODEL,
-        "prompt": user_text,
-        "system": APP_DECISION_PROMPT,
-        "stream": False,
-        "format": "json",
-        "options": {"temperature": 0.1} # Precisão máxima
-    }
-    try:
-        response = requests.post(url, json=payload, timeout=10)
-        response.raise_for_status()
-        return response.json().get("response", "{}")
-    except Exception as e:
-        log.error(f"❌ [APP SKILL] Erro no cérebro (Timeout/Conexão): {e}")
-        return None
+    # core.llm normaliza OLLAMA_HOST e trata erro (devolve None).
+    return query_ollama([{"role": "system", "content": APP_DECISION_PROMPT},
+                         {"role": "user", "content": user_text}],
+                        format="json", temperature=0.1, timeout=settings.TIMEOUT_API)
 
 # --- HELPERS DE SISTEMA (MANTIDOS IGUAIS PELA EFICIÊNCIA) ---
 def get_installed_apps():
@@ -77,8 +74,8 @@ def get_installed_apps():
     
     # 1. PowerShell (Modern Apps)
     try:
-        cmd = 'powershell -Command "Get-StartApps | Select-Object Name, AppID | ConvertTo-Json -Compress"'
-        result = subprocess.run(cmd, capture_output=True, text=True, shell=True)
+        cmd = ["powershell", "-NoProfile", "-Command", "Get-StartApps | Select-Object Name, AppID | ConvertTo-Json -Compress"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode == 0 and result.stdout.strip():
             raw = json.loads(result.stdout)
             data = raw if isinstance(raw, list) else [raw]
@@ -113,21 +110,91 @@ def find_best_match(user_query, apps_dict):
         return matches[0], apps_dict[matches[0]]
     return None, None
 
-def find_active_processes(target_name):
-    target_clean = target_name.lower()
-    if target_clean in ALIASES: target_clean = ALIASES[target_clean]
+def _resolve_target(target_name):
+    """Alvo do LLM → (nome limpo, nomes de executável aceitos, conhecido?)."""
+    target_clean = processes.stem(target_name)
+    if target_clean in ALIASES:
+        target_clean = ALIASES[target_clean]
+    known = target_clean in PROCESS_MAP
+    names = PROCESS_MAP.get(target_clean, [target_clean])
+    return target_clean, {processes.stem(n) for n in names}, known
 
+
+def find_active_processes(target_name):
+    """Processos cujo executável tem EXATAMENTE o nome do alvo (sem .exe, sem
+    maiúsculas). Nunca devolve processos protegidos (sistema, o próprio JARVIS).
+    Antes era substring: "fechar code" pegava tudo com "code" no nome (GHSA-p7rm)."""
+    _, names, _ = _resolve_target(target_name)
     found_procs = []
-    # Busca na lista manual ou usa o próprio nome
-    targets_to_check = PROCESS_MAP.get(target_clean, [target_clean])
-    
     for proc in psutil.process_iter(['pid', 'name']):
         try:
-            p_name = proc.info['name'].lower()
-            if any(t.lower() in p_name for t in targets_to_check):
+            p_name = proc.info['name'] or ""
+            if processes.stem(p_name) in names and not processes.is_protected(p_name, proc.info['pid']):
                 found_procs.append(proc)
-        except: continue
+        except Exception:
+            continue
     return found_procs
+
+
+def _snapshot(procs):
+    """[(pid, nome, create_time)] — o que exatamente será encerrado após o "sim"."""
+    snap = []
+    for proc in procs:
+        try:
+            snap.append((proc.info['pid'], proc.info['name'], proc.create_time()))
+        except Exception:
+            continue
+    return snap
+
+
+def _terminate_snapshot(snapshot, label):
+    closed = sum(1 for pid, name, created in snapshot
+                 if processes.terminate_if_same(pid, name, created) == "ok")
+    if not closed:
+        return f"Nenhuma instância do {label} foi encerrada (já tinham fechado ou exigem administrador)."
+    return f"Encerrando {closed} instâncias do {label}. Memória liberada."
+
+
+def _valid_close_target(target_raw):
+    return len(processes.stem(target_raw)) >= MIN_TARGET_LEN
+
+
+def close_now(target_raw):
+    """Encerra o alvo sem perguntar — só para quando o usuário JÁ confirmou
+    (ex.: alerta de consumo crítico respondido com "sim")."""
+    if not target_raw or not _valid_close_target(target_raw):
+        return "Alvo inválido para encerrar, senhor."
+    procs = find_active_processes(target_raw)
+    if not procs:
+        return f"Não há processos ativos do {target_raw} para terminar."
+    return _terminate_snapshot(_snapshot(procs), target_raw)
+
+
+def _close(target_raw):
+    """Ação "fechar": app conhecido com um único executável fecha direto; nome
+    desconhecido ou vários executáveis diferentes pedem confirmação."""
+    if not _valid_close_target(target_raw):
+        return f"O alvo '{target_raw}' é curto demais para eu encerrar com segurança, senhor."
+    procs = find_active_processes(target_raw)
+    if not procs:
+        return f"Não há processos ativos do {target_raw} para terminar."
+    snapshot = _snapshot(procs)
+    _, _, known = _resolve_target(target_raw)
+    exe_names = sorted({name for _, name, _ in snapshot})
+    if known and len(exe_names) == 1:
+        return _terminate_snapshot(snapshot, target_raw)
+    question = (f"Encerrar {len(snapshot)} processo(s) de {', '.join(exe_names)}? "
+                f"Não reconheço '{target_raw}' como um app da minha lista.")
+    armed = pending.arm("APP_CLOSE", question, lambda: _terminate_snapshot(snapshot, target_raw),
+                        target=target_raw)
+    if armed is None:
+        return pending.BUSY_REPLY
+    return f"{question} Diga **sim** para confirmar."
+
+
+def _safe_command_name(target_raw):
+    """Nome simples de programa (ex.: 'notepad'): sem caminho, aspas nem &|;<>."""
+    return bool(_SAFE_COMMAND.fullmatch(target_raw or ""))
 
 def focus_window(pid):
     # Tentativa 1 (principal): Win32 direto. Trata janela minimizada (IsIconic + SW_RESTORE)
@@ -202,18 +269,7 @@ def execute(entity, command_text=""):
 
         # --- AÇÃO: FECHAR ---
         elif action == "close":
-            procs = find_active_processes(target_raw)
-            if procs:
-                count = 0
-                for proc in procs:
-                    try: 
-                        proc.terminate()
-                        count += 1
-                    except: pass
-                # Resposta técnica e satisfatória
-                return f"Encerrando {count} instâncias do {target_raw}. Memória liberada."
-            else:
-                return f"Não há processos ativos do {target_raw} para terminar."
+            return _close(target_raw)
 
         # --- AÇÃO: ABRIR (OPEN) ---
         elif action == "open":
@@ -233,19 +289,25 @@ def execute(entity, command_text=""):
                     log.info(f"🚀 Iniciando: {real_name}")
                     # Usamos subprocess.DEVNULL para silenciar logs internos dos apps (Notion, Spotify, etc)
                     if "!" in app_path or app_path.startswith("{"):
-                        subprocess.Popen(f'explorer.exe shell:AppsFolder\\{app_path}', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        # Lista de argumentos (sem shell): o AppID nunca vira comando do cmd.
+                        subprocess.Popen(["explorer.exe", f"shell:AppsFolder\\{app_path}"],
+                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                     else:
                         os.startfile(app_path)
                     return f"Inicializando sequência de abertura do {real_name}."
-                except:
+                except Exception:
                     return f"Erro ao tentar executar o binário do {real_name}."
-            
-            # Tentativa desesperada (Comando direto)
-            try:
-                subprocess.Popen(target_raw, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                return f"Protocolo padrão falhou. Tentando execução direta via shell para {target_raw}."
-            except:
-                return f"Busca negativa. O software {target_raw} não foi localizado no índice do sistema."
+
+            # Último recurso: programa no PATH (ex.: "notepad"), só com nome simples e
+            # sem shell. O texto do LLM nunca vai para o cmd (GHSA-8j53).
+            exe = shutil.which(target_raw) if _safe_command_name(target_raw) else None
+            if exe:
+                try:
+                    subprocess.Popen([exe], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    return f"Protocolo padrão falhou. Iniciando {target_raw} pelo PATH do sistema."
+                except Exception as e:
+                    log.warning(f"[APP SKILL] Falha ao iniciar {exe}: {e}")
+            return f"Busca negativa. O software {target_raw} não foi localizado no índice do sistema."
 
     except json.JSONDecodeError:
         return "Erro de sintaxe na resposta da IA. Requer diagnóstico."

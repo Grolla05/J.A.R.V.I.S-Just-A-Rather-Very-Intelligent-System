@@ -6,6 +6,7 @@ import requests
 
 from core import log
 from core.config import settings
+from core.llm import query_ollama
 from core.prompts import load_prompt
 from core.spotify import ensure_device_ready, spotify, start_uri
 
@@ -67,22 +68,10 @@ def _start_playlist(uri):
 
 def _ask_ollama_macro_expert(user_text):
     """Consulta o LLM para decidir qual macro ativar."""
-    url = f"http://{settings.OLLAMA_HOST}/api/generate"
-    payload = {
-        "model": settings.OLLAMA_MODEL,
-        "prompt": user_text,
-        "system": MACRO_DECISION_PROMPT,
-        "stream": False,
-        "format": "json",
-        "options": {"temperature": 0.1}
-    }
-    try:
-        response = requests.post(url, json=payload, timeout=10)
-        response.raise_for_status()
-        return response.json().get("response", "{}")
-    except Exception as e:
-        log.error(f"❌ [MACRO SKILL] Erro no cérebro (Timeout/Conexão): {e}")
-        return None
+    # core.llm normaliza OLLAMA_HOST e trata erro (devolve None).
+    return query_ollama([{"role": "system", "content": MACRO_DECISION_PROMPT},
+                         {"role": "user", "content": user_text}],
+                        format="json", temperature=0.1, timeout=settings.TIMEOUT_API)
 
 def execute_app_action(app_name, action="open"):
     """Reutiliza a skill APP_CONTROL para abrir os apps da macro."""

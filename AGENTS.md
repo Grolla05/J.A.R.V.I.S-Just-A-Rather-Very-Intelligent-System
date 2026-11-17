@@ -49,6 +49,8 @@ J.A.R.V.I.S/
 │   ├── agent.py             ← Agente residente (pythonw, bandeja): atalho global Win+J abre/foca a TUI; sobe com o Windows
 │   ├── core/                ← Infraestrutura
 │   │   ├── state.py         ← Estado global (sys_monitor, pending_critical_action, voice_enabled, announce)
+│   │   ├── pending.py       ← Ação crítica pendente: arm (sem sobrescrever, com id) / take / parse_reply (só frase de confirmação aprova)
+│   │   ├── processes.py     ← Encerrar processo com segurança (nome + hora de criação) e lista PROTECTED
 │   │   ├── llm.py           ← Cliente Ollama oficial (query_ollama / stream)
 │   │   ├── hardware.py      ← scan_system_hardware() via PowerShell WMI
 │   │   ├── alerts.py        ← process_system_alert() + PROCESS_JUDGEMENT_CACHE (com DND ligado guarda no backlog)
@@ -201,6 +203,7 @@ J.A.R.V.I.S/
 
 - `sys_monitor`, `pending_critical_action`, `voice_enabled` e `announce` vivem em `core/state.py`
 - Acesso: `import core.state as state` → `state.sys_monitor` / `state.pending_critical_action`
+- Ação crítica pendente: **só** por `core/pending.py` — `arm()` (não sobrescreve pendência válida, devolve `None`; responda `pending.BUSY_REPLY`), `take(id)` e `parse_reply()` (só frase de confirmação aprova). Nunca atribuir `state.pending_critical_action` direto fora dos testes; nunca confiar em `confirmed` vindo do LLM; nunca passar texto do LLM para `shell=True`
 - **Nunca** instanciar `SystemInfo()` novamente em outros módulos
 
 ### Skills — Contrato Obrigatório

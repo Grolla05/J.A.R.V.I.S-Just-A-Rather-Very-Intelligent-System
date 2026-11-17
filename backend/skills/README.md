@@ -60,7 +60,7 @@ O bloqueio no Chat vem de `CHAT_BLOCKED_CATEGORIES` em `services/intent.py`: ess
 1. Crie `backend/skills/<categoria>/minha_skill.py` com `INTENT`, `PROMPT_TEXT` e `execute(entity, command)`.
 2. Escreva o `PROMPT_TEXT` em `backend/prompts/skills/minha_skill.md` (nunca string no `.py`).
 3. Se precisar do LLM, use `core.llm.query_ollama(..., format="json", temperature=0)` e um prompt `.md`. Resolva frases óbvias sem LLM primeiro (veja `parse_fast` em `focus_mode.py` e `github_control.py`).
-4. Ação destrutiva ou externa (apagar, publicar, encerrar)? Não execute direto: grave `state.pending_critical_action = {"type": ..., "target": ..., "question": ..., "timeout": time.time() + 30, "on_confirm": fn}` e devolva a pergunta (modelo: `request_issue` em `github_control.py`). A TUI abre a `ConfirmScreen`; a voz aceita "sim".
+4. Ação destrutiva ou externa (apagar, publicar, encerrar)? Não execute direto: arme com `core.pending.arm(tipo, pergunta, on_confirm, target=...)` e devolva a pergunta (modelo: `request_issue` em `github_control.py`). Nunca atribua `state.pending_critical_action` direto: `arm` devolve `None` quando já há outra pergunta aberta (responda `pending.BUSY_REPLY`), e só ele dá o `id` que impede o "sim" de uma pergunta executar outra. Nunca confie num campo `confirmed` vindo do LLM, e nunca passe texto do LLM para `shell=True`. A TUI abre a `ConfirmScreen`; a voz aceita "sim".
 5. Faça imports pesados dentro de `execute`. Valide `entity` antes de passar para subprocesso.
 6. Use `log` (nunca `print`) e devolva sempre uma string — erro vira mensagem amigável.
 7. Escreva testes em `backend/tests/` (sem hardware real: mocke as chamadas de sistema).

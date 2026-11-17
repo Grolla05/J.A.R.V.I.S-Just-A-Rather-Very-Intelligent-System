@@ -2,6 +2,46 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+**Data:** 2026-11-17
+**Escopo:** Segurança — correção dos 5 Security Advisories privados abertos pela revisão geral (GHSA-8j53, GHSA-ph22, GHSA-48jx, GHSA-p7rm, GHSA-x47w) e da issue #47 (URL do Ollama duplicada em 7 skills).
+
+### 1. Skills falam com o Ollama só por `core.llm` (issue #47)
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | **Fim do `http://http://`**: 7 skills montavam `f"http://{OLLAMA_HOST}/api/generate"`; com o padrão do `env.example` (`http://localhost:11434`) a URL quebrava e as skills falhavam na instalação padrão (inclusive o "sim" do alerta de processo crítico, que nunca encerrava nada). Agora todas usam `query_ollama(..., format="json")`, que normaliza o host e trata erro | `backend/skills/automation/{app_control,audio_control,keyboard_control,screen_control,work_macros}.py`, `backend/skills/system/{system_clear,system_security}.py` |
+| 2 | `SYSTEM_CLEANUP`: `winget` e `Get-StartApps` como lista de argumentos (sem `shell=True`); `appwiz.cpl` via `os.startfile` | `backend/skills/system/system_clear.py` |
+| 3 | Teste estático: nenhuma skill monta URL do Ollama nem usa `requests.post` para ele | `backend/tests/test_skills_llm.py` |
+
+### 2. Confirmação de ação crítica centralizada (GHSA-x47w, GHSA-48jx)
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | **`core/pending.py`**: única porta de `state.pending_critical_action`, com lock. `arm()` nunca sobrescreve uma pendência válida (devolve `None`); toda pendência tem `id`; `take(id)` só executa a pendência que a pergunta mostrou (trocada → "foi substituída; nada foi feito") | `backend/core/pending.py` |
+| 2 | **Resposta estrita**: `parse_reply()` só aprova frase feita de confirmação/verbo de ação/alvo ("sim, pode encerrar"). "pode me dizer o clima?" ou "vai chover amanhã" não aprovam mais — descartam a pendência e seguem como comando. Negação continua vencendo | `backend/core/pending.py`, `backend/services/brain.py` |
+| 3 | Alerta de hardware, vigia de rede e criação de issue passam a armar por `pending.arm`; o `ConfirmScreen` repassa o `id` da pergunta até `confirm_pending_action(pending_id=)` | `backend/core/alerts.py`, `backend/services/net_guard.py`, `backend/skills/productivity/github_control.py`, `frontend/app.py` |
+
+### 3. `APP_CONTROL` sem shell e sem substring (GHSA-8j53, GHSA-p7rm)
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | **Sem injeção de shell**: saiu o fallback `Popen(target_raw, shell=True)`. Último recurso agora é `shutil.which` de um nome simples (`[\w .+-]`), executado como lista; AppsFolder também em lista | `backend/skills/automation/app_control.py` |
+| 2 | **Fechar por nome exato** do executável (antes "fechar code" pegava tudo com "code"); alvo com menos de 3 letras é recusado; processos do sistema e o próprio JARVIS nunca são encerrados | `backend/skills/automation/app_control.py`, `backend/core/processes.py` |
+| 3 | **App desconhecido pede confirmação** (snapshot de PID + nome + hora de criação; PID reaproveitado não é encerrado). App conhecido (`PROCESS_MAP`/aliases) com um único executável fecha direto. `close_now()` serve quem já confirmou (alerta de consumo crítico) | `backend/skills/automation/app_control.py`, `backend/core/processes.py`, `backend/services/net_guard.py` |
+
+### 4. Desligar sempre pede confirmação (GHSA-ph22)
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | O campo `confirmed` do LLM saiu: desligar sempre arma `pending.arm("POWER_DOWN")` e abre o `ConfirmScreen`; `shutdown`/suspender viraram `subprocess.run` em lista | `backend/skills/system/system_security.py`, `backend/prompts/skills/system_security_decision.md` |
+| 2 | **Desligar não apaga mais nada**: Lixeira e `%TEMP%` saíram do desligamento (ficam com `SYSTEM_CLEANUP`). Sem LLM, comando não reconhecido não bloqueia mais a tela por padrão | `backend/skills/system/system_security.py` |
+
+### Testes
+
+Novos: `test_pending.py`, `test_app_control.py`, `test_system_security.py`, `test_skills_llm.py`. Ajustados: `test_mode_routing.py` (frases que não aprovam, pendência substituída, `close_now`) e `test_tui_app.py` (o `ConfirmScreen` só resolve a pendência que mostrou).
+
+---
+
 **Data:** 2026-11-16
 **Escopo:** Cinco itens do roadmap fechados: histórico do clipboard persistente com busca, explicar código/erro por atalho global, registro automático de insights no vault, lembretes contextuais (agenda, trajeto e por pedido) e vigia de rede com ação confirmada.
 

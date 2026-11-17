@@ -8,7 +8,7 @@ O `brain` recebe cada mensagem (digitada ou falada) e decide o destino: confirma
 |---|---|
 | `execute_command_stream(command, session_id, images=None, mode="chat", on_route=None)` | Pipeline da TUI (Chat e Copilot). Generator de texto |
 | `execute_command(command, session_id)` | Pipeline do modo voz standalone. Devolve a resposta inteira; todas as skills liberadas |
-| `confirm_pending_action(approved)` | Resolve `state.pending_critical_action`: chama `on_confirm()` da skill ou, sem ele, encerra `target` via `APP_CONTROL` |
+| `confirm_pending_action(approved, explicit_decline, pending_id)` | Retira a pendência por `core.pending.take` (com `pending_id` diferente: "foi substituída", nada executa) e chama `on_confirm()` da skill ou, sem ele, `APP_CONTROL.close_now(target)` |
 | `start_brain()` | Laço de voz sem interface (`python -m services.brain`) |
 
 ## Decisão

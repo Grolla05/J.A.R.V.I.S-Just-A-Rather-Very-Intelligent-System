@@ -220,6 +220,27 @@ class TestJarvisApp(unittest.IsolatedAsyncioTestCase):
                 return {k.key for k in app.screen.query("FooterKey")}
             await self._wait_for(pilot, lambda: {"s", "n"} <= keys())
 
+    async def test_confirm_screen_resolves_only_the_action_it_showed(self):
+        """GHSA-x47w: se a pendência é trocada com a pergunta na tela, o "s" não executa a nova."""
+        from unittest.mock import MagicMock
+
+        from core import pending
+        first, second = MagicMock(return_value="A feito"), MagicMock(return_value="B feito")
+        app = self._app()
+        async with app.run_test() as pilot:
+            pending.arm("A", "A?", first)
+            app._ask_pending_confirmation("A?")
+            await pilot.pause()
+            self.assertIsInstance(app.screen, tui_app.ConfirmScreen)
+            state.pending_critical_action = None          # A sai (ex.: venceu) e B toma o lugar
+            pending.arm("B", "B?", second)
+            await pilot.press("s")
+            await self._wait_for(pilot, lambda: not isinstance(app.screen, tui_app.ConfirmScreen))
+            await pilot.pause(0.3)
+            first.assert_not_called()
+            second.assert_not_called()
+            self.assertEqual(state.pending_critical_action["type"], "B")
+
     async def test_chat_reply_has_no_skill_badge(self):
         app = self._app()
         async with app.run_test() as pilot:

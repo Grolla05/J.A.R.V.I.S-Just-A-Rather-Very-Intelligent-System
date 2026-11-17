@@ -19,8 +19,7 @@ import time
 from collections import deque
 from datetime import datetime
 
-import core.state as state
-from core import netwatch
+from core import netwatch, pending, processes
 from core.database import db
 from core.logger import log
 from core.prompts import load_prompt
@@ -91,21 +90,15 @@ def judge(finding, query=None, clock=time.time):
 # --------------------------------------------------------------------- ações
 def kill_process(pid, name, created):
     """Encerra o processo se ainda for o mesmo (nome e hora de criação). Devolve a fala."""
-    try:
-        import psutil
-        proc = psutil.Process(pid)
-        if proc.name().lower() != name.lower() or abs(float(proc.create_time()) - float(created)) > 1.0:
-            return f"O processo {name} já não é o mesmo (PID {pid} foi reaproveitado). Não encerrei nada, Senhor."
-        proc.terminate()
-        try:
-            proc.wait(timeout=3)
-        except Exception:
-            proc.kill()
+    result = processes.terminate_if_same(pid, name, created)
+    if result == "ok":
         log.info(f"[REDE] Processo encerrado a pedido: {name} (PID {pid}).")
         return f"{name} encerrado, Senhor."
-    except Exception as e:
-        log.warning(f"[REDE] Não consegui encerrar {name} (PID {pid}): {e}")
-        return f"Não consegui encerrar {name}, Senhor: ele já fechou ou exige privilégio de administrador."
+    if result == "changed":
+        return f"O processo {name} já não é o mesmo (PID {pid} foi reaproveitado). Não encerrei nada, Senhor."
+    if result == "protected":
+        return f"{name} é um processo do sistema; não o encerro, Senhor."
+    return f"Não consegui encerrar {name}, Senhor: ele já fechou ou exige privilégio de administrador."
 
 
 def is_admin():
@@ -149,11 +142,6 @@ def block_ip(ip, admin=is_admin, run=subprocess.run):
 
 
 # ------------------------------------------------------------------ tratamento
-def _pending_active(clock=time.time):
-    pending = state.pending_critical_action
-    return bool(pending) and clock() <= pending.get("timeout", 0)
-
-
 def _announce(text):
     from core.alerts import _announce as announce
     announce(text)
@@ -171,7 +159,7 @@ def handle(finding, judge_fn=judge, announce=_announce, clock=time.time):
             trust(finding)
             log.info(f"[REDE] {finding['proc']} julgado seguro; incorporado à linha de base.")
             return True
-        if _pending_active(clock):
+        if pending.active(clock):
             return False  # já há uma confirmação aberta: este achado espera a vez
 
     _recent.appendleft({"time": datetime.now().strftime("%d/%m %H:%M"), "finding": finding})
@@ -183,12 +171,13 @@ def handle(finding, judge_fn=judge, announce=_announce, clock=time.time):
 
     if is_process:
         question = f"Alerta de rede: {finding['text']} Não reconheço esse processo. Deseja que eu o encerre?"
-        state.pending_critical_action = {
-            "type": "NET_KILL_PROCESS", "target": finding["proc"], "question": question,
-            "timeout": clock() + CONFIRM_TIMEOUT_S,
-            "on_confirm": lambda f=finding: kill_process(f["pid"], f["proc"], f["created"]),
-            "on_decline": lambda f=finding: _keep(f),
-        }
+        armed = pending.arm("NET_KILL_PROCESS", question,
+                            lambda f=finding: kill_process(f["pid"], f["proc"], f["created"]),
+                            target=finding["proc"], on_decline=lambda f=finding: _keep(f),
+                            timeout_s=CONFIRM_TIMEOUT_S, clock=clock)
+        if armed is None:
+            _recent.popleft()
+            return False  # outra confirmação abriu no meio do caminho: tenta na próxima rodada
         announce(question)
     else:
         hint = (" `/rede confiar 1` marca como conhecido." if finding["kind"] == netwatch.NEW_DEVICE

@@ -79,7 +79,7 @@ Nenhuma etapa trava a TUI. Depois do boot:
 2. `JarvisApp.send` cria as bolhas e dispara o worker de thread `_stream`.
 3. `db.log_interaction` grava a mensagem do usuário (com anexo, se houver `/attach`).
 4. `services/brain.execute_command_stream(texto, session_id, images, mode="chat", on_route=…)`:
-   - Se existe `state.pending_critical_action`, a mensagem é a resposta (sim/não) a ela.
+   - Se existe uma ação pendente (`core.pending.active()`), a mensagem é a resposta a ela: `parse_reply` só aprova frase de confirmação ("sim, pode encerrar"); negação recusa; qualquer outra frase descarta a pendência e segue como comando normal.
    - `classify_intent(texto, exclude_categories=("automation", "system"))` pede ao Ollama um JSON `{intent, entity, confidence}`. Resultado fica em cache (TTL 30 s, 64 entradas).
    - `MEMORY_WRITE` → `services/memory.extract_fact_to_memory` → nota nova no Obsidian.
    - Skill ligada e permitida no Chat (categorias `productivity` e `web`) → `on_route(intent)` (selo `[INTENT]` na bolha) → `skill.execute(entity, texto)`.
@@ -96,7 +96,7 @@ Nenhuma etapa trava a TUI. Depois do boot:
 
 ### 3.3 Ações críticas
 
-Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub) não executam direto: gravam `state.pending_critical_action` com `on_confirm` e um prazo. A TUI mostra a `ConfirmScreen` (topo vermelho, `s`/`n`, expira em 30 s = não); na voz, a próxima frase com "sim/pode/ok…" confirma. Quem resolve é `brain.confirm_pending_action`.
+Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub) não executam direto: armam `core.pending.arm(tipo, pergunta, on_confirm)` com um prazo — uma pendência por vez, com `id`, sem sobrescrever outra ainda válida. A TUI mostra a `ConfirmScreen` (topo vermelho, `s`/`n`, expira em 30 s = não) e confirma só o `id` que mostrou; na voz, só uma frase de confirmação ("sim", "pode encerrar") aprova. Quem resolve é `brain.confirm_pending_action`.
 
 ## 4. Módulos
 

@@ -6,10 +6,9 @@ import os
 import shutil
 import subprocess
 
-import requests
-
 from core import log
 from core.config import settings
+from core.llm import query_ollama
 from core.prompts import load_prompt
 
 # --- CONFIGURAÇÃO DA SKILL ---
@@ -32,22 +31,10 @@ ALIASES = {
 
 # --- FUNÇÃO LOCAL DE LLM ---
 def _ask_ollama_cleanup_expert(user_text):
-    url = f"http://{settings.OLLAMA_HOST}/api/generate"
-    payload = {
-        "model": settings.OLLAMA_MODEL,
-        "prompt": user_text,
-        "system": CLEANUP_DECISION_PROMPT,
-        "stream": False,
-        "format": "json",
-        "options": {"temperature": 0.1}
-    }
-    try:
-        response = requests.post(url, json=payload, timeout=5)
-        response.raise_for_status()
-        return response.json().get("response", "{}")
-    except Exception as e:
-        log.error(f"❌ [CLEANUP] Erro no cérebro: {e}")
-        return None
+    # core.llm normaliza OLLAMA_HOST e trata erro (devolve None).
+    return query_ollama([{"role": "system", "content": CLEANUP_DECISION_PROMPT},
+                         {"role": "user", "content": user_text}],
+                        format="json", temperature=0.1, timeout=settings.TIMEOUT_API)
 
 # --- HELPERS DE DESCOBERTA DE APPS (Baseado no app_control) ---
 def get_installed_apps():
@@ -57,8 +44,8 @@ def get_installed_apps():
     apps = {}
     # 1. PowerShell (Modern Apps) - Ótimo para pegar nomes oficiais
     try:
-        cmd = 'powershell -Command "Get-StartApps | Select-Object Name | ConvertTo-Json -Compress"'
-        result = subprocess.run(cmd, capture_output=True, text=True, shell=True)
+        cmd = ["powershell", "-NoProfile", "-Command", "Get-StartApps | Select-Object Name | ConvertTo-Json -Compress"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode == 0 and result.stdout.strip():
             raw = json.loads(result.stdout)
             data = raw if isinstance(raw, list) else [raw]
@@ -127,18 +114,19 @@ def uninstall_app(target_raw):
     # --accept-source-agreements evita bloqueio no primeiro uso
     log.info(f"🗑️ Tentando desinstalar: {real_name}")
     
-    cmd = f'winget uninstall --name "{real_name}" --source winget --accept-source-agreements'
-    
+    # Lista de argumentos (sem shell): aspas ou & no nome do app não viram comando.
+    cmd = ["winget", "uninstall", "--name", real_name, "--source", "winget", "--accept-source-agreements"]
+
     # Executa em subprocesso para capturar output
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, shell=True)
+        proc = subprocess.run(cmd, capture_output=True, text=True)
         
         if proc.returncode == 0:
             return f"Processo de desinstalação do {real_name} iniciado com sucesso."
         else:
             # Se falhar no winget (ex: app não é do winget), abrimos o painel antigo como fallback
             log.warning(f"Winget falhou: {proc.stderr}")
-            subprocess.Popen("appwiz.cpl", shell=True)
+            os.startfile("appwiz.cpl")
             return f"Não consegui remover o {real_name} automaticamente. Abri o painel de controle para você finalizar."
             
     except Exception as e:

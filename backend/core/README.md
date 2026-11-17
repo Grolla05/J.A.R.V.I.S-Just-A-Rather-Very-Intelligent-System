@@ -17,6 +17,8 @@ Importar `core` abre o banco, carrega as skills e prepara o cliente MCP. Por iss
 | `logger.py` | Arquivo diário em `logs/`, console colorido fora da TUI; com a TUI, WARNING+ vira notificação. `RingBufferHandler` alimenta o `/log` | `log.info/warning/error/critical`, `log.use_tui()` |
 | `database.py` | SQLite com `config`, `history`, `sessions`, `hardware` e migrações por `PRAGMA table_info` | `db.log_interaction`, `get_config/save_config`, `update_hardware_spec` |
 | `state.py` | Estado de runtime: `sys_monitor`, `pending_critical_action`, `voice_enabled`, `dnd_active`/`dnd_backlog`, `auto_quiet`, `presentation_active`, `announce` | `import core.state as state` |
+| `pending.py` | Ação crítica pendente (única porta de `state.pending_critical_action`): `arm` não sobrescreve pendência válida e dá `id`; `take(id)`; `parse_reply` (só frase de confirmação aprova) | `from core import pending` |
+| `processes.py` | `terminate_if_same(pid, nome, criado)` (confere o PID antes de encerrar) e `PROTECTED` (sistema e o próprio JARVIS nunca são encerrados) | `from core import processes` |
 | `prompts.py` | Carrega `backend/prompts/*.md` com cache e `string.Template` (`$variavel`) | `load_prompt("x.md", var=...)` |
 | `skill_loader.py` | Descobre skills em `skills/<categoria>/` e herda `CATEGORY` da pasta | `manager.skills` |
 | `utils.py` | Cache LRU com validade | `TTLCache` |

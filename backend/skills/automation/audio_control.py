@@ -2,12 +2,12 @@ import json
 import time
 from ctypes import POINTER, cast
 
-import requests  # Adicionado para fazer a requisição direta
 from comtypes import CLSCTX_ALL, CoInitialize, CoUninitialize
 from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 
 from core import log
 from core.config import settings  # Para pegar o IP e Modelo definidos no config
+from core.llm import query_ollama
 from core.prompts import load_prompt
 
 # --- CONFIGURAÇÃO PARA O ROTEADOR ---
@@ -24,26 +24,10 @@ def _ask_ollama_audio_expert(user_text):
     Função privada que conecta ao Ollama especificamente para esta skill.
     Isso isola a lógica de decisão dentro deste arquivo.
     """
-    url = f"http://{settings.OLLAMA_HOST}/api/generate"
-    
-    payload = {
-        "model": settings.OLLAMA_MODEL,
-        "prompt": user_text,
-        "system": AUDIO_DECISION_PROMPT,
-        "stream": False,
-        "format": "json", # Força resposta em JSON nativo do Ollama
-        "options": {
-            "temperature": 0.1, # Muito baixo para ser preciso/matemático
-        }
-    }
-
-    try:
-        response = requests.post(url, json=payload, timeout=5)
-        response.raise_for_status()
-        return response.json().get("response", "{}")
-    except Exception as e:
-        log.error(f"❌ [AUDIO SKILL] Erro ao consultar IA Local: {e}")
-        return None
+    # core.llm normaliza OLLAMA_HOST e trata erro (devolve None).
+    return query_ollama([{"role": "system", "content": AUDIO_DECISION_PROMPT},
+                         {"role": "user", "content": user_text}],
+                        format="json", temperature=0.1, timeout=settings.TIMEOUT_API)
 
 # --- HELPERS DE ÁUDIO (PYCAW) ---
 def get_audio_interface():
