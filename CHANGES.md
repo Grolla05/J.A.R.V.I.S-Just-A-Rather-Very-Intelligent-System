@@ -76,6 +76,15 @@ A TUI rodou de verdade (Ollama, Google Agenda, GitHub, DuckDuckGo, Nominatim/OSR
 
 **Testes novos:** `test_clipboard.py::TestRead`, `test_reminders.py` (cache sem falha, tempo relativo, ordem de sair, número inventado), `test_insights.py` (título do modelo, prefixo), `test_net_guard.py` (IP estranho), `test_web.py` (nova tentativa).
 
+### 7. Versão (`VERSION`)
+
+| # | Mudança | Arquivos |
+|---|---|---|
+| 1 | **O `VERSION` estava parado em `1.0.0`** enquanto os Releases iam até v1.0.5: a versão calculada pelo CI só existia na tag e no instalador. Agora, depois de publicar o Release, o CI grava a versão no `VERSION` da `main` e da `DEV` pela API do GitHub (commit do `github-actions[bot]`, `[skip ci]`; falha aqui só gera aviso, não desfaz o Release) | `.github/workflows/release.yml` |
+| 2 | **Este PR sai como v1.1.0** (5 features novas = minor). Regra: o patch continua subindo sozinho pela última tag; para subir minor/major, edite o `VERSION` para `X.Y.0` no PR | `VERSION`, `AGENTS.md` |
+
+Depois de cada release, dê `git pull` na `DEV` antes do próximo push (o commit do bot entra lá).
+
 **Fora do código:** `posts_linkedin_JARVIS/` (no `.gitignore`) guarda os 7 posts de 08/11 a 16/11 com 25 screenshots reais da TUI.
 
 **Pendente (manual):** apertar `Ctrl+Alt+E` com o agente rodando e receber o aviso de um evento de verdade do Google Agenda.

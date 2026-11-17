@@ -124,7 +124,7 @@ J.A.R.V.I.S/
 ├── docs/                    ← arquitetura.md (ponta a ponta, módulo a módulo) e integracoes-oauth.md
 ├── .github/workflows/       ← main.yml (CI: ruff + compileall em PR/push na main e DEV) e release.yml (push na main → testes → setup → Release vX.Y.Z só com JARVIS-Setup.exe)
 ├── env.example              ← Modelo do .env com todas as variáveis comentadas
-└── VERSION                  ← major.minor (patch sobe sozinho pela última tag)
+└── VERSION                  ← versão publicada: o release calcula o patch pela última tag e o CI grava de volta na main e na DEV (dê `git pull` na DEV depois de cada release). Subir minor/major = editar para X.Y.0 no PR
 ```
 
 ### Modo instalado (`JARVIS_DATA_DIR`)

@@ -3,7 +3,10 @@ name: Release
 # Cada merge na main (push na main) gera um Release novo com um único asset:
 # dist/JARVIS-Setup.exe, o instalador completo (Python embutido + todas as
 # libs + código). Versão: VERSION define major.minor; o patch sobe sozinho a
-# partir da última tag vX.Y.* (sem tag ainda, usa o patch do VERSION).
+# partir da última tag vX.Y.* (sem tag ainda, usa o patch do VERSION). Depois
+# do Release, o CI grava a versão publicada de volta no VERSION da main e da
+# DEV (commit do github-actions[bot]). Para subir o minor/major, edite o
+# VERSION para X.Y.0 no PR: o release sai exatamente com essa versão.
 on:
   push:
     branches: [main]
@@ -107,3 +110,29 @@ jobs:
           make_latest: true
           files: dist/JARVIS-Setup.exe
           fail_on_unmatched_files: true
+
+      # Sem isto o VERSION do repositório ficava parado (ex.: 1.0.0 com o v1.0.5
+      # publicado): a versão só existia na tag e no instalador. Grava pela API
+      # (sem checkout, a pasta do build não muda). Commit feito com o
+      # GITHUB_TOKEN não dispara outro workflow, então não há release em loop.
+      # Falhar aqui não desfaz o Release: só fica o aviso no log.
+      - name: Gravar a versão publicada no VERSION (main e DEV)
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSAO: ${{ steps.versao.outputs.versao }}
+        run: |
+          $repo = "${{ github.repository }}"
+          $conteudo = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($env:VERSAO))
+          foreach ($branch in 'main', 'DEV') {
+            $atual = gh api "repos/$repo/contents/VERSION?ref=$branch" | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0) { Write-Warning "VERSION não lido na $branch"; continue }
+            $texto = [Text.Encoding]::ASCII.GetString([Convert]::FromBase64String($atual.content)).Trim()
+            if ($texto -eq $env:VERSAO) { Write-Host "$branch já está em $env:VERSAO"; continue }
+            gh api -X PUT "repos/$repo/contents/VERSION" `
+              -f message="chore(release): VERSION $env:VERSAO [skip ci]" `
+              -f content="$conteudo" -f sha="$($atual.sha)" -f branch="$branch" | Out-Null
+            if ($LASTEXITCODE -ne 0) { Write-Warning "Não consegui gravar o VERSION na $branch" }
+            else { Write-Host "VERSION da $branch: $texto -> $env:VERSAO" }
+          }
