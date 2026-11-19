@@ -18,7 +18,7 @@ class DatabaseManager:
         """Cria uma conexão robusta com o banco de dados.
 
         WAL + busy_timeout eliminam o 'database is locked' sob múltiplas threads
-        (telemetria + brain + bridge). check_same_thread=False libera o acesso
+        (telemetria + TUI + workers). check_same_thread=False libera o acesso
         multi-thread (cada chamada abre/fecha sua própria conexão).
         """
         try:
@@ -35,7 +35,7 @@ class DatabaseManager:
         """Context manager: garante commit/rollback/close sem try/finally manual.
 
         Uso: `with db.connection() as conn:` → commita ao sair; faz rollback e
-        propaga em caso de erro SQL; sempre fecha (evita travar o loop PyWebView).
+        propaga em caso de erro SQL; sempre fecha (evita conexões presas entre threads).
         """
         conn = self._get_connection()
         try:
@@ -141,6 +141,14 @@ class DatabaseManager:
                     cursor.execute("ALTER TABLE history ADD COLUMN mode TEXT")
                     log.info("Migração de banco executada: coluna 'mode' adicionada à tabela history.")
 
+                # Tipo do valor de config: 0 = texto cru, 1 = JSON. NULL = linha antiga
+                # (get_config mantém o comportamento legado de tentar json.loads).
+                cursor.execute("PRAGMA table_info(config)")
+                config_cols = [col[1] for col in cursor.fetchall()]
+                if "is_json" not in config_cols:
+                    cursor.execute("ALTER TABLE config ADD COLUMN is_json INTEGER")
+                    log.info("Migração de banco executada: coluna 'is_json' adicionada à tabela config.")
+
                 # Cria índice na coluna session_id para consultas super rápidas (agora que a coluna 100% existe)
                 cursor.execute('CREATE INDEX IF NOT EXISTS idx_history_session ON history(session_id)')
 
@@ -189,18 +197,26 @@ class DatabaseManager:
 
     # --- MÉTODOS DE CONFIG (Estado da aplicação: skills, preferências de UI) ---
     def save_config(self, key: str, value: Any):
-        if not isinstance(value, str):
-            value = json.dumps(value)
+        """Grava `value`. String vai crua (volta igual); o resto vai em JSON.
+
+        O tipo fica em `is_json`, para "123", "true" ou "null" salvos como texto
+        voltarem como texto em `get_config`.
+        """
+        if isinstance(value, str):
+            stored, is_json = value, 0
+        else:
+            stored, is_json = json.dumps(value, ensure_ascii=False), 1
 
         try:
             with self.connection() as conn:
                 conn.execute('''
-                    INSERT INTO config (key, value, updated_at)
-                    VALUES (?, ?, CURRENT_TIMESTAMP)
+                    INSERT INTO config (key, value, is_json, updated_at)
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
                     ON CONFLICT(key) DO UPDATE SET
                         value=excluded.value,
+                        is_json=excluded.is_json,
                         updated_at=CURRENT_TIMESTAMP
-                ''', (key, value))
+                ''', (key, stored, is_json))
             log.debug(f"Config persistida: [{key}]")
         except sqlite3.Error as e:
             log.error(f"Falha ao salvar config '{key}': {e}")
@@ -208,17 +224,23 @@ class DatabaseManager:
     def get_config(self, key: str) -> Optional[Any]:
         try:
             with self.connection() as conn:
-                result = conn.execute('SELECT value FROM config WHERE key = ?', (key,)).fetchone()
-            if result:
-                data = result[0]
-                try:
-                    return json.loads(data)
-                except Exception:
-                    return data
-            return None
+                result = conn.execute(
+                    'SELECT value, is_json FROM config WHERE key = ?', (key,)
+                ).fetchone()
         except sqlite3.Error as e:
             log.error(f"Erro ao ler config '{key}': {e}")
             return None
+        if not result:
+            return None
+        data, is_json = result
+        if is_json == 0:
+            return data
+        try:
+            return json.loads(data)
+        except (TypeError, ValueError):
+            if is_json == 1:
+                log.warning(f"Config '{key}' marcada como JSON, mas inválida; devolvendo texto.")
+            return data  # linha antiga (is_json NULL) com texto que não é JSON
 
     # --- MÉTODOS DE HISTÓRICO ---
     def log_interaction(self, role: str, content: str, session_id: str = 'default',

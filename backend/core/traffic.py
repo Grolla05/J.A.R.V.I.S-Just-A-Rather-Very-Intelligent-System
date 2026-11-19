@@ -131,11 +131,11 @@ def set_place(kind, address, geocoder=None):
     if not place:
         return f"Não encontrei \"{address}\" no mapa. Tente rua, número e cidade."
     db = _db()
-    db.save_config(_key(tag), json.dumps(place, ensure_ascii=False))
+    db.save_config(_key(tag), place)
     tags = _index()
     if tag not in tags:
         tags.append(tag)
-    db.save_config(INDEX_KEY, json.dumps([t for t in tags if t not in PLACES], ensure_ascii=False))
+    db.save_config(INDEX_KEY, [t for t in tags if t not in PLACES])
     return f"Endereço de {label} salvo: {place['label']}."
 
 
@@ -154,7 +154,7 @@ def clear_places():
     db = _db()
     for tag in _index():
         db.save_config(_key(tag), "")
-    db.save_config(INDEX_KEY, "[]")
+    db.save_config(INDEX_KEY, [])
 
 
 def has_places():
