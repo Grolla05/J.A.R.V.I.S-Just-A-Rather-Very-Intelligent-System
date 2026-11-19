@@ -1,5 +1,5 @@
 """Stubs de dependências pesadas/não instaladas para permitir importar o pacote
-`core` em ambiente de teste sem hardware (mic/GPU/WMI) nem servidor MCP.
+`core` em ambiente de teste sem hardware (mic/GPU/WMI).
 
 Chame `install()` ANTES de qualquer `import core` ou `from core...`.
 """
@@ -9,9 +9,6 @@ from unittest.mock import MagicMock
 # Roots não instalados no venv — substituídos por mocks para permitir importar
 # o pacote `core` (e a cadeia obsidian/SystemInfo) sem hardware/rede.
 _STUB_MODULES = (
-    "mcp",
-    "mcp.client",
-    "mcp.client.stdio",
     "GPUtil",
     "wmi",
     "requests",   # core.obsidian

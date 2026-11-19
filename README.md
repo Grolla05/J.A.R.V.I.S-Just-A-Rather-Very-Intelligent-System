@@ -26,7 +26,7 @@ Cada usuário cria as **próprias chaves** (apps grátis no Google Cloud e no Sp
 
 ## Rodar a partir do código
 
-Pré-requisitos: Windows, Python 3.11+, [Ollama](https://ollama.com) com um modelo (`ollama pull llama3.2`) e, para a memória de longo prazo, o Obsidian com o plugin **Local REST API** e o [uv](https://docs.astral.sh/uv/) (`uvx mcp-obsidian`).
+Pré-requisitos: Windows, Python 3.11+, [Ollama](https://ollama.com) com um modelo (`ollama pull llama3.2`) e, para a memória de longo prazo, o Obsidian com o plugin **Local REST API**.
 
 ```bash
 cd backend

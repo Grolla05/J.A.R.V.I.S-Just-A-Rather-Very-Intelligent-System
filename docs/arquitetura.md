@@ -160,7 +160,7 @@ Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub
 | `health.py` | Saúde de Ollama, Obsidian, microfone e SQLite |
 | `hardware.py` | Scan WMI via PowerShell → tabela `hardware` |
 | `boot.py` | Etapas da tela de boot |
-| `obsidian.py` | REST do Obsidian + cliente MCP (`uvx mcp-obsidian`); RAG em 2 camadas |
+| `obsidian.py` | REST do Obsidian (plugin Local REST API); RAG em 2 camadas |
 | `briefing.py` | Briefing diário em seções fixas (veja §5.1) |
 | `news.py` | Manchetes do briefing: uma por fonte, a mais relevante (RSS ou busca) |
 | `weather.py` | Clima (Open-Meteo + geolocalização por IP) e saudação por horário |
@@ -276,7 +276,7 @@ Em dev tudo fica em `backend/`. Instalado, `JARVIS_DATA_DIR=%APPDATA%\JARVIS` co
 
 ## 8. Agente residente e instalação
 
-- **Agente (`backend/agent.py`)**: sobe no logon (`HKCU\…\Run`, `--logon`), segura os atalhos globais, oferece a bandeja ("Abrir J.A.R.V.I.S", "Iniciar com o Windows", "Sair do agente") e conversa com a TUI só por `core/presence.py`. Carrega um pacote `core` vazio para não iniciar banco, MCP e skills.
+- **Agente (`backend/agent.py`)**: sobe no logon (`HKCU\…\Run`, `--logon`), segura os atalhos globais, oferece a bandeja ("Abrir J.A.R.V.I.S", "Iniciar com o Windows", "Sair do agente") e conversa com a TUI só por `core/presence.py`. Carrega um pacote `core` vazio para não iniciar banco e skills.
 - **Atualização (`core/updater.py`)**: a TUI e o agente comparam o último Release do GitHub com o `VERSION`. Com versão nova, a TUI mostra a tela de atualização; qualquer tecla pede ao agente baixar o `JARVIS-Setup.exe`, conferir o SHA-256 e instalar em silêncio. Dev (sem `JARVIS_DATA_DIR`) nunca atualiza.
 - **Instalador (`installer/`)**: `build_runtime.ps1` monta Python 3.11 + libs; `jarvis.iss` (Inno Setup 6) exige o Ollama, deixa escolher o modelo e faz `ollama pull`. O workflow `release.yml` publica um Release a cada push na `main`.
 

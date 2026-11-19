@@ -1,5 +1,3 @@
-import asyncio
-import json
 import urllib.parse
 from typing import Optional
 
@@ -27,17 +25,21 @@ class ObsidianClient:
             "Content-Type": "text/markdown"
         }
 
-    def _req(self, method, path, **kwargs):
+    def _send(self, method, path, **kwargs):
+        """Request cru: None em 404 (nota não existe); levanta se o Obsidian estiver fora."""
         headers = kwargs.pop("headers", self.headers)
+        r = requests.request(method, f"{self.base}{path}",
+                             headers=headers, timeout=5, **kwargs)
+        if r.status_code == 404:
+            return None  # Nota não existe — comportamento normal
+        r.raise_for_status()
+        return r
+
+    def _req(self, method, path, quiet=False, **kwargs):
         try:
-            r = requests.request(method, f"{self.base}{path}",
-                                 headers=headers, timeout=5, **kwargs)
-            if r.status_code == 404:
-                return None  # Nota não existe — comportamento normal
-            r.raise_for_status()
-            return r
+            return self._send(method, path, **kwargs)
         except requests.RequestException as e:
-            log.warning(f"Obsidian inacessível: {e}")
+            (log.debug if quiet else log.warning)(f"Obsidian inacessível: {e}")
             return None
 
     def search(self, query: str, limit: int = 5) -> str:
@@ -56,16 +58,25 @@ class ObsidianClient:
                     parts.append(f"[{fname}]: {ctx}")
         return "\n".join(parts)
 
-    def search_results(self, query: str, limit: int = 8) -> list:
-        """Busca estruturada p/ a tela /vault: [{'filename', 'score'}], maior score primeiro."""
+    def search_scored(self, query: str, limit: int = 8) -> list:
+        """[{'filename', 'score'}], maior score primeiro. Levanta se o Obsidian
+        estiver fora (quem chama decide se avisa); [] = nenhum resultado."""
         encoded = urllib.parse.quote(query, safe="", encoding="utf-8")
-        r = self._req("GET", f"/search/simple/?query={encoded}&contextLength=80")
+        r = self._send("GET", f"/search/simple/?query={encoded}&contextLength=80")
         if not r:
             return []
         items = [{"filename": i.get("filename", ""), "score": float(i.get("score", 0) or 0)}
                  for i in r.json() if i.get("filename")]
         items.sort(key=lambda i: i["score"], reverse=True)
         return items[:limit]
+
+    def search_results(self, query: str, limit: int = 8) -> list:
+        """Busca estruturada p/ a tela /vault: [{'filename', 'score'}], maior score primeiro."""
+        try:
+            return self.search_scored(query, limit)
+        except (requests.RequestException, ValueError) as e:
+            log.warning(f"Obsidian inacessível: {e}")
+            return []
 
     def list_dir(self, path: str = "") -> Optional[list]:
         """Itens de uma pasta do vault (pastas terminam com '/'). None se inacessível."""
@@ -80,10 +91,10 @@ class ObsidianClient:
         except ValueError:
             return None
 
-    def get_file(self, path: str) -> Optional[str]:
-        """Lê conteúdo de uma nota pelo caminho."""
+    def get_file(self, path: str, quiet: bool = False) -> Optional[str]:
+        """Lê conteúdo de uma nota pelo caminho. quiet=True: Obsidian fora só vai ao log."""
         encoded = urllib.parse.quote(path, safe="", encoding="utf-8")
-        r = self._req("GET", f"/vault/{encoded}")
+        r = self._req("GET", f"/vault/{encoded}", quiet=quiet)
         return r.text if r else None
 
     def get_memory(self, key: str) -> Optional[str]:
@@ -143,107 +154,6 @@ class ObsidianClient:
 
 
 obsidian = ObsidianClient()
-
-
-_HTTP_PORT, _HTTPS_PORT = "27123", "27124"  # portas padrão do plugin Local REST API
-
-
-def mcp_endpoint(raw_host):
-    """OBSIDIAN_HOST → (protocolo, host, porta) para o servidor mcp-obsidian.
-
-    O mcp-obsidian assume HTTPS quando OBSIDIAN_PROTOCOL não é passado. A porta
-    27123 do plugin é HTTP puro: falar HTTPS com ela dá SSL WRONG_VERSION_NUMBER
-    e toda busca volta como texto de erro. O protocolo vem do esquema da URL; sem
-    esquema, a porta decide (27124 = HTTPS, o resto = HTTP).
-    """
-    raw = (raw_host or "").strip().rstrip("/")
-    scheme, sep, rest = raw.partition("://")
-    if not sep:
-        scheme, rest = "", raw
-    host, _, port = rest.partition(":")
-    host = host or "127.0.0.1"
-    scheme = scheme.lower()
-    if scheme not in ("http", "https"):
-        scheme = "https" if port == _HTTPS_PORT else "http"
-    port = port or (_HTTPS_PORT if scheme == "https" else _HTTP_PORT)
-    return scheme, host, port
-
-
-class ObsidianMCPClient:
-    """Acesso completo ao vault via MCP usando stdio e uvx."""
-
-    def __init__(self):
-        self._tools_cache = None
-        import os
-
-        from mcp.client.stdio import StdioServerParameters
-        
-        env = os.environ.copy()
-        env["OBSIDIAN_API_KEY"] = settings.OBSIDIAN_API_KEY
-        
-        protocol, host, port = mcp_endpoint(settings.OBSIDIAN_HOST)
-        env["OBSIDIAN_PROTOCOL"] = protocol
-        env["OBSIDIAN_HOST"] = host
-        env["OBSIDIAN_PORT"] = port
-
-        self._server_params = StdioServerParameters(
-            command="uvx",
-            args=["mcp-obsidian"],
-            env=env
-        )
-
-    def _run(self, coro):
-        try:
-            return asyncio.run(coro)
-        except RuntimeError:
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                return pool.submit(asyncio.run, coro).result()
-
-    async def _list_tools(self) -> list:
-        from mcp import ClientSession
-        from mcp.client.stdio import stdio_client
-        async with stdio_client(self._server_params) as (r, w):
-            async with ClientSession(r, w) as session:
-                await session.initialize()
-                result = await session.list_tools()
-                return result.tools
-
-    async def _call_tool(self, name: str, args: dict) -> str:
-        from mcp import ClientSession
-        from mcp.client.stdio import stdio_client
-        async with stdio_client(self._server_params) as (r, w):
-            async with ClientSession(r, w) as session:
-                await session.initialize()
-                result = await session.call_tool(name, args)
-                return "\n".join(
-                    c.text for c in result.content if hasattr(c, "text") and c.text
-                )
-
-    @property
-    def tools(self) -> list:
-        if self._tools_cache is None:
-            try:
-                self._tools_cache = self._run(self._list_tools())
-                log.info(f"Obsidian MCP: {len(self._tools_cache)} ferramentas disponíveis.")
-            except Exception as e:
-                log.warning(f"Obsidian MCP: falha ao listar tools: {e}")
-                self._tools_cache = []
-        return self._tools_cache
-
-    @property
-    def tools_schema(self) -> str:
-        return "\n".join(f"- {t.name}: {t.description}" for t in self.tools)
-
-    def call(self, name: str, **kwargs) -> str:
-        try:
-            return self._run(self._call_tool(name, kwargs)) or ""
-        except Exception as e:
-            log.warning(f"Obsidian MCP call '{name}': {e}")
-            return ""
-
-
-mcp_client = ObsidianMCPClient()
 
 
 # --- VAULT CONTEXT LOOKUP ---
@@ -339,11 +249,19 @@ def extract_relevant_section(content: str, query: str) -> str:
 _search_warned = False
 
 
+def _warn_vault_down(error):
+    """Obsidian fora: avisa uma vez por sessão (WARNING vira notificação na TUI)."""
+    global _search_warned
+    (log.debug if _search_warned else log.warning)(f"⚠️ [VAULT] Busca indisponível: {str(error)[:160]}")
+    _search_warned = True
+
+
 def get_vault_context(command: str) -> tuple[str, str]:
     """
     Retorna (filename, content) do arquivo mais relevante no vault.
     Camada 1: keywords pessoais → lê Sobre mim.md diretamente.
-    Camada 2: busca semântica → arquivo com maior score.
+    Camada 2: busca no vault → arquivo com maior score.
+    Tudo pela API REST do plugin Local REST API (sem subprocesso por chamada).
     Retorna ("", "") se vault inacessível ou sem resultado.
     """
     cmd_lower = command.lower()
@@ -351,50 +269,36 @@ def get_vault_context(command: str) -> tuple[str, str]:
     # Camada 1: pergunta pessoal/identidade → perfil completo
     if any(kw in cmd_lower for kw in _PROFILE_KEYWORDS):
         log.info("🔍 [VAULT] Camada 1 — acesso direto ao perfil pessoal")
-        content = mcp_client.call("obsidian_get_file_contents", filepath=_PROFILE_FILE)
+        content = obsidian.get_file(_PROFILE_FILE, quiet=True)
         if content:
             log.info(f"✅ [VAULT] Lendo: {_PROFILE_FILE}")
             extracted = extract_relevant_section(content, command)
             return (_PROFILE_FILE, extracted)
-        log.warning("⚠️ [VAULT] Perfil não encontrado — descendo para Camada 2")
+        log.info("[VAULT] Perfil não encontrado — descendo para Camada 2")
 
-    # Camada 2: busca semântica no vault
+    # Camada 2: busca no vault
     words = cmd_lower.split()
     keywords = [w for w in words if w not in _STOPWORDS and len(w) > 3]
     search_query = " ".join(keywords[:4]) or command
 
     log.info(f"🔍 [VAULT] Camada 2 — buscando: '{search_query}'")
-    search_result_str = mcp_client.call("obsidian_simple_search", query=search_query)
+    try:
+        results = obsidian.search_scored(search_query)
+    except Exception as e:  # Obsidian fechado, porta/chave errada, resposta inválida
+        _warn_vault_down(e)
+        return ("", "")
 
-    if search_result_str:
-        try:
-            results = json.loads(search_result_str)
-        except ValueError:
-            # O mcp-obsidian devolve o erro como texto (ex.: Obsidian fechado, porta errada)
-            msg = f"⚠️ [VAULT] Busca indisponível: {search_result_str[:160]}"
-            # Avisa uma vez por sessão (WARNING vira notificação na TUI); depois só no arquivo
-            (log.debug if _search_warned else log.warning)(msg)
-            globals()["_search_warned"] = True
-            return ("", "")
-        try:
-            if results and isinstance(results, list):
-                valid = [r for r in results if not r.get("filename", "").startswith("_templates")]
-                if not valid:
-                    valid = results
-
-                best = max(valid, key=lambda r: r.get("score", -9999))
-                best_file = best.get("filename", "")
-
-                if best_file:
-                    log.info(f"[VAULT] Melhor resultado (score={best.get('score', '?')}): {best_file}")
-                    content = mcp_client.call("obsidian_get_file_contents", filepath=best_file)
-                    if content:
-                        extracted = extract_relevant_section(content, command)
-                        log.info(f"✅ [VAULT] Contexto injetado ({len(extracted)} chars) de: {best_file}")
-                        return (best_file, extracted)
-                    log.warning(f"⚠️ [VAULT] '{best_file}' retornou conteúdo vazio.")
-        except Exception as e:
-            log.error(f"❌ [VAULT] Erro ao processar resultado: {e}")
+    valid = [r for r in results if not r["filename"].startswith("_templates")] or results
+    if valid:
+        best = valid[0]  # search_scored já ordena pelo score
+        best_file = best["filename"]
+        log.info(f"[VAULT] Melhor resultado (score={best['score']}): {best_file}")
+        content = obsidian.get_file(best_file, quiet=True)
+        if content:
+            extracted = extract_relevant_section(content, command)
+            log.info(f"✅ [VAULT] Contexto injetado ({len(extracted)} chars) de: {best_file}")
+            return (best_file, extracted)
+        log.warning(f"⚠️ [VAULT] '{best_file}' retornou conteúdo vazio.")
 
     log.info("🔍 [VAULT] Nenhum arquivo relevante encontrado.")
     return ("", "")
