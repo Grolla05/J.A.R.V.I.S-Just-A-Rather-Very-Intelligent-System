@@ -1,7 +1,6 @@
 import json
 
 from core.config import settings
-from core.database import db
 from core.llm import query_ollama
 from core.logger import log
 from core.prompts import load_prompt
@@ -26,11 +25,16 @@ def skill_allowed_in_chat(intent):
     return intent in manager.skills and skill_category(intent) not in CHAT_BLOCKED_CATEGORIES
 
 
-def is_skill_enabled(intent):
-    """Verifica de forma robusta se a skill e sua respectiva categoria estão ativas no SQLite."""
+def _disabled_sets():
+    from services import skill_settings  # tardio: skill_settings não importa intent, mas evita ciclo no boot
+    return skill_settings.disabled_sets()
+
+
+def is_skill_enabled(intent, disabled=None):
+    """A skill e a categoria dela estão ativas? `disabled` = (skills, categorias)
+    já lidas — o classificador lê uma vez e reaproveita para todas as skills."""
     try:
-        disabled_skills = db.get_config("disabled_skills") or []
-        disabled_categories = db.get_config("disabled_categories") or []
+        disabled_skills, disabled_categories = disabled if disabled is not None else _disabled_sets()
 
         if intent in disabled_skills:
             return False
@@ -47,8 +51,15 @@ def is_skill_enabled(intent):
         return True
 
 
-def _offered(intent, exclude_categories):
-    return is_skill_enabled(intent) and skill_category(intent) not in exclude_categories
+def _offered_skills(exclude_categories):
+    """Skills ativas fora das categorias excluídas (uma leitura do SQLite no máximo)."""
+    try:
+        disabled = _disabled_sets()
+    except Exception as e:
+        log.error(f"Erro ao ler skills desligadas: {e}")
+        disabled = (frozenset(), frozenset())
+    return [intent for intent in manager.skills
+            if is_skill_enabled(intent, disabled) and skill_category(intent) not in exclude_categories]
 
 
 def classify_intent(text, skip_skills=False, exclude_categories=()):
@@ -62,9 +73,7 @@ def classify_intent(text, skip_skills=False, exclude_categories=()):
         log.debug(f"⚡ [INTENÇÃO CACHE HIT]: {cached.get('intent')}")
         return dict(cached)  # cópia: chamador nunca muta a entrada cacheada
 
-    active_skills = [] if skip_skills else [
-        intent for intent in manager.skills.keys() if _offered(intent, exclude_categories)
-    ]
+    active_skills = [] if skip_skills else _offered_skills(exclude_categories)
     valid_intents = ["HARDWARE", "MEMORY_READ", "MEMORY_WRITE", "CHAT"] + active_skills
 
     options_str = " | ".join([f'"{opt}"' for opt in valid_intents])
@@ -76,10 +85,9 @@ def classify_intent(text, skip_skills=False, exclude_categories=()):
         "confidence": float (0.0 a 1.0)
     }}
     """
-    active_prompts = [] if skip_skills else [
-        getattr(mod, "PROMPT_TEXT", "")
-        for intent, mod in manager.skills.items()
-        if _offered(intent, exclude_categories) and hasattr(mod, "PROMPT_TEXT")
+    active_prompts = [
+        manager.skills[intent].PROMPT_TEXT
+        for intent in active_skills if hasattr(manager.skills[intent], "PROMPT_TEXT")
     ]
     skills_prompts = "\n    ".join(active_prompts)
     prompt = load_prompt(
