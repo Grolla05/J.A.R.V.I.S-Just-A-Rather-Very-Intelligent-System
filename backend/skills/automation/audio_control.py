@@ -14,6 +14,8 @@ from core.prompts import load_prompt
 INTENT = "AUDIO_CONTROL"
 
 PROMPT_TEXT = load_prompt("skills/audio_control.md")
+# Pré-filtro do classificador (sem acento; `*` = prefixo). Ver skills/README.md
+KEYWORDS = ("volume", "som", "mut*", "desmut*", "aument*", "diminu*", "abaix*", "alto", "baixo")
 
 # --- CÉREBRO ESPECÍFICO DA SKILL (ATUALIZADO) ---
 AUDIO_DECISION_PROMPT = load_prompt("skills/audio_decision.md")

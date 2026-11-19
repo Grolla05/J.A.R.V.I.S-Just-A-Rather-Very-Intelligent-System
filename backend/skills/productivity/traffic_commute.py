@@ -14,6 +14,8 @@ from core.prompts import load_prompt
 
 INTENT = "TRAFFIC"
 PROMPT_TEXT = load_prompt("skills/traffic.md")
+# Pré-filtro do classificador (sem acento; `*` = prefixo). Ver skills/README.md
+KEYWORDS = ("transito", "trajeto", "deslocamento", "sair agora", "demor*", "cheg*", "casa", "trabalho", "faculdade", "escola", "academia", "quanto tempo", "rota*")
 
 _FROM_RE = re.compile(r"\b(de|da|do|desde|saindo d[aeo])\s*$")
 _TO_RE = re.compile(r"\b(pra|para|ate|ao|a|pro|na|no|em)\s*(a|o)?\s*$")

@@ -25,6 +25,8 @@ from core.spotify import (
 # --- CONFIGURAÇÃO DA SKILL ---
 INTENT = "SPOTIFY_CONTROL"
 PROMPT_TEXT = load_prompt("skills/spotify_control.md")
+# Pré-filtro do classificador (sem acento; `*` = prefixo). Ver skills/README.md
+KEYWORDS = ("spotify", "music*", "toc*", "toque", "coloca*", "playlist*", "paus*", "para a", "retom*", "continu*", "pul*", "proxima", "anterior", "volta*", "fila", "artista*", "album*")
 
 # --- CÉREBRO ESPECÍFICO DA SKILL (CURADOR MUSICAL) ---
 SPOTIFY_DECISION_PROMPT = load_prompt("skills/spotify_decision.md")

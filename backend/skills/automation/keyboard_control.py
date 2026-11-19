@@ -14,6 +14,8 @@ _state = {"pending_keyboard_action": None}
 # --- CONFIGURAÇÃO DA SKILL ---
 INTENT = "KEYBOARD_CONTROL"
 PROMPT_TEXT = load_prompt("skills/keyboard_control.md")
+# Pré-filtro do classificador (sem acento; `*` = prefixo). Ver skills/README.md
+KEYWORDS = ("copi*", "cola", "colar", "cole", "salv*", "atalho*", "tecla*", "alt tab", "print*", "janela*", "desfaz*", "ctrl")
 
 # --- CÉREBRO ESPECÍFICO (KEYBOARD EXPERT) ---
 KEYBOARD_EXPERT_PROMPT = load_prompt("skills/keyboard_expert.md")

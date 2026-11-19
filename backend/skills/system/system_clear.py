@@ -14,6 +14,8 @@ from core.prompts import load_prompt
 # --- CONFIGURAÇÃO DA SKILL ---
 INTENT = "SYSTEM_CLEANUP"
 PROMPT_TEXT = load_prompt("skills/system_clear.md")
+# Pré-filtro do classificador (sem acento; `*` = prefixo). Ver skills/README.md
+KEYWORDS = ("desinstal*", "remov*", "limp*", "lixeira", "lixo", "temporari*")
 
 # --- CÉREBRO ESPECÍFICO DA SKILL (CLEANUP EXPERT) ---
 CLEANUP_DECISION_PROMPT = load_prompt("skills/system_clear_decision.md")

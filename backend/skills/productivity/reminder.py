@@ -10,6 +10,8 @@ from core.prompts import load_prompt
 
 INTENT = "REMINDER"
 PROMPT_TEXT = load_prompt("skills/reminder.md")
+# Pré-filtro do classificador (sem acento; `*` = prefixo). Ver skills/README.md
+KEYWORDS = ("lembr*", "avis*")
 
 _LIST_RE = re.compile(r"\b(quais|que|meus|lista|listar|mostra|mostrar|tenho|ver)\b.*\blembretes?\b", re.I)
 _REMOVE_RE = re.compile(r"\b(cancel[ae]r?|remov[ae]r?|apag[ae]r?|exclu[ia]r?|delet[ae]r?)\b.*?\blembretes?\b\D*(\d+)?", re.I)

@@ -27,6 +27,8 @@ except Exception:
 # --- CONFIGURAÇÃO DA SKILL ---
 INTENT = "SCREEN_CONTROL"
 PROMPT_TEXT = load_prompt("skills/screen_control.md")
+# Pré-filtro do classificador (sem acento; `*` = prefixo). Ver skills/README.md
+KEYWORDS = ("brilho", "monitor*", "tela*", "janela*", "mov*", "retina", "luz azul")
 
 # --- ESTRUTURAS DO WINDOWS API (Ctypes) ---
 user32 = ctypes.windll.user32

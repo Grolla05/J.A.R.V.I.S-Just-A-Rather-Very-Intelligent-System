@@ -4,6 +4,8 @@ from services import presentation
 
 INTENT = "PRESENTATION_MODE"
 PROMPT_TEXT = load_prompt("skills/presentation_mode.md")
+# Pré-filtro do classificador (sem acento; `*` = prefixo). Ver skills/README.md
+KEYWORDS = ("apresent*", "silencio total", "quiet*", "voltar a falar")
 
 _OFF_WORDS = ("desliga", "desativa", "sai do", "saia do", "encerra", "termina", "acabou", "pode voltar",
               "pode falar", "fim da apresenta", "volta a falar", "volte a falar")

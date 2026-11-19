@@ -6,6 +6,8 @@ from core.prompts import load_prompt
 
 INTENT = "CLIPBOARD"
 PROMPT_TEXT = load_prompt("skills/clipboard.md")
+# Pré-filtro do classificador (sem acento; `*` = prefixo). Ver skills/README.md
+KEYWORDS = ("copiei", "copiado*", "copiou", "clipboard", "area de transferencia")
 
 _VERBS = (("tradu", "translate"), ("resum", "summarize"), ("explic", "explain"))
 

@@ -10,6 +10,8 @@ from core.prompts import load_prompt
 
 INTENT = "INSIGHT_SAVE"
 PROMPT_TEXT = load_prompt("skills/insight_note.md")
+# Pré-filtro do classificador (sem acento; `*` = prefixo). Ver skills/README.md
+KEYWORDS = ("ideia*", "insight*", "brainstorm*", "anot*", "registr*", "guard*")
 
 _REQUEST_RE = re.compile(
     r"^\s*(jarvis[,!.]?\s+)?"

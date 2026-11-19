@@ -13,6 +13,8 @@ from core.prompts import load_prompt
 
 INTENT = "FOCUS_MODE"
 PROMPT_TEXT = load_prompt("skills/focus_mode.md")
+# Pré-filtro do classificador (sem acento; `*` = prefixo). Ver skills/README.md
+KEYWORDS = ("pomodoro*", "foco", "focar", "nao perturbe", "silenci*", "notifica*", "pausa", "quanto falta", "concentr*")
 
 ACTIONS = {"start", "stop", "skip", "status", "dnd_on", "dnd_off"}
 

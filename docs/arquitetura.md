@@ -80,7 +80,7 @@ Nenhuma etapa trava a TUI. Depois do boot:
 3. `db.log_interaction` grava a mensagem do usuário (com anexo, se houver `/attach`).
 4. `services/brain.execute_command_stream(texto, session_id, images, mode="chat", on_route=…)`:
    - Se existe uma ação pendente (`core.pending.active()`), a mensagem é a resposta a ela: `parse_reply` só aprova frase de confirmação ("sim, pode encerrar"); negação recusa; qualquer outra frase descarta a pendência e segue como comando normal.
-   - `classify_intent(texto, exclude_categories=("automation", "system"))` pede ao Ollama um JSON `{intent, entity, confidence}`. Resultado fica em cache (TTL 30 s, 64 entradas).
+   - `classify_intent(texto, exclude_categories=("automation", "system"))`: mensagem trivial ("oi", "valeu") vira `CHAT` sem LLM; senão o pré-filtro por `KEYWORDS` escolhe as skills candidatas (nenhuma casou → todas) e o Ollama devolve um JSON `{intent, entity, confidence}`. As skills desligadas são lidas uma vez (cache em `services/skill_settings.disabled_sets`, invalidado no toggle). Resultado fica em cache (TTL 30 s, 64 entradas); prompt acima de 70% do `num_ctx` gera um aviso no log.
    - `MEMORY_WRITE` → `services/memory.extract_fact_to_memory` → nota nova no Obsidian.
    - Skill ligada e permitida no Chat (categorias `productivity` e `web`) → `on_route(intent)` (selo `[INTENT]` na bolha) → `skill.execute(entity, texto)`.
    - Qualquer outra coisa (`CHAT`, `HARDWARE`, `MEMORY_READ`) → `services/chat.ask_local_ai_stream` com histórico da sessão, contexto do vault (`get_vault_context`) e dados reais (`services/live_context.build`).
@@ -129,7 +129,7 @@ Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub
 | Módulo | Papel |
 |---|---|
 | `brain.py` | Roteador. `execute_command_stream` (TUI, por modo) e `execute_command` (voz standalone); `confirm_pending_action` |
-| `intent.py` | `classify_intent` (Ollama em JSON, cache TTL), `is_skill_enabled`, `CHAT_BLOCKED_CATEGORIES` |
+| `intent.py` | `classify_intent` (atalho trivial, pré-filtro `KEYWORDS`, Ollama em JSON, cache TTL), `is_skill_enabled`, `CHAT_BLOCKED_CATEGORIES` |
 | `chat.py` | Monta o prompt (system + live data + vault + live_context + histórico de 8 mensagens) e chama o Ollama |
 | `live_context.py` | Detecta perguntas sobre a agenda e injeta os eventos reais com "não invente" |
 | `memory.py` | Extrai um fato (chave/valor) e grava no Obsidian |
@@ -188,7 +188,7 @@ Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub
 
 ### 4.4 Skills — `backend/skills/`
 
-Cada skill expõe `INTENT`, `PROMPT_TEXT`, `CATEGORY` (herdada da pasta) e `execute(entity, command)`. O `SkillManager` as descobre no boot; o `PROMPT_TEXT` entra no prompt do classificador.
+Cada skill expõe `INTENT`, `PROMPT_TEXT`, `KEYWORDS` (opcional, pré-filtro), `CATEGORY` (herdada da pasta) e `execute(entity, command)`. O `SkillManager` as descobre no boot; o `PROMPT_TEXT` entra no prompt do classificador.
 
 | Categoria | Skill (`INTENT`) | O que faz | Chat? |
 |---|---|---|---|

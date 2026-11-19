@@ -9,6 +9,8 @@ from core.prompts import load_prompt
 
 INTENT = "NETWORK_SCAN"
 PROMPT_TEXT = load_prompt("skills/network_guard.md")
+# Pré-filtro do classificador (sem acento; `*` = prefixo). Ver skills/README.md
+KEYWORDS = ("rede", "wifi", "wi fi", "internet", "conex*", "porta*", "perimetro", "varr*", "suspeit*", "conectad*")
 
 
 def execute(entity, command):

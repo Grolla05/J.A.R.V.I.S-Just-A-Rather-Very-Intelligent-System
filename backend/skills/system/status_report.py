@@ -6,6 +6,8 @@ from core.weather import get_time_greeting, get_weather_context
 # --- CONFIGURAÇÃO DA SKILL ---
 INTENT = "SYSTEM_REPORT"
 PROMPT_TEXT = load_prompt("skills/status_report.md")
+# Pré-filtro do classificador (sem acento; `*` = prefixo). Ver skills/README.md
+KEYWORDS = ("status", "relatorio*", "checkup", "saude", "diagnostic*", "boot")
 
 # Instanciamos um monitor para leituras
 sys_monitor = SystemInfo()

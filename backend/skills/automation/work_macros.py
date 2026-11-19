@@ -13,6 +13,8 @@ from core.spotify import ensure_device_ready, spotify, start_uri
 # --- CONFIGURAÇÃO DA SKILL ---
 INTENT = "WORK_MACRO"
 PROMPT_TEXT = load_prompt("skills/work_macros.md")
+# Pré-filtro do classificador (sem acento; `*` = prefixo). Ver skills/README.md
+KEYWORDS = ("modo", "ambiente", "macro*", "cena*", "prepar*")
 
 # --- CÉREBRO ESPECÍFICO DA SKILL (MACRO EXPERT) ---
 MACRO_DECISION_PROMPT = load_prompt("skills/work_macro_decision.md")
