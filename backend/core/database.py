@@ -151,6 +151,8 @@ class DatabaseManager:
 
                 # Cria índice na coluna session_id para consultas super rápidas (agora que a coluna 100% existe)
                 cursor.execute('CREATE INDEX IF NOT EXISTS idx_history_session ON history(session_id)')
+                # Histórico do chat para a IA: WHERE session_id ORDER BY id DESC
+                cursor.execute('CREATE INDEX IF NOT EXISTS idx_history_session_id ON history(session_id, id)')
 
                 log.info("Banco de dados verificado (Tabelas: Config, History, Hardware, Sessions).")
         except sqlite3.Error as e:

@@ -11,37 +11,40 @@ SYSTEM_PROMPT = {
 }
 
 
-def get_session_history_for_ai(session_id, limit=8):
+def get_session_history_for_ai(session_id, limit=None):
     """Carrega o histórico recente do SQLite formatado para a IA.
-    Busca limit+1 e descarta a última entrada (user) pois é a mensagem
-    atual, já logada antes desta chamada, enviada separadamente no prompt."""
+
+    `limit` = linhas (padrão: `CHAT_HISTORY_TURNS` × 2). Busca limit+1 e descarta
+    a última entrada (user), que é a mensagem atual, já logada antes desta
+    chamada e enviada separadamente no prompt. Ordena por `id` (autoincremento):
+    o `timestamp` tem resolução de segundo e empata pergunta e resposta.
+    """
+    if limit is None:
+        limit = max(1, settings.CHAT_HISTORY_TURNS) * 2
     try:
-        conn = db._get_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT role, content FROM history
-            WHERE session_id = ?
-            ORDER BY timestamp DESC LIMIT ?
-        ''', (session_id, limit + 1))
-        rows = cursor.fetchall()
-        conn.close()
-
-        rows.reverse()
-        # Última entrada é a mensagem atual (logada antes desta chamada) — remover
-        if rows and rows[-1][0] == 'user':
-            rows = rows[:-1]
-
-        messages = []
-        for role, content in rows:
-            if content:
-                messages.append({
-                    'role': 'user' if role == 'user' else 'assistant',
-                    'content': content
-                })
-        return messages
+        with db.connection() as conn:
+            rows = conn.execute('''
+                SELECT role, content FROM history
+                WHERE session_id = ?
+                ORDER BY id DESC LIMIT ?
+            ''', (session_id, limit + 1)).fetchall()
     except Exception as e:
         log.error(f"Erro ao obter histórico do banco para a IA: {e}")
         return []
+
+    rows.reverse()
+    # Última entrada é a mensagem atual (logada antes desta chamada) — remover
+    if rows and rows[-1][0] == 'user':
+        rows = rows[:-1]
+
+    messages = []
+    for role, content in rows:
+        if content:
+            messages.append({
+                'role': 'user' if role == 'user' else 'assistant',
+                'content': content
+            })
+    return messages
 
 
 # Modo da conversa → prompt de regras (voz = modo standalone, sem Markdown).
@@ -79,7 +82,7 @@ def build_messages(text, intent_type="CHAT", vault_context="", vault_filename=""
     if live_context:  # dados reais (agenda…) — services/live_context.py
         messages.append({'role': 'system', 'content': live_context})
 
-    return messages + get_session_history_for_ai(session_id, limit=8) + [{'role': 'user', 'content': text}]
+    return messages + get_session_history_for_ai(session_id) + [{'role': 'user', 'content': text}]
 
 
 def _temperature(intent_type, live_context):

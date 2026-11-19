@@ -187,6 +187,7 @@ class Settings:
                         or "Grolla05/J.A.R.V.I.S-Just-A-Rather-Very-Intelligent-System")
 
     # --- Pomodoro / Não Perturbe (services/focus.py, /focus e skill FOCUS_MODE) ---
+    CHAT_HISTORY_TURNS: int = _env_int("CHAT_HISTORY_TURNS", 10)  # turnos (pergunta+resposta) de memória do chat
     POMODORO_FOCUS_MIN: int = _env_int("POMODORO_FOCUS_MIN", 25)
     POMODORO_SHORT_BREAK_MIN: int = _env_int("POMODORO_SHORT_BREAK_MIN", 5)
     POMODORO_LONG_BREAK_MIN: int = _env_int("POMODORO_LONG_BREAK_MIN", 15)
