@@ -86,7 +86,7 @@ J.A.R.V.I.S/
 │   │   ├── wt_profile.py    ← Fragmento do perfil JARVIS do Windows Terminal (logo na aba)
 │   │   ├── utils.py         ← TTLCache
 │   │   ├── selection.py     ← Copia a seleção (Ctrl+C; `restore=True` devolve o clipboard anterior) e lê/escreve o clipboard via Win32 (agente)
-│   │   ├── skill_loader.py  ← Auto-discovery de skills (plug-and-play)
+│   │   ├── skill_loader.py  ← Auto-discovery de skills (plug-and-play); carrega na etapa do boot (`manager.ensure_loaded()`), não no import
 │   │   └── SystemInfo.py    ← psutil — monitoramento de hardware
 │   ├── services/            ← Serviços cognitivos
 │   │   ├── brain.py         ← Roteador: execute_command (voz) / execute_command_stream (TUI, por modo)

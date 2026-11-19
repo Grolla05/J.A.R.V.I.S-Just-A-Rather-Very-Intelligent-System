@@ -154,7 +154,7 @@ Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub
 | `llm.py` | `query_ollama` (JSON/temperatura) e `query_ollama_stream`; `warm_up_ollama` |
 | `ollama_server.py` | Sobe `ollama serve` no boot quando o servidor local está fora |
 | `prompts.py` | `load_prompt("arquivo.md", var=…)` com cache e `string.Template` |
-| `skill_loader.py` | `manager`: descobre skills em `skills/<categoria>/` |
+| `skill_loader.py` | `manager`: descobre skills em `backend/skills/<categoria>/` (caminho absoluto) no 1º uso / etapa do boot; INTENT duplicado gera aviso e vale o primeiro |
 | `SystemInfo.py` | Telemetria (psutil/GPUtil), limites críticos e monitor proativo |
 | `alerts.py` | `process_system_alert`: passa pelo filtro, fala, notifica ou pede confirmação |
 | `health.py` | Saúde de Ollama, Obsidian, microfone e SQLite |
