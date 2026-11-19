@@ -2,8 +2,11 @@ version: 2
 updates:
   - package-ecosystem: "pip"
     directory: "/backend"
+    target-branch: "DEV"
     schedule:
       interval: "weekly"
+    # Dependabot sobe as faixas do requirements.txt; depois de aceitar a PR,
+    # regenere requirements.lock com o comando do cabeçalho do requirements.txt.
     open-pull-requests-limit: 5
     labels: ["dependencies", "backend"]
     groups:
@@ -14,6 +17,7 @@ updates:
 
   - package-ecosystem: "github-actions"
     directory: "/"
+    target-branch: "DEV"
     schedule:
       interval: "monthly"
     labels: ["dependencies", "ci"]

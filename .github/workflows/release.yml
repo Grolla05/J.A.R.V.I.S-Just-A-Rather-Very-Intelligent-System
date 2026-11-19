@@ -40,7 +40,7 @@ jobs:
       - name: Lint e testes (gate do release)
         working-directory: backend
         run: |
-          pip install -r requirements.txt -r requirements-dev.txt
+          pip install --require-hashes -r requirements.lock -r requirements-dev.lock
           ruff check .
           ruff check ../frontend
           python -m pytest tests -q -n auto

@@ -5,50 +5,55 @@
 # cd backend
 # pip install -r requirements.txt (instala as dependências)
 # python -m services.brain (rodar o arquivo brain.py)
+#
+# Faixas compatíveis aqui; versões exatas (com hash) em requirements.lock, que
+# o CI e o instalador usam. Mudou este arquivo? Regenere o lock:
+#   uv pip compile requirements.txt --python-version 3.11 --python-platform windows --generate-hashes -o requirements.lock
+#   uv pip compile requirements-dev.txt --python-version 3.11 --python-platform windows --generate-hashes -o requirements-dev.lock
 # ============================================================================
 
 # --- CORE / INTELIGÊNCIA ARTIFICIAL ---
-ollama                      # Cliente Python para comunicação com servidor Ollama (LLM)
-faster-whisper              # Transcrição local de áudio (Whisper via CTranslate2 — rápido em CPU/GPU)
-Pillow                      # Validação/normalização de imagem antes de enviar ao modelo de visão
+ollama>=0.6,<0.7            # Cliente Python para comunicação com servidor Ollama (LLM)
+faster-whisper>=1.2,<2      # Transcrição local de áudio (Whisper via CTranslate2 — rápido em CPU/GPU)
+Pillow>=12,<13              # Validação/normalização de imagem antes de enviar ao modelo de visão
 
 # --- CONFIGURAÇÃO E AMBIENTE ---
-python-dotenv               # Gerenciamento de variáveis de ambiente (.env)
+python-dotenv>=1.2,<2       # Gerenciamento de variáveis de ambiente (.env)
 
 # --- RECONHECIMENTO DE VOZ (Speech to Text) ---
-SpeechRecognition           # Biblioteca para reconhecimento de voz via Google Speech API
-PyAudio                     # Interface para captura de áudio do microfone
+SpeechRecognition>=3.16,<4  # Biblioteca para reconhecimento de voz via Google Speech API
+PyAudio>=0.2.14,<0.3        # Interface para captura de áudio do microfone
 
 # --- TEXT-TO-SPEECH (Síntese de Voz) ---
-edge-tts>=7.3.1             # Voz neural da Microsoft Edge (online). <7.3.1 leva 403 do serviço da Microsoft
-pyttsx3                     # Motor de TTS offline (backup)
-pygame-ce                   # Reprodução de arquivos de áudio MP3 (usando a Community Edition para suporte ao Python 3.14+)
+edge-tts>=7.3.1,<8          # Voz neural da Microsoft Edge (online). <7.3.1 leva 403 do serviço da Microsoft
+pyttsx3>=2.99,<3            # Motor de TTS offline (backup)
+pygame-ce>=2.5,<3           # Reprodução de arquivos de áudio MP3 (usando a Community Edition para suporte ao Python 3.14+)
 
 # --- CONTROLE DE SISTEMA & AUTOMAÇÃO ---
-pyautogui                   # Controle programático de Teclado e Mouse (Atalhos, Clicks)
-comtypes                    # Biblioteca COM para interação com APIs do Windows
-pycaw                       # Python Core Audio Windows - Controle de volume, dispositivos de áudio
+pyautogui>=0.9.54,<0.10     # Controle programático de Teclado e Mouse (Atalhos, Clicks)
+comtypes>=1.4,<2            # Biblioteca COM para interação com APIs do Windows
+pycaw>=20251023             # Python Core Audio Windows - Controle de volume, dispositivos de áudio
 
 # --- INTERFACE (TERMINAL) ---
-textual                     # TUI no terminal (chat/copilot) - substitui o HUD React/PyWebView
+textual>=8.2,<9             # TUI no terminal (chat/copilot) - substitui o HUD React/PyWebView
 
 # --- MONITORAMENTO DE SISTEMA ---
-psutil                      # Informações de CPU, RAM, Disco, Rede, Processos
-GPUtil                      # Monitoramento de GPUs NVIDIA (temperatura, carga, memória)
+psutil>=7.2,<8              # Informações de CPU, RAM, Disco, Rede, Processos
+GPUtil>=1.4,<2              # Monitoramento de GPUs NVIDIA (temperatura, carga, memória)
 
 # --- REQUISIÇÕES HTTP ---
-requests                    # Cliente HTTP para APIs externas e comunicação
+requests>=2.34,<3           # Cliente HTTP para APIs externas e comunicação
 
 # --- WEB ---
-ddgs                        # Busca no DuckDuckGo sem chave de API (skill WEB_SEARCH / /web)
-PyGithub                    # API do GitHub (skill GITHUB / /gh) — token no .env
-keyring                     # Cofre de Credenciais do Windows (tokens OAuth das integrações)
-pystray                     # Ícone na bandeja do agente residente (agent.py, Win+J)
+ddgs>=9.16,<10              # Busca no DuckDuckGo sem chave de API (skill WEB_SEARCH / /web)
+PyGithub>=2.10,<3           # API do GitHub (skill GITHUB / /gh) — token no .env
+keyring>=25.7,<26           # Cofre de Credenciais do Windows (tokens OAuth das integrações)
+pystray>=0.19.5,<0.20       # Ícone na bandeja do agente residente (agent.py, Win+J)
 
 # --- MODEL CONTEXT PROTOCOL ---
 
 # --- LOGS COLORIDOS ---
-colorama                    # Cores nos logs do console (fora da TUI)
+colorama>=0.4.6,<0.5        # Cores nos logs do console (fora da TUI)
 
 # --- BIBLIOTECAS PADRÃO DO PYTHON (Não requerem instalação) ---
 # sqlite3                   # Banco de dados (embutido no Python)

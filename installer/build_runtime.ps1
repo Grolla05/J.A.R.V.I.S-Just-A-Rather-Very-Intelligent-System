@@ -1,7 +1,8 @@
 # build_runtime.ps1 - monta o conteudo do JARVIS-Setup.exe em dist\
 #
 #   dist\runtime\  Python 3.11 completo (pacote NuGet oficial "python") com
-#                  todas as libs do backend\requirements.txt ja instaladas
+#                  todas as libs do backend\requirements.lock ja instaladas
+#                  (versoes exatas + hash: o build e reproduzivel)
 #   dist\app\      codigo do JARVIS (backend\ sem testes/dados, frontend\, VERSION...)
 #
 # O instalador (installer\jarvis.iss) so copia essas pastas: a maquina de quem
@@ -58,11 +59,11 @@ Roda $py @('--version')
 if (-not (Test-Path (Join-Path $runtime 'pythonw.exe'))) { throw "pythonw.exe ausente em $runtime" }
 
 # --- 2. Dependencias --------------------------------------------------------
-Passo 'pip install -r backend\requirements.txt'
+Passo 'pip install --require-hashes -r backend\requirements.lock'
 Roda $py @('-m', 'ensurepip', '--upgrade')
 Roda $py @('-m', 'pip', 'install', '--no-cache-dir', '--no-warn-script-location', '--upgrade', 'pip')
 Roda $py @('-m', 'pip', 'install', '--no-cache-dir', '--no-warn-script-location', '--prefer-binary',
-    '-r', (Join-Path $raiz 'backend\requirements.txt'))
+    '--require-hashes', '-r', (Join-Path $raiz 'backend\requirements.lock'))
 
 # --- 3. Limpeza --------------------------------------------------------------
 Passo 'Limpando runtime (caches, testes das libs)'
