@@ -5,6 +5,10 @@ from core.llm import query_ollama, query_ollama_stream
 from core.logger import log
 from core.prompts import load_prompt
 
+# Texto que versões antigas gravavam no histórico quando o Ollama falhava (#54).
+# Linhas assim nunca voltam ao modelo.
+LEGACY_ERROR_REPLY = "Erro de processamento neural."
+
 SYSTEM_PROMPT = {
     'role': 'system',
     'content': load_prompt("system_prompt.md")
@@ -39,7 +43,7 @@ def get_session_history_for_ai(session_id, limit=None):
 
     messages = []
     for role, content in rows:
-        if content:
+        if content and not (role != 'user' and content.strip() == LEGACY_ERROR_REPLY):
             messages.append({
                 'role': 'user' if role == 'user' else 'assistant',
                 'content': content
@@ -96,11 +100,12 @@ def ask_local_ai(text, intent_type="CHAT", entity=None, vault_context="", vault_
     reply = query_ollama(messages, temperature=_temperature(intent_type, live_context))
     if reply:
         return reply.replace("*", "").replace("#", "").strip()
-    return "Erro de processamento neural."
+    return LEGACY_ERROR_REPLY
 
 
 def ask_local_ai_stream(text, intent_type="CHAT", entity=None, vault_context="", vault_filename="", session_id="default",
                         images=None, mode="chat", live_context=""):
+    """Stream da resposta. Falha do Ollama sobe como `core.llm.LLMError`."""
     if images:
         # Imagem anexada: roteia pro modelo de visão com um contexto mínimo e
         # dedicado. Moondream/LLaVA são modelos pequenos — empilhar a

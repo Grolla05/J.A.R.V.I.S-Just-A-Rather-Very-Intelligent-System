@@ -101,9 +101,19 @@ class TestLlmOptions(unittest.TestCase):
         with patch.object(llm.settings, "OLLAMA_NUM_GPU", 99), \
              patch.object(llm.settings, "OLLAMA_NUM_CTX", None), \
              patch.object(llm, "_get_client", return_value=client):
-            out = list(llm.query_ollama_stream([{"role": "user", "content": "oi"}]))
-        self.assertEqual(out, ["parcial", "Erro de processamento neural."])
+            out = []
+            with self.assertRaises(llm.LLMError):
+                for chunk in llm.query_ollama_stream([{"role": "user", "content": "oi"}]):
+                    out.append(chunk)
+        self.assertEqual(out, ["parcial"])  # #54: o erro não vira texto da resposta
         self.assertEqual(client.chat.call_count, 1)
+
+    def test_stream_failure_before_output_raises(self):
+        client = MagicMock()
+        client.chat.side_effect = ConnectionError("ollama fora")
+        with patch.object(llm.settings, "OLLAMA_NUM_GPU", None),              patch.object(llm, "_get_client", return_value=client):
+            with self.assertRaises(llm.LLMError):
+                list(llm.query_ollama_stream([{"role": "user", "content": "oi"}]))
 
 
 if __name__ == "__main__":

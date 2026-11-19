@@ -25,6 +25,7 @@ from textual.worker import get_current_worker
 
 import core.state as state
 from core import db, log, settings
+from core.llm import LLMError
 from frontend.commands import (
     Command,
     dropped_paths,
@@ -65,6 +66,8 @@ from services import sessions
 
 MODES = ("chat", "copilot")
 STREAM_FLUSH_S = 0.05  # re-render do Markdown no máx. a cada 50 ms durante o stream
+NO_REPLY_TEXT = "_Sem resposta do modelo. O Ollama está rodando?_"
+LLM_FAILED_SPEECH = "O modelo não respondeu, Senhor. Verifique o Ollama."  # voz: nunca o parcial
 TELEMETRY_HISTORY = 40  # amostras guardadas p/ os sparklines (40 × 3 s = 2 min)
 NOTE_CONTEXT_MAX = 4000  # caracteres da nota do /vault que vão ao modelo
 REMINDER_INTERVAL = 30  # s entre checagens de lembretes (agenda + pedidos); a agenda tem cache próprio
@@ -1289,15 +1292,23 @@ class JarvisApp(App, inherit_bindings=False):
 
             if full.strip() == "PROTOCOL_SHUTDOWN":
                 return "PROTOCOL_SHUTDOWN"
-            if not full.strip():
-                full = "_Sem resposta do modelo. O Ollama está rodando?_"
-            self.call_from_thread(reply.set_text, full)
+            empty = not full.strip()
+            # Placeholder só na bolha: não é resposta e não vai para o histórico
+            self.call_from_thread(reply.set_text, NO_REPLY_TEXT if empty else full)
             if skill:
                 self.call_from_thread(reply.set_meta, f"{base_meta} · ■ [{skill[0]}] ✓")
                 self._finish_skill_turn("ok", full)
+            if empty:
+                return ""
             db.log_interaction("assistant", full, session_id, mode=mode)
             if not skill and not force_chat and not image:
                 self._maybe_capture_insight(text, full)
+        except LLMError as e:
+            # Falha do modelo (#54): mostra o parcial + o erro, mas não grava no
+            # histórico nem vira insight — senão volta ao modelo como resposta.
+            shown = (full.rstrip() + "\n\n") if full.strip() else ""
+            self.call_from_thread(reply.set_text, f"{shown}**Erro:** o modelo não respondeu (`{e}`).")
+            full = LLM_FAILED_SPEECH if on_output is not None else ""
         except Exception as e:
             log.error(f"Erro no stream do chat: {e}")
             self.call_from_thread(reply.set_text, f"**Erro:** `{e}`")

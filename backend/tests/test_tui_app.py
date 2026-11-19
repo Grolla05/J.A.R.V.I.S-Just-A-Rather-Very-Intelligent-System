@@ -125,6 +125,35 @@ class TestJarvisApp(unittest.IsolatedAsyncioTestCase):
             history = sessions.get_chat_history(app.session_id)
             self.assertEqual([m["content"] for m in history], ["olá", "**chat**: eco de olá"])
 
+    async def test_llm_error_is_shown_but_not_logged(self):
+        # #54: falha do modelo aparece na bolha, mas não vai para o histórico
+        from core.llm import LLMError
+
+        def broken(text, session_id, images, mode, on_route=None):
+            yield "parcial "
+            raise LLMError("conexão recusada")
+
+        app = tui_app.JarvisApp(stream_fn=broken, start_services=False, voice=FakeVoice())
+        async with app.run_test() as pilot:
+            await self._send(pilot, "olá")
+            replies = [m for m in app.query(tui_app.MessageView) if m.role == "assistant"]
+            self.assertIn("parcial", replies[-1].text)
+            self.assertIn("**Erro:**", replies[-1].text)
+            history = sessions.get_chat_history(app.session_id)
+            self.assertEqual([m["role"] for m in history], ["user"])
+
+    async def test_empty_reply_placeholder_not_logged(self):
+        def empty(text, session_id, images, mode, on_route=None):
+            yield ""
+
+        app = tui_app.JarvisApp(stream_fn=empty, start_services=False, voice=FakeVoice())
+        async with app.run_test() as pilot:
+            await self._send(pilot, "olá")
+            replies = [m for m in app.query(tui_app.MessageView) if m.role == "assistant"]
+            self.assertEqual(replies[-1].text, tui_app.NO_REPLY_TEXT)
+            history = sessions.get_chat_history(app.session_id)
+            self.assertEqual([m["role"] for m in history], ["user"])
+
     async def test_copilot_is_voice_only(self):
         app = self._app()
         async with app.run_test() as pilot:

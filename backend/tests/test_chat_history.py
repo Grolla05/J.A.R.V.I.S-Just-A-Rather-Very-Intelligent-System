@@ -63,6 +63,13 @@ class TestChatHistory(unittest.TestCase):
             msgs = chat.get_session_history_for_ai("s")
         self.assertEqual([m["content"] for m in msgs], ["p27", "r27", "p28", "r28", "p29", "r29"])
 
+    def test_legacy_error_replies_are_skipped(self):
+        # #54: respostas de erro gravadas por versões antigas não voltam ao modelo
+        self._same_second([("user", "p1"), ("assistant", chat.LEGACY_ERROR_REPLY),
+                           ("user", "p2"), ("assistant", "r2"), ("user", "atual")])
+        msgs = chat.get_session_history_for_ai("s", limit=10)
+        self.assertEqual([m["content"] for m in msgs], ["p1", "p2", "r2"])
+
     def test_db_error_returns_empty(self):
         with patch.object(self.db, "connection", side_effect=RuntimeError("boom")):
             self.assertEqual(chat.get_session_history_for_ai("s"), [])
