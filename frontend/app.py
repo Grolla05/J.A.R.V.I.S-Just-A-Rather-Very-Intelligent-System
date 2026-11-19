@@ -146,7 +146,7 @@ class JarvisApp(App, inherit_bindings=False):
     busy = reactive(False, init=False)
 
     def __init__(self, stream_fn=None, start_services=True, voice=None, boot_fn=None, start_mode=None,
-                 quiet_boot=False, update_fn=None, install_fn=None):
+                 quiet_boot=False, update_fn=None, install_fn=None, snooze_fn=None):
         """`boot_fn(report)` (core.boot.run_boot) mostra a tela de boot antes da
         conversa; None (testes, `start_services=False`) pula direto pro chat.
         `start_mode="copilot"` (main.py --copilot, aberto pelo Win+J) entra no
@@ -154,12 +154,14 @@ class JarvisApp(App, inherit_bindings=False):
         --copilot) roda as checagens do boot em segundo plano, sem a tela de
         boot: a interface já abre pronta e só os problemas viram notificação.
         `update_fn()` (core.updater.check_available) roda numa thread depois do
-        boot; devolvendo {"version", "current"} abre a UpdateScreen. Qualquer
-        tecla chama `install_fn()` (core.updater.request_install; None = prévia,
-        não instala) e, se o pedido saiu, a TUI fecha para o setup rodar."""
+        boot; devolvendo {"version", "current"} abre a UpdateScreen. Enter
+        chama `install_fn()` (core.updater.request_install; None = prévia,
+        não instala) e, se o pedido saiu, a TUI fecha para o setup rodar. Esc
+        chama `snooze_fn(version)` (core.updater.snooze: adia 24 h)."""
         super().__init__()
         self._update_fn = update_fn
         self._install_fn = install_fn
+        self._snooze_fn = snooze_fn
         self._quiet_boot = quiet_boot
         self._start_mode = start_mode if start_mode in MODES else None
         self._presence_stop = threading.Event()  # encerra a escuta dos sinais do agente
@@ -274,9 +276,18 @@ class JarvisApp(App, inherit_bindings=False):
         if self._shutting_down or isinstance(self.screen, UpdateScreen):
             return
         log.info(f"Atualização disponível: v{info['current']} → v{info['version']}.")
-        self.push_screen(UpdateScreen(info["current"], info["version"]), self._update_chosen)
+        self.push_screen(UpdateScreen(info["current"], info["version"]),
+                         lambda proceed: self._update_chosen(proceed, info["version"]))
 
-    def _update_chosen(self, _proceed=True):
+    def _update_chosen(self, proceed=True, version=""):
+        if not proceed:
+            if self._snooze_fn is not None:
+                try:
+                    self._snooze_fn(version)
+                except Exception as e:
+                    log.debug(f"Adiamento da atualização falhou: {e}")
+            self.notify(f"Atualização v{version} adiada por 24 h.", title="Atualização")
+            return
         if self._install_fn is None:
             self.notify("Prévia da tela de atualização: nada foi instalado.", title="Atualização")
             return

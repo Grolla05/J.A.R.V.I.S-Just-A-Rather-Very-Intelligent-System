@@ -120,7 +120,7 @@ Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub
 | `screens/integrations_panel.py` | Cards de INTEGRAÇÕES (Google Agenda, Spotify, GitHub…) |
 | `screens/save_slots.py` | `Ctrl+O`: sessões como save slots (carregar, fixar, apagar, buscar) |
 | `screens/palette.py` | `Ctrl+K`: paleta de comandos, modos, foco e skills |
-| `screens/update.py` | "ATUALIZAÇÃO DISPONÍVEL!!" — qualquer tecla instala |
+| `screens/update.py` | "ATUALIZAÇÃO DISPONÍVEL!!" — Enter instala, Esc adia 24 h |
 | `screens/shutdown.py` | Saída com efeito CRT |
 | `screens/house_party.py` | Easter egg ("house party" no Chat) |
 
@@ -277,7 +277,7 @@ Em dev tudo fica em `backend/`. Instalado, `JARVIS_DATA_DIR=%APPDATA%\JARVIS` co
 ## 8. Agente residente e instalação
 
 - **Agente (`backend/agent.py`)**: sobe no logon (`HKCU\…\Run`, `--logon`), segura os atalhos globais, oferece a bandeja ("Abrir J.A.R.V.I.S", "Iniciar com o Windows", "Sair do agente") e conversa com a TUI só por `core/presence.py`. Carrega um pacote `core` vazio para não iniciar banco e skills.
-- **Atualização (`core/updater.py`)**: a TUI e o agente comparam o último Release do GitHub com o `VERSION`. Com versão nova, a TUI mostra a tela de atualização; qualquer tecla pede ao agente baixar o `JARVIS-Setup.exe`, conferir o SHA-256 e instalar em silêncio. Dev (sem `JARVIS_DATA_DIR`) nunca atualiza.
+- **Atualização (`core/updater.py`)**: a TUI e o agente comparam o último Release do GitHub com o `VERSION`. Com versão nova, a TUI mostra a tela de atualização; Enter pede ao agente baixar o `JARVIS-Setup.exe`, conferir o SHA-256 e instalar em silêncio; Esc adia aquela versão por 24 h (`updates/snooze.json`, vale também para o logon). Dev (sem `JARVIS_DATA_DIR`) nunca atualiza.
 - **Instalador (`installer/`)**: `build_runtime.ps1` monta Python 3.11 + libs; `jarvis.iss` (Inno Setup 6) exige o Ollama, deixa escolher o modelo e faz `ollama pull`. O workflow `release.yml` publica um Release a cada push na `main`.
 
 ## 9. Testes

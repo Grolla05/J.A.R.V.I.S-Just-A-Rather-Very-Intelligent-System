@@ -536,9 +536,13 @@ class TestJarvisApp(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(sessions.get_chat_history(app.session_id), [])
 
     # ------------------------------------------------- atualização disponível
-    def _update_app(self, info, install_fn=None):
+    def _update_app(self, info, install_fn=None, snooze_fn=None, grace=0.0):
+        from frontend.screens import UpdateScreen
+        patcher = patch.object(UpdateScreen, "GRACE_S", grace)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         return tui_app.JarvisApp(stream_fn=_fake_stream, start_services=False, voice=FakeVoice(),
-                                 update_fn=lambda: info, install_fn=install_fn)
+                                 update_fn=lambda: info, install_fn=install_fn, snooze_fn=snooze_fn)
 
     async def test_update_screen_appears_with_versions(self):
         from frontend.screens import UpdateScreen
@@ -559,24 +563,64 @@ class TestJarvisApp(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             self.assertNotIsInstance(app.screen, UpdateScreen)
 
-    async def test_any_key_requests_install_and_exits(self):
+    async def test_enter_requests_install_and_exits(self):
         from frontend.screens import ShutdownScreen, UpdateScreen
         calls = []
         app = self._update_app({"version": "2.7.0", "current": "2.6.3"},
                                install_fn=lambda: calls.append(1) or "agent")
         async with app.run_test() as pilot:
             await self._wait_for(pilot, lambda: isinstance(app.screen, UpdateScreen))
-            await pilot.press("shift+tab")  # até atalho de modo conta como "qualquer tecla"
+            await pilot.press("enter")
             await self._wait_for(pilot, lambda: isinstance(app.screen, ShutdownScreen) or not app.is_running)
             self.assertEqual(calls, [1])
             self.assertEqual(app.mode, "chat")
+
+    async def test_other_keys_do_nothing(self):
+        # #50: tecla qualquer (inclusive atalhos da conversa) não instala
+        from frontend.screens import UpdateScreen
+        calls = []
+        app = self._update_app({"version": "2.7.0", "current": "2.6.3"},
+                               install_fn=lambda: calls.append(1) or "agent")
+        async with app.run_test() as pilot:
+            await self._wait_for(pilot, lambda: isinstance(app.screen, UpdateScreen))
+            await pilot.press("x", "shift+tab", "space", "a")
+            await pilot.pause()
+            self.assertIsInstance(app.screen, UpdateScreen)
+            self.assertEqual(calls, [])
+            self.assertEqual(app.mode, "chat")
+
+    async def test_escape_snoozes_without_installing(self):
+        from frontend.screens import UpdateScreen
+        installs, snoozed = [], []
+        app = self._update_app({"version": "2.7.0", "current": "2.6.3"},
+                               install_fn=lambda: installs.append(1) or "agent", snooze_fn=snoozed.append)
+        async with app.run_test() as pilot:
+            await self._wait_for(pilot, lambda: isinstance(app.screen, UpdateScreen))
+            await pilot.press("escape")
+            await pilot.pause()
+            self.assertNotIsInstance(app.screen, UpdateScreen)
+            self.assertEqual(snoozed, ["2.7.0"])
+            self.assertEqual(installs, [])
+            self.assertFalse(app._shutting_down)
+
+    async def test_keys_in_grace_period_are_ignored(self):
+        from frontend.screens import UpdateScreen
+        calls = []
+        app = self._update_app({"version": "2.7.0", "current": "2.6.3"},
+                               install_fn=lambda: calls.append(1) or "agent", grace=60.0)
+        async with app.run_test() as pilot:
+            await self._wait_for(pilot, lambda: isinstance(app.screen, UpdateScreen))
+            await pilot.press("enter", "escape")
+            await pilot.pause()
+            self.assertIsInstance(app.screen, UpdateScreen)
+            self.assertEqual(calls, [])
 
     async def test_failed_install_keeps_tui_open(self):
         from frontend.screens import UpdateScreen
         app = self._update_app({"version": "2.7.0", "current": "2.6.3"}, install_fn=lambda: "failed")
         async with app.run_test() as pilot:
             await self._wait_for(pilot, lambda: isinstance(app.screen, UpdateScreen))
-            await pilot.press("x")
+            await pilot.press("enter")
             await app.workers.wait_for_complete()
             await pilot.pause()
             self.assertFalse(app._shutting_down)
