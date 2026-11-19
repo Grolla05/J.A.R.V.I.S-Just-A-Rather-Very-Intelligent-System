@@ -5,6 +5,7 @@ import requests
 
 from .config import settings
 from .logger import log
+from .utils import plain, word_regex
 
 # Subpasta de mem\u00f3ria dentro do projeto JARVIS no vault.
 # N\u00e3o usa emoji para garantir compatibilidade total com urllib no Windows.
@@ -160,29 +161,35 @@ obsidian = ObsidianClient()
 
 _PROFILE_FILE = "⚙️ Configurações/🧠 Sobre mim.md"
 
-_PROFILE_KEYWORDS = {
-    "nome", "familia", "família", "pai", "mãe", "mae", "irmão", "irmao",
-    "quem", "moro", "mora", "localização", "localizacao", "cidade", "fuso",
-    "faculdade", "curso", "formação", "formacao", "semestre", "universidade",
-    "trabalho", "estágio", "estagio", "empresa", "tuv",
-    "linguagem", "programação", "programacao", "stack", "tecnologia",
-    "hobby", "hobbies", "música", "musica", "jogo", "jogos", "instrumento", "guitarra",
-    "setup", "monitor", "teclado", "mouse", "processador",
-    "rotina", "horário", "horario", "objetivo", "meta",
-    "linkedin", "github", "age", "nascimento", "identidade",
-    "quem sou", "sobre mim", "perfil",
-}
+# Camada 1: termos que pedem o perfil pessoal. Casam como palavra inteira e
+# sem acento (`word_regex`). Nada de termos curtos/ambíguos ("age" casava com
+# "agenda", "meta" com "metade", "mora" com "demora", "curso" com "recurso").
+_PROFILE_KEYWORDS = (
+    "sobre mim", "quem sou", "quem eu sou", "meu perfil", "identidade",
+    "meu nome", "minha idade", "quantos anos eu tenho", "nascimento", "aniversario",
+    "minha familia", "familia", "meu pai", "minha mae", "meus pais", "meu irmao", "minha irma",
+    "onde moro", "onde eu moro", "minha cidade", "fuso horario",
+    "faculdade", "universidade", "semestre", "meu curso", "minha formacao", "formacao",
+    "estagio", "onde trabalho", "onde eu trabalho", "meu trabalho", "minha empresa", "tuv",
+    "minhas linguagens", "minha stack",
+    "hobby", "hobbies", "meu hobby", "meus hobbies", "guitarra", "instrumento",
+    "meu setup", "meu monitor", "meu teclado", "meu mouse", "meu processador", "meu pc",
+    "minha rotina", "meu horario", "meu objetivo", "meus objetivos", "minha meta", "minhas metas",
+    "meu linkedin", "meu github",
+)
+_PROFILE_RE = word_regex(_PROFILE_KEYWORDS)
 
 _SECTION_KEYWORDS: dict[str, list[str]] = {
-    "família":    ["família", "familia", "pai", "mãe", "mae", "irmão", "irmao", "parente", "familiar"],
-    "identidade": ["nome", "quem sou", "identidade", "nascimento", "idade"],
-    "trabalho":   ["trabalho", "estágio", "estagio", "empresa", "tuv", "cargo"],
-    "educação":   ["faculdade", "curso", "universidade", "semestre", "formação"],
+    "família":    ["familia", "pai", "mae", "pais", "irmao", "irma", "parente", "familiar"],
+    "identidade": ["nome", "quem sou", "identidade", "nascimento", "idade", "aniversario"],
+    "trabalho":   ["trabalho", "trabalho", "estagio", "empresa", "tuv", "cargo"],
+    "educação":   ["faculdade", "curso", "universidade", "semestre", "formacao"],
     "setup":      ["monitor", "teclado", "mouse", "processador", "pc", "setup"],
-    "hobbies":    ["hobby", "hobbies", "música", "musica", "guitarra", "jogo", "jogos"],
-    "rotina":     ["rotina", "horário", "horario", "fuso", "cidade", "localização"],
+    "hobbies":    ["hobby", "hobbies", "musica", "guitarra", "instrumento", "jogo", "jogos"],
+    "rotina":     ["rotina", "horario", "fuso", "cidade", "localizacao", "moro"],
     "contatos":   ["linkedin", "github", "email", "contato"],
 }
+_SECTION_RES = {name: word_regex(words) for name, words in _SECTION_KEYWORDS.items()}
 
 _STOPWORDS = {
     "o", "a", "os", "as", "um", "uma", "de", "do", "da", "dos", "das",
@@ -190,6 +197,8 @@ _STOPWORDS = {
     "me", "meu", "minha", "meus", "minhas", "eu", "é", "para",
     "por", "com", "como", "quando", "onde", "sei", "sabe", "seria",
     "jarvis", "voce", "você",
+    # conversa fiada: não vale uma busca no vault
+    "tudo", "bem", "obrigado", "obrigada", "valeu", "beleza", "favor", "olá", "bom", "boa",
 }
 
 
@@ -199,16 +208,12 @@ def extract_relevant_section(content: str, query: str) -> str:
     Mapeia keywords da query → seção do arquivo → retorna só aquela seção.
     Fallback: primeiros 2000 chars se nenhuma seção bater.
     """
-    query_lower = query.lower()
+    query_plain = plain(query)
 
-    # Qual categoria de seção a query pede?
-    target_keywords = None
-    for _section, keywords in _SECTION_KEYWORDS.items():
-        if any(kw in query_lower for kw in keywords):
-            target_keywords = keywords
-            break
+    # Qual categoria de seção a query pede? (palavra inteira, sem acento)
+    target_re = next((rx for rx in _SECTION_RES.values() if rx.search(query_plain)), None)
 
-    if not target_keywords:
+    if target_re is None:
         return content[:2000]
 
     # Parsear markdown em seções por headers (# / ##)
@@ -232,8 +237,8 @@ def extract_relevant_section(content: str, query: str) -> str:
     # Encontrar seção com maior overlap de keywords
     best_header, best_body, best_score = "", "", 0
     for header, body in sections:
-        combined = (header + " " + body).lower()
-        score = sum(1 for kw in target_keywords if kw in combined)
+        combined = plain(header + " " + body)
+        score = len({m.group(0) for m in target_re.finditer(combined)})
         if score > best_score:
             best_score = score
             best_header, best_body = header, body
@@ -256,6 +261,14 @@ def _warn_vault_down(error):
     _search_warned = True
 
 
+def _is_relevant(filename: str, content: str, keywords: list[str]) -> bool:
+    """A nota precisa citar (palavra inteira, sem acento) ao menos metade das
+    palavras buscadas — a busca do vault sempre devolve algo, mesmo irrelevante."""
+    text = plain(filename + " " + content)
+    hits = sum(1 for kw in keywords if word_regex([kw]).search(text))
+    return hits >= max(1, (len(keywords) + 1) // 2)
+
+
 def get_vault_context(command: str) -> tuple[str, str]:
     """
     Retorna (filename, content) do arquivo mais relevante no vault.
@@ -267,7 +280,7 @@ def get_vault_context(command: str) -> tuple[str, str]:
     cmd_lower = command.lower()
 
     # Camada 1: pergunta pessoal/identidade → perfil completo
-    if any(kw in cmd_lower for kw in _PROFILE_KEYWORDS):
+    if _PROFILE_RE.search(plain(command)):
         log.info("🔍 [VAULT] Camada 1 — acesso direto ao perfil pessoal")
         content = obsidian.get_file(_PROFILE_FILE, quiet=True)
         if content:
@@ -277,9 +290,11 @@ def get_vault_context(command: str) -> tuple[str, str]:
         log.info("[VAULT] Perfil não encontrado — descendo para Camada 2")
 
     # Camada 2: busca no vault
-    words = cmd_lower.split()
-    keywords = [w for w in words if w not in _STOPWORDS and len(w) > 3]
-    search_query = " ".join(keywords[:4]) or command
+    words = [w.strip("?!.,;:\"'()") for w in cmd_lower.split()]
+    keywords = [w for w in words if w not in _STOPWORDS and len(w) > 3][:4]
+    if not keywords:  # "oi", "tudo bem?": nada para procurar no vault
+        return ("", "")
+    search_query = " ".join(keywords)
 
     log.info(f"🔍 [VAULT] Camada 2 — buscando: '{search_query}'")
     try:
@@ -292,8 +307,15 @@ def get_vault_context(command: str) -> tuple[str, str]:
     if valid:
         best = valid[0]  # search_scored já ordena pelo score
         best_file = best["filename"]
+        min_score = settings.VAULT_MIN_SCORE
+        if min_score is not None and best["score"] < min_score:
+            log.info(f"[VAULT] Melhor resultado abaixo do mínimo ({best['score']} < {min_score}): {best_file}")
+            return ("", "")
         log.info(f"[VAULT] Melhor resultado (score={best['score']}): {best_file}")
         content = obsidian.get_file(best_file, quiet=True)
+        if content and not _is_relevant(best_file, content, keywords):
+            log.info(f"[VAULT] '{best_file}' não cita as palavras da pergunta — ignorado.")
+            return ("", "")
         if content:
             extracted = extract_relevant_section(content, command)
             log.info(f"✅ [VAULT] Contexto injetado ({len(extracted)} chars) de: {best_file}")
