@@ -7,7 +7,7 @@ on:
     branches: [main, DEV]
 
 jobs:
-  backend:
+  lint:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -17,14 +17,28 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
-      - name: Instalar dependências de sistema (PyAudio)
-        run: sudo apt-get update && sudo apt-get install -y portaudio19-dev
-      - run: pip install -r requirements.txt
       # Versao fixa: os defaults do ruff mudam entre releases e quebram o CI sozinhos.
       - run: pip install ruff==0.16.8
       - run: ruff check .
       # TUI (pasta frontend/ na raiz) herda as regras do backend/pyproject.toml
       - run: ruff check ../frontend
-      - run: python -m compileall . ../frontend
-      # pytest segue desligado: 11 testes de test_work_macros_spotify.py falham antes desta mudança.
-      # - run: pytest
+      - run: python -m compileall -q . ../frontend
+
+  tests:
+    # Windows: os testes usam winreg, pycaw, Win32 e o mesmo Python do instalador.
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      # -n auto: pytest-xdist reparte a suíte (a TUI sozinha leva minutos em série)
+      - run: python -m pytest tests -q -n auto

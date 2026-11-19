@@ -1,0 +1,5 @@
+# Ferramentas de desenvolvimento/CI (não entram no instalador).
+# pip install -r requirements.txt -r requirements-dev.txt
+pytest
+pytest-xdist                # python -m pytest tests -n auto (paralelo)
+ruff==0.16.8                # versão fixa: os defaults mudam entre releases e quebram o CI

@@ -106,7 +106,14 @@ class TestRealSkillsKeywords(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        intent.manager.ensure_loaded()
+        # SkillManager próprio: outros testes no mesmo worker (xdist) trocam manager.skills
+        from core.skill_loader import SkillManager
+        cls._patch = patch.object(intent, "manager", SkillManager())
+        cls._patch.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._patch.stop()
 
     def test_all_skills_declare_keywords(self):
         missing = [i for i, m in intent.manager.skills.items() if not getattr(m, "KEYWORDS", None)]
