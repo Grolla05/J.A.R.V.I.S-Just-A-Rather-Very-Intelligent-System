@@ -16,6 +16,11 @@ def _fake_client_factory():
 
 
 class TestQueryOllamaTimeout(unittest.TestCase):
+    def setUp(self):
+        # #61: o Client é reaproveitado por timeout; cada teste cria o seu
+        llm._clients.clear()
+        self.addCleanup(llm._clients.clear)
+
     def test_custom_timeout_forwarded(self):
         Client, _ = _fake_client_factory()
         with patch("ollama.Client", Client):

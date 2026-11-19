@@ -87,8 +87,8 @@ def delete(name):
     if kr is not None:
         try:
             kr.delete_password(SERVICE, name)
-        except Exception:
-            pass
+        except Exception as e:  # não existia no cofre
+            log.debug(f"Cofre: '{name}' não removido do keyring: {e}")
     try:
         with _lock:
             data = _read_fallback()

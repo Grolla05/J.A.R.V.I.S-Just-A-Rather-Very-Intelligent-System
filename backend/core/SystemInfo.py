@@ -202,8 +202,8 @@ class SystemInfo:
                     "plugged": battery.power_plugged,
                     "time_left": time_left
                 }
-        except Exception:
-            pass
+        except Exception as e:
+            log.debug(f"Leitura da bateria falhou: {e}")
         return {"percent": 100, "plugged": True, "time_left": "Desktop"}
     # ----------------------------------------------------
 
@@ -226,7 +226,8 @@ class SystemInfo:
                 "total": self._get_size(ram.total),
                 "used_gb": round(ram.used / (1024 ** 3), 2) # Adicionado para compatibilidade
             }
-        except:
+        except Exception as e:
+            log.debug(f"Leitura de RAM falhou: {e}")
             return {"percent": 0, "used": "0B", "total": "0B", "used_gb": 0}
 
     def get_gpu_info(self):
@@ -244,8 +245,8 @@ class SystemInfo:
                     "memory_total": f"{gpu.memoryTotal}MB",
                     "memory_used": f"{gpu.memoryUsed}MB"
                 }
-        except:
-            pass
+        except Exception as e:
+            log.debug(f"Leitura da GPU falhou: {e}")
         return {"name": "Integrada/N/A", "load": 0, "temp": 0}
 
     def get_dashboard_details(self, top=5):
@@ -343,8 +344,9 @@ class SystemInfo:
                 "read_speed": self._get_size(read_per_sec) + "/s",
                 "write_speed": self._get_size(write_per_sec) + "/s"
             }
-        except:
-             return {"read_speed": "0B/s", "write_speed": "0B/s"}
+        except Exception as e:
+            log.debug(f"Leitura de disco falhou: {e}")
+            return {"read_speed": "0B/s", "write_speed": "0B/s"}
 
     def get_ping(self, host="8.8.8.8"):
         """Verifica latência via Ping ICMP (Windows) para o Google DNS."""
@@ -425,7 +427,8 @@ class SystemInfo:
             elif resource_type == 'memory':
                 # Memória é instantânea, a lógica anterior funciona bem
                 def key_func(p):
-                    return p.info['memory_percent']
+                    # AccessDenied faz o psutil devolver None: vai para o fim da lista
+                    return p.info.get('memory_percent') or 0.0
                 attrs = ['pid', 'name', 'memory_percent']
                 
                 processes = sorted(
@@ -436,7 +439,7 @@ class SystemInfo:
 
                 result = []
                 for proc in processes:
-                    result.append(f"{proc.info['name']} ({proc.info['memory_percent']:.1f}%)")
+                    result.append(f"{proc.info['name']} ({proc.info.get('memory_percent') or 0.0:.1f}%)")
                     
                 return result
             

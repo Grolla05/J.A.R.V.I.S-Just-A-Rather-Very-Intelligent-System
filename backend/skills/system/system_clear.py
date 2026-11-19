@@ -51,7 +51,8 @@ def get_installed_apps():
             data = raw if isinstance(raw, list) else [raw]
             for item in data:
                 apps[item.get('Name', '').lower().strip()] = item.get('Name') # Guardamos o Nome Real como valor
-    except: pass
+    except Exception as e:
+        log.debug(f"SYSTEM_CLEAR: lista de apps do Windows indisponível: {e}")
 
     # 2. Filesystem (LNKs) - Fallback
     paths = [
@@ -85,7 +86,9 @@ def empty_recycle_bin():
         flags = 1 | 2 | 4 
         ctypes.windll.shell32.SHEmptyRecycleBinW(None, None, flags)
         return "Lixeira esvaziada. Detritos eliminados."
-    except: return "A lixeira já parece estar limpa."
+    except Exception as e:
+        log.debug(f"SYSTEM_CLEAR: lixeira: {e}")
+        return "A lixeira já parece estar limpa."
 
 def clean_temp_files():
     temp_path = os.environ.get('TEMP')
@@ -96,7 +99,8 @@ def clean_temp_files():
             if os.path.isfile(f): os.remove(f)
             elif os.path.isdir(f): shutil.rmtree(f)
             count += 1
-        except: pass
+        except Exception as e:  # arquivo em uso: segue para o próximo
+            log.debug(f"SYSTEM_CLEAR: não removi {f}: {e}")
     return f"Limpeza de cache concluída. {count} itens removidos."
 
 def uninstall_app(target_raw):

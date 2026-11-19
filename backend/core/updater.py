@@ -84,8 +84,8 @@ def is_enabled():
             with reg.OpenKey(reg.HKEY_CURRENT_USER, REG_KEY) as key:
                 value, _kind = reg.QueryValueEx(key, REG_VALUE)
                 return bool(value)
-        except OSError:
-            pass
+        except OSError as e:  # chave ausente: vale o padrão do .env
+            log.debug(f"AutoUpdate sem valor no registro ({e}); usando AUTO_UPDATE.")
     return bool(settings.AUTO_UPDATE)
 
 

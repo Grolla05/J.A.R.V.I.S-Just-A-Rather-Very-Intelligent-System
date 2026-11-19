@@ -1627,4 +1627,4 @@ class _TuiLogHandler(logging.Handler):
             severity = "error" if record.levelno >= logging.ERROR else "warning"
             self._app._call_ui(lambda: self._app.notify(msg, severity=severity))
         except Exception:
-            pass
+            pass  # handler de log: logar aqui entraria em recursão

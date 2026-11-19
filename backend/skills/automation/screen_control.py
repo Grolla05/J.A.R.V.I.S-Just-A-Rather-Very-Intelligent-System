@@ -110,7 +110,9 @@ def _try_wmi_brightness(target_percent):
         cmd = f"powershell -Command \"(Get-CimInstance -Namespace root/wmi -ClassName WmiMonitorBrightnessMethods).WmiSetBrightness(1, {target_percent})\""
         res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
         return res.returncode == 0
-    except: return False
+    except Exception as e:
+        log.debug(f"SCREEN_CONTROL: brilho via WMI falhou: {e}")
+        return False
 
 LAST_BRIGHTNESS = 100
 

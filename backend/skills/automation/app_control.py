@@ -81,7 +81,8 @@ def get_installed_apps():
             data = raw if isinstance(raw, list) else [raw]
             for item in data:
                 apps[item.get('Name', '').lower().strip()] = item.get('AppID')
-    except: pass
+    except Exception as e:
+        log.debug(f"APP_CONTROL: lista de apps do Windows indisponível: {e}")
 
     # 2. Filesystem (LNKs)
     paths = [

@@ -1,4 +1,5 @@
 import os
+import threading
 import time
 
 from .config import settings
@@ -12,14 +13,23 @@ class LLMError(Exception):
     grava como resposta do assistente (voltaria ao modelo no histórico)."""
 
 
+_clients = {}  # timeout -> ollama.Client (um por timeout, reaproveitado entre chamadas)
+_clients_lock = threading.Lock()
+
+
 def _get_client(timeout=None):
-    """Constrói o Client Ollama com host normalizado. Centraliza para evitar
-    duplicação entre query_ollama / query_ollama_stream / warm_up_ollama."""
-    from ollama import Client
-    host = settings.OLLAMA_HOST
-    if not host.startswith("http"):
-        host = f"http://{host}"
-    return Client(host=host, timeout=timeout or 120)
+    """Client Ollama com host normalizado, reaproveitado por timeout (o Client
+    guarda o pool de conexões HTTP). Centraliza query_ollama / stream / warm-up."""
+    timeout = timeout or 120
+    with _clients_lock:
+        client = _clients.get(timeout)
+        if client is None:
+            from ollama import Client
+            host = settings.OLLAMA_HOST
+            if not host.startswith("http"):
+                host = f"http://{host}"
+            client = _clients[timeout] = Client(host=host, timeout=timeout)
+        return client
 
 
 # Fica True após o Ollama recusar num_gpu (VRAM insuficiente): a partir daí a opção
