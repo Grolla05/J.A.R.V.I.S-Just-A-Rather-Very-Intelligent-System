@@ -333,6 +333,34 @@ class TestCheckAvailable(unittest.TestCase):
         self.assertEqual(sleeps, [15, 45])
 
 
+class TestSnooze(TestCheckAvailable):
+    """#50: Esc na tela de atualização adia a versão por 24 h (TUI e logon)."""
+
+    def test_snoozed_version_is_not_offered(self):
+        updater.snooze("1.2.0", now=1000)
+        self.assertIsNone(updater.check_available(fake_get(release()), now=1001, use_cache=False))
+
+    def test_snooze_expires_after_24h(self):
+        updater.snooze("1.2.0", now=1000)
+        info = updater.check_available(fake_get(release()), now=1000 + updater.SNOOZE_S + 1, use_cache=False)
+        self.assertEqual(info["version"], "1.2.0")
+
+    def test_newer_version_ignores_snooze(self):
+        updater.snooze("1.2.0", now=1000)
+        info = updater.check_available(fake_get(release(tag="v1.3.0")), now=1001, use_cache=False)
+        self.assertEqual(info["version"], "1.3.0")
+
+    def test_explicit_install_clears_snooze(self):
+        updater.snooze("1.2.0", now=1000)
+        updater.request_install(lambda: True, MagicMock())
+        self.assertFalse(updater.is_snoozed("1.2.0", now=1001))
+
+    def test_broken_snooze_file_is_ignored(self):
+        updater.updates_dir().mkdir(parents=True, exist_ok=True)
+        (updater.updates_dir() / updater.SNOOZE_NAME).write_text("{oops", encoding="utf-8")
+        self.assertFalse(updater.is_snoozed("1.2.0", now=1))
+
+
 class TestRequestInstall(unittest.TestCase):
     def test_signal_reaches_running_agent(self):
         start = MagicMock()

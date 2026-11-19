@@ -1,4 +1,5 @@
 import os
+import threading
 import time
 
 from .config import settings
@@ -7,14 +8,28 @@ from .logger import log
 os.environ["OLLAMA_HOST"] = settings.OLLAMA_HOST
 
 
+class LLMError(Exception):
+    """O Ollama falhou durante o stream. Quem consome mostra o erro, mas não o
+    grava como resposta do assistente (voltaria ao modelo no histórico)."""
+
+
+_clients = {}  # timeout -> ollama.Client (um por timeout, reaproveitado entre chamadas)
+_clients_lock = threading.Lock()
+
+
 def _get_client(timeout=None):
-    """Constrói o Client Ollama com host normalizado. Centraliza para evitar
-    duplicação entre query_ollama / query_ollama_stream / warm_up_ollama."""
-    from ollama import Client
-    host = settings.OLLAMA_HOST
-    if not host.startswith("http"):
-        host = f"http://{host}"
-    return Client(host=host, timeout=timeout or 120)
+    """Client Ollama com host normalizado, reaproveitado por timeout (o Client
+    guarda o pool de conexões HTTP). Centraliza query_ollama / stream / warm-up."""
+    timeout = timeout or 120
+    with _clients_lock:
+        client = _clients.get(timeout)
+        if client is None:
+            from ollama import Client
+            host = settings.OLLAMA_HOST
+            if not host.startswith("http"):
+                host = f"http://{host}"
+            client = _clients[timeout] = Client(host=host, timeout=timeout)
+        return client
 
 
 # Fica True após o Ollama recusar num_gpu (VRAM insuficiente): a partir daí a opção
@@ -84,7 +99,8 @@ def query_ollama(messages, format=None, temperature=0.7, timeout=None, model=Non
 
 def query_ollama_stream(messages, temperature=0.7, timeout=None, model=None, keep_alive=None):
     """Centraliza chamadas streaming ao Ollama.
-    model/keep_alive: override explícito (ex: modelo de visão + keep_alive curto)."""
+    model/keep_alive: override explícito (ex: modelo de visão + keep_alive curto).
+    Falha (antes ou no meio do stream) levanta `LLMError` — nunca vira texto."""
     try:
         client = _get_client(timeout)
         # O request só sai na 1ª iteração do stream: erro de VRAM aparece lá. Se nada
@@ -110,7 +126,7 @@ def query_ollama_stream(messages, temperature=0.7, timeout=None, model=None, kee
                 raise
     except Exception as e:
         log.error(f"Erro na comunicação streaming com Ollama: {e}")
-        yield "Erro de processamento neural."
+        raise LLMError(str(e) or e.__class__.__name__) from e
 
 
 def warm_up_ollama():

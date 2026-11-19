@@ -1,5 +1,7 @@
 """Utilitários compartilhados do core."""
+import re
 import time
+import unicodedata
 from collections import OrderedDict
 
 
@@ -39,3 +41,19 @@ class TTLCache:
 
     def clear(self):
         self._store.clear()
+
+
+def plain(text):
+    """Minúsculas e sem acentos (NFKD) — base para casar palavras-chave."""
+    text = unicodedata.normalize("NFKD", (text or "").lower())
+    return "".join(c for c in text if not unicodedata.combining(c))
+
+
+def word_regex(words):
+    """Regex que casa qualquer termo de `words` como palavra inteira (sobre `plain`).
+
+    Termos mais longos primeiro, para "quem sou" vencer "quem". Ex.: "age" não
+    casa com "agenda", "meta" não casa com "metade".
+    """
+    terms = sorted({plain(w) for w in words if w}, key=len, reverse=True)
+    return re.compile(r"\b(?:" + "|".join(re.escape(t) for t in terms) + r")\b")

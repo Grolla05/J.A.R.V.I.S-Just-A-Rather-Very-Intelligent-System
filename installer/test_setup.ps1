@@ -55,7 +55,7 @@ Confere (Test-Path $envReal) ".env nao foi criado em $envReal"
 import json, os, sys
 # cwd = app\backend (como no jarvis.cmd); ".." = app\, onde mora o pacote frontend
 sys.path[:0] = [os.getcwd(), os.path.dirname(os.getcwd())]
-import textual, ollama, faster_whisper, pyaudio, pycaw, psutil, mcp, edge_tts, pygame, pystray
+import textual, ollama, faster_whisper, pyaudio, pycaw, psutil, edge_tts, pygame, pystray
 import core.autostart, core.presence, core.hotkey, core.launcher
 from core.config import settings as s
 import frontend.app

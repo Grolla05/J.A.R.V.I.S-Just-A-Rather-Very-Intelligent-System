@@ -1,24 +1,49 @@
+"""Pacote `core`. Importar é leve: banco, skills e SystemInfo só carregam no
+primeiro acesso (`from core import db` continua funcionando — PEP 562)."""
+import importlib
 import logging
 
 from .config import settings
-from .database import db
 from .logger import log
-from .obsidian import get_vault_context, mcp_client, obsidian
+
+# Leve (REST via requests). Fica direto para `core.obsidian` continuar sendo a
+# instância ObsidianClient, e não o submódulo.
+from .obsidian import get_vault_context, obsidian
 from .prompts import load_prompt
-from .skill_loader import manager
-from .SystemInfo import SystemInfo
 
 # --- 1. Filtro de Poluição (Noise Reduction) ---
 # Silencia bibliotecas que "falam demais" no console
 LIBRARIES_TO_SILENCE = [
-    "urllib3", 
-    "asyncio", 
-    "multipart", 
+    "urllib3",
+    "asyncio",
+    "multipart",
     "httpcore",
-    "httpx" # Ollama usa muito isso
+    "httpx",  # Ollama usa muito isso
 ]
 
 for lib in LIBRARIES_TO_SILENCE:
     logging.getLogger(lib).setLevel(logging.WARNING)
 
-__all__ = ["settings", "log", "db", "obsidian", "mcp_client", "get_vault_context", "manager", "SystemInfo", "load_prompt"]
+# Nome → (submódulo, atributo). Carregados só quando alguém pedir.
+_LAZY = {
+    "db": (".database", "db"),                  # abre/migra o SQLite
+    "manager": (".skill_loader", "manager"),    # skills carregam no 1º uso de manager.skills
+    "SystemInfo": (".SystemInfo", "SystemInfo"),
+}
+
+
+def __getattr__(name):
+    target = _LAZY.get(name)
+    if target is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module_name, attr = target
+    value = getattr(importlib.import_module(module_name, __name__), attr)
+    globals()[name] = value  # próximos acessos não passam mais por aqui
+    return value
+
+
+def __dir__():
+    return sorted(set(globals()) | set(_LAZY))
+
+
+__all__ = ["settings", "log", "db", "obsidian", "get_vault_context", "manager", "SystemInfo", "load_prompt"]

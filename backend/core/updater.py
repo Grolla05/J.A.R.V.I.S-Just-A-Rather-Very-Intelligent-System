@@ -7,7 +7,7 @@ Duas etapas:
   mostra a tela "ATUALIZAÇÃO DISPONÍVEL!!" (frontend/screens/update.py). O
   resultado fica em cache (`updates/available.json`, CACHE_TTL_S) para o Win+J
   não bater no GitHub toda vez.
-- `install_latest()`: qualquer tecla nessa tela pede ao agente (evento
+- `install_latest()`: Enter nessa tela pede ao agente (evento
   `presence.INSTALL_UPDATE`, ou um agente novo com `--install-update`) que
   instale. Ele espera a TUI fechar, baixa o `JARVIS-Setup.exe`, confere o
   SHA-256 publicado pelo GitHub (`digest` do asset) e roda o setup em silêncio
@@ -38,6 +38,8 @@ MAX_ASSET_BYTES = 1024 ** 3
 CHUNK = 1024 * 1024
 MARKER_NAME = "pending_update.json"
 CACHE_NAME = "available.json"
+SNOOZE_NAME = "snooze.json"   # Esc na tela de atualização: versão adiada
+SNOOZE_S = 24 * 3600
 CACHE_TTL_S = 6 * 3600  # Win+J/bandeja reusam a última consulta por 6 h
 QUICK_TIMEOUT = 5       # consulta da TUI: não pode segurar a tela
 TUI_CLOSE_WAIT_S = 60   # install_latest espera a TUI fechar (ela trava o runtime)
@@ -82,8 +84,8 @@ def is_enabled():
             with reg.OpenKey(reg.HKEY_CURRENT_USER, REG_KEY) as key:
                 value, _kind = reg.QueryValueEx(key, REG_VALUE)
                 return bool(value)
-        except OSError:
-            pass
+        except OSError as e:  # chave ausente: vale o padrão do .env
+            log.debug(f"AutoUpdate sem valor no registro ({e}); usando AUTO_UPDATE.")
     return bool(settings.AUTO_UPDATE)
 
 
@@ -252,6 +254,42 @@ def _fetch_with_retries(get, delays, sleep, timeout=HTTP_TIMEOUT):
     return "offline", None
 
 
+def _snooze_path():
+    return updates_dir() / SNOOZE_NAME
+
+
+def snooze(version, now=None):
+    """Esc na tela de atualização: adia `version` por SNOOZE_S (TUI e logon).
+    Uma versão mais nova que a adiada aparece normalmente. Nunca levanta."""
+    now = time.time() if now is None else now
+    try:
+        updates_dir().mkdir(parents=True, exist_ok=True)
+        _snooze_path().write_text(json.dumps({"version": str(version), "until": now + SNOOZE_S}),
+                                  encoding="utf-8")
+        log.info(f"Atualização v{version} adiada por {SNOOZE_S // 3600} h.")
+        return True
+    except OSError as e:
+        log.debug(f"Adiamento da atualização não gravado: {e}")
+        return False
+
+
+def is_snoozed(version, now=None):
+    try:
+        data = json.loads(_snooze_path().read_text(encoding="utf-8"))
+        now = time.time() if now is None else now
+        return (isinstance(data, dict) and data.get("version") == str(version)
+                and now < float(data.get("until") or 0))
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def clear_snooze():
+    try:
+        _snooze_path().unlink(missing_ok=True)
+    except OSError as e:
+        log.debug(f"Adiamento da atualização não removido: {e}")
+
+
 def check_available(get=None, now=None, use_cache=True, retries=(), sleep=time.sleep):
     """{"version", "current"} quando o Release do GitHub é MAIS NOVO que o
     instalado (diferente mas mais velho não conta); senão None. Nunca levanta:
@@ -273,7 +311,12 @@ def check_available(get=None, now=None, use_cache=True, retries=(), sleep=time.s
                 return None
             latest = release["version"] if release else ""
             _write_cache(current, latest, now)
-        return {"version": latest, "current": current} if is_newer(latest, current) else None
+        if not is_newer(latest, current):
+            return None
+        if is_snoozed(latest, now):
+            log.debug(f"Atualização v{latest} adiada pelo usuário; não ofereço agora.")
+            return None
+        return {"version": latest, "current": current}
     except Exception as e:  # rede, disco, JSON: a tela simplesmente não aparece
         log.debug(f"Verificação de atualização falhou: {e}")
         return None
@@ -283,7 +326,7 @@ INSTALL_FLAG = "--install-update"  # agent.py: sobe só para instalar
 
 
 def request_install(signal=None, start_agent=None):
-    """TUI → agente (qualquer tecla na tela de atualização). Devolve 'agent'
+    """TUI → agente (Enter na tela de atualização). Devolve 'agent'
     (o agente rodando recebeu o sinal), 'spawned' (subiu um agente com
     INSTALL_FLAG) ou 'failed'. A TUI deve fechar logo depois."""
     if signal is None:
@@ -292,6 +335,7 @@ def request_install(signal=None, start_agent=None):
     if start_agent is None:
         from . import autostart
         start_agent = lambda: autostart.start_agent((INSTALL_FLAG,))  # noqa: E731
+    clear_snooze()  # pedido explícito vence um adiamento anterior
     try:
         if signal():
             return "agent"
@@ -303,7 +347,7 @@ def request_install(signal=None, start_agent=None):
 
 # ------------------------------------------------------------------ fluxo
 def install_latest(notify, tui_open, sleep, get=None, popen=None, wait_s=TUI_CLOSE_WAIT_S):
-    """Pedido da tela de atualização (qualquer tecla): espera a TUI fechar — o
+    """Pedido da tela de atualização (Enter): espera a TUI fechar — o
     python.exe dela trava o runtime que o setup apaga — e instala."""
     waited = 0
     while tui_open() and waited < wait_s:

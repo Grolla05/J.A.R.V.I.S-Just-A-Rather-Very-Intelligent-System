@@ -211,8 +211,8 @@ class TestContratoDaSkill(unittest.TestCase):
         self.assertTrue(callable(spotify_control.execute))
 
     def test_prompt_text_tem_dois_pontos(self):
-        """O bridge monta a descrição do card do frontend com
-        PROMPT_TEXT.split(':')[-1] — sem ':' o card fica ilegível."""
+        """PROMPT_TEXT segue o formato "INTENT: descrição" das outras skills,
+        que é como o classificador de intents (services/intent.py) as lista."""
         self.assertIn(":", spotify_control.PROMPT_TEXT)
 
     def test_execute_sem_client_id_nao_chama_a_api(self):

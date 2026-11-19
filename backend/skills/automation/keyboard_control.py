@@ -30,7 +30,8 @@ def get_active_window_title():
         buff = ctypes.create_unicode_buffer(length + 1)
         ctypes.windll.user32.GetWindowTextW(hwnd, buff, length + 1)
         return buff.value or "Janela Desconhecida"
-    except:
+    except Exception as e:
+        log.debug(f"KEYBOARD_CONTROL: janela em foco indisponível: {e}")
         return "Interface do Sistema"
 
 def get_clipboard_text():

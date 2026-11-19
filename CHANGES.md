@@ -2,6 +2,83 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+**Data:** 2026-11-19
+**Escopo:** Correção das 9 issues abertas com a tag `bug` (revisão geral, DEV @ 87f6671): #48, #49, #50, #53, #54, #55, #56, #59 e #61.
+
+### 1. `ShutdownScreen` para o timer ao sair (#59)
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `_finish()` para o timer antes de chamar `on_done` (cobre o Esc de novo); `_tick`/`_crt_tick` saem cedo se a tela já foi desmontada ou terminou. Fim do `NoMatches '#crt'` | `frontend/screens/shutdown.py` |
+
+### 2. `get_config` devolve o tipo que foi salvo (#55)
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | Coluna nova `config.is_json` (migração `PRAGMA table_info` + `ALTER TABLE`). String grava crua (`is_json=0`) e volta igual: `"123"`, `"true"`, `"null"` deixam de virar int/bool/None. O resto vai em JSON (`is_json=1`). Linhas antigas (`NULL`) mantêm o comportamento anterior | `backend/core/database.py` |
+| 2 | Trânsito grava lugar/índice como dict/list direto (sem `json.dumps` manual) | `backend/core/traffic.py` |
+
+### 3. Histórico do chat para a IA (#53)
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `ORDER BY id DESC` (o `timestamp` empatava pergunta e resposta do mesmo segundo); `with db.connection()` (a conexão fecha sempre); índice `(session_id, id)` | `backend/services/chat.py`, `backend/core/database.py` |
+| 2 | Memória configurável: `CHAT_HISTORY_TURNS` (padrão 10 turnos; antes 4) | `backend/core/config.py`, `env.example` |
+
+### 4. Erro do LLM não entra no histórico (#54)
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `query_ollama_stream` levanta `LLMError` em vez de emitir "Erro de processamento neural." como texto | `backend/core/llm.py` |
+| 2 | A TUI mostra o parcial + o erro na bolha, mas não grava a resposta nem registra insight; o placeholder "Sem resposta do modelo" também não vai para o banco. No Copilot por voz, fala uma frase curta de erro | `frontend/app.py` |
+| 3 | Respostas de erro gravadas por versões antigas são ignoradas ao montar o histórico | `backend/services/chat.py` |
+
+### 5. RAG do Obsidian pela API REST, sem MCP (#48)
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `get_vault_context` usa o `ObsidianClient` REST (`search_scored` + `get_file`), o mesmo plugin Local REST API e a mesma chave. Sai o subprocesso `uvx mcp-obsidian` por chamada (1 a 3 por mensagem); funciona na instalação limpa | `backend/core/obsidian.py` |
+| 2 | Removidos `ObsidianMCPClient`, `mcp_client`, `mcp_endpoint` e a dependência `mcp` | `backend/core/obsidian.py`, `backend/core/__init__.py`, `backend/requirements.txt`, `installer/build_runtime.ps1`, `installer/test_setup.ps1`, `backend/tests/_stubs.py` |
+| 3 | Obsidian fora do ar: aviso uma vez por sessão, depois só no log | `backend/core/obsidian.py` |
+
+### 6. "Sobre mim" só em pergunta pessoal (#49)
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | Palavras-chave do perfil casam como palavra inteira, sem acento (`core.utils.plain` / `word_regex`). Lista revista: saem `age`, `quem`, `meta`, `mora`, `curso`, `mouse`… e entram frases ("meu nome", "onde moro", "meu curso") | `backend/core/obsidian.py`, `backend/core/utils.py` |
+| 2 | Camada 2: a nota só entra se citar ao menos metade das palavras buscadas; `VAULT_MIN_SCORE` opcional; conversa fiada ("oi, tudo bem?") nem busca | `backend/core/obsidian.py`, `backend/core/config.py`, `env.example` |
+
+### 7. Tela de atualização: Enter instala, Esc adia (#50)
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | Só Enter instala; Esc adia aquela versão por 24 h; outras teclas não fazem nada; teclas nos primeiros 0,5 s são ignoradas (a tela pode abrir enquanto o usuário digita) | `frontend/screens/update.py`, `frontend/app.py`, `backend/main.py` |
+| 2 | `updater.snooze()` / `is_snoozed()` (`updates/snooze.json`): `check_available` não oferece a versão adiada, nem no logon. Versão mais nova aparece na hora; pedir a instalação limpa o adiamento | `backend/core/updater.py` |
+
+### 8. Skills e `import core` (#56)
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | Pasta de skills absoluta (`Path(__file__)`): `python backend/main.py` da raiz carrega as skills | `backend/core/skill_loader.py` |
+| 2 | INTENT duplicado gera aviso e mantém o primeiro (ordem alfabética, determinística) | `backend/core/skill_loader.py` |
+| 3 | Skills carregam na etapa do boot (`manager.ensure_loaded()`) ou no 1º uso, não no import. `import core` ficou leve: `db`, `manager` e `SystemInfo` são carregados sob demanda (PEP 562) | `backend/core/skill_loader.py`, `backend/core/__init__.py`, `backend/core/boot.py` |
+
+### 9. Ajustes menores (#61)
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | Veredito do juiz de processo: só a primeira palavra conta ("SIMPLESMENTE" não é "SIM"); cache em `TTLCache` (remove vencidas, máx. 256) | `backend/core/alerts.py` |
+| 2 | `get_top_processes('memory')` não quebra com `memory_percent` `None` | `backend/core/SystemInfo.py` |
+| 3 | `ollama.Client` reaproveitado por timeout | `backend/core/llm.py` |
+| 4 | 15 `except:` sem tipo viram `except Exception` + `log.debug`; `E722` voltou a valer no ruff. `try/except/pass` que escondiam falha ganharam `log.debug` | `backend/core/SystemInfo.py`, `backend/skills/**`, `backend/core/{secrets_store,updater}.py`, `backend/services/focus.py`, `backend/pyproject.toml` |
+| 5 | Comentários que ainda citavam PyWebView/bridge | `backend/core/database.py`, `backend/tests/test_spotify_control.py` |
+
+### Testes
+
+Novos: `test_chat_history.py`, `test_vault_keywords.py`, `test_skill_loader.py`, `test_systeminfo_top.py`. Ampliados: `test_database.py` (ida e volta de tipos, migração), `test_llm_options.py` (`LLMError`, reuso do Client), `test_tui_app.py` (erro do LLM fora do histórico, Enter/Esc/carência da tela de atualização), `test_updater.py` (adiamento), `test_tui_phase34.py` (timer do shutdown), `test_alerts_cache.py` (TTLCache, primeira palavra), `test_obsidian_endpoint.py` (RAG via REST).
+
+---
+
 **Data:** 2026-11-17
 **Escopo:** Segurança — correção dos 5 Security Advisories privados abertos pela revisão geral (GHSA-8j53, GHSA-ph22, GHSA-48jx, GHSA-p7rm, GHSA-x47w) e da issue #47 (URL do Ollama duplicada em 7 skills).
 

@@ -25,6 +25,7 @@ from textual.worker import get_current_worker
 
 import core.state as state
 from core import db, log, settings
+from core.llm import LLMError
 from frontend.commands import (
     Command,
     dropped_paths,
@@ -65,6 +66,8 @@ from services import sessions
 
 MODES = ("chat", "copilot")
 STREAM_FLUSH_S = 0.05  # re-render do Markdown no máx. a cada 50 ms durante o stream
+NO_REPLY_TEXT = "_Sem resposta do modelo. O Ollama está rodando?_"
+LLM_FAILED_SPEECH = "O modelo não respondeu, Senhor. Verifique o Ollama."  # voz: nunca o parcial
 TELEMETRY_HISTORY = 40  # amostras guardadas p/ os sparklines (40 × 3 s = 2 min)
 NOTE_CONTEXT_MAX = 4000  # caracteres da nota do /vault que vão ao modelo
 REMINDER_INTERVAL = 30  # s entre checagens de lembretes (agenda + pedidos); a agenda tem cache próprio
@@ -143,7 +146,7 @@ class JarvisApp(App, inherit_bindings=False):
     busy = reactive(False, init=False)
 
     def __init__(self, stream_fn=None, start_services=True, voice=None, boot_fn=None, start_mode=None,
-                 quiet_boot=False, update_fn=None, install_fn=None):
+                 quiet_boot=False, update_fn=None, install_fn=None, snooze_fn=None):
         """`boot_fn(report)` (core.boot.run_boot) mostra a tela de boot antes da
         conversa; None (testes, `start_services=False`) pula direto pro chat.
         `start_mode="copilot"` (main.py --copilot, aberto pelo Win+J) entra no
@@ -151,12 +154,14 @@ class JarvisApp(App, inherit_bindings=False):
         --copilot) roda as checagens do boot em segundo plano, sem a tela de
         boot: a interface já abre pronta e só os problemas viram notificação.
         `update_fn()` (core.updater.check_available) roda numa thread depois do
-        boot; devolvendo {"version", "current"} abre a UpdateScreen. Qualquer
-        tecla chama `install_fn()` (core.updater.request_install; None = prévia,
-        não instala) e, se o pedido saiu, a TUI fecha para o setup rodar."""
+        boot; devolvendo {"version", "current"} abre a UpdateScreen. Enter
+        chama `install_fn()` (core.updater.request_install; None = prévia,
+        não instala) e, se o pedido saiu, a TUI fecha para o setup rodar. Esc
+        chama `snooze_fn(version)` (core.updater.snooze: adia 24 h)."""
         super().__init__()
         self._update_fn = update_fn
         self._install_fn = install_fn
+        self._snooze_fn = snooze_fn
         self._quiet_boot = quiet_boot
         self._start_mode = start_mode if start_mode in MODES else None
         self._presence_stop = threading.Event()  # encerra a escuta dos sinais do agente
@@ -271,9 +276,18 @@ class JarvisApp(App, inherit_bindings=False):
         if self._shutting_down or isinstance(self.screen, UpdateScreen):
             return
         log.info(f"Atualização disponível: v{info['current']} → v{info['version']}.")
-        self.push_screen(UpdateScreen(info["current"], info["version"]), self._update_chosen)
+        self.push_screen(UpdateScreen(info["current"], info["version"]),
+                         lambda proceed: self._update_chosen(proceed, info["version"]))
 
-    def _update_chosen(self, _proceed=True):
+    def _update_chosen(self, proceed=True, version=""):
+        if not proceed:
+            if self._snooze_fn is not None:
+                try:
+                    self._snooze_fn(version)
+                except Exception as e:
+                    log.debug(f"Adiamento da atualização falhou: {e}")
+            self.notify(f"Atualização v{version} adiada por 24 h.", title="Atualização")
+            return
         if self._install_fn is None:
             self.notify("Prévia da tela de atualização: nada foi instalado.", title="Atualização")
             return
@@ -1289,15 +1303,23 @@ class JarvisApp(App, inherit_bindings=False):
 
             if full.strip() == "PROTOCOL_SHUTDOWN":
                 return "PROTOCOL_SHUTDOWN"
-            if not full.strip():
-                full = "_Sem resposta do modelo. O Ollama está rodando?_"
-            self.call_from_thread(reply.set_text, full)
+            empty = not full.strip()
+            # Placeholder só na bolha: não é resposta e não vai para o histórico
+            self.call_from_thread(reply.set_text, NO_REPLY_TEXT if empty else full)
             if skill:
                 self.call_from_thread(reply.set_meta, f"{base_meta} · ■ [{skill[0]}] ✓")
                 self._finish_skill_turn("ok", full)
+            if empty:
+                return ""
             db.log_interaction("assistant", full, session_id, mode=mode)
             if not skill and not force_chat and not image:
                 self._maybe_capture_insight(text, full)
+        except LLMError as e:
+            # Falha do modelo (#54): mostra o parcial + o erro, mas não grava no
+            # histórico nem vira insight — senão volta ao modelo como resposta.
+            shown = (full.rstrip() + "\n\n") if full.strip() else ""
+            self.call_from_thread(reply.set_text, f"{shown}**Erro:** o modelo não respondeu (`{e}`).")
+            full = LLM_FAILED_SPEECH if on_output is not None else ""
         except Exception as e:
             log.error(f"Erro no stream do chat: {e}")
             self.call_from_thread(reply.set_text, f"**Erro:** `{e}`")
@@ -1605,4 +1627,4 @@ class _TuiLogHandler(logging.Handler):
             severity = "error" if record.levelno >= logging.ERROR else "warning"
             self._app._call_ui(lambda: self._app.notify(msg, severity=severity))
         except Exception:
-            pass
+            pass  # handler de log: logar aqui entraria em recursão

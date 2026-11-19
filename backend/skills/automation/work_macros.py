@@ -46,7 +46,8 @@ def check_internet():
     try:
         requests.get("https://www.google.com", timeout=3)
         return True
-    except:
+    except Exception as e:
+        log.debug(f"WORK_MACROS: sem internet ({e})")
         return False
 
 def _start_playlist(uri):

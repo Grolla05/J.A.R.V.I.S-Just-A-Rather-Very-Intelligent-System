@@ -1,6 +1,7 @@
 import os
 import sys
 from pathlib import Path
+from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -53,6 +54,15 @@ def _env_int(name, default):
     """Inteiro do .env; ausente/inválido -> default."""
     raw = os.getenv(name, "").strip()
     return int(raw) if raw.lstrip("-").isdigit() else default
+
+
+def _env_float(name, default):
+    """Número (aceita vírgula) do .env; ausente/inválido -> default."""
+    raw = os.getenv(name, "").strip().replace(",", ".")
+    try:
+        return float(raw) if raw else default
+    except ValueError:
+        return default
 
 
 def _optional_int(name):
@@ -122,6 +132,9 @@ class Settings:
     # --- Configurações do Obsidian (Memória de Longo Prazo) ---
     OBSIDIAN_HOST: str = os.getenv("OBSIDIAN_HOST") or "http://127.0.0.1:27123"
     OBSIDIAN_API_KEY: str = os.getenv("OBSIDIAN_API_KEY", "")
+    # Score mínimo da busca do vault para injetar a nota no chat (vazio = sem corte;
+    # o filtro por palavras da pergunta continua valendo).
+    VAULT_MIN_SCORE: Optional[float] = _env_float("VAULT_MIN_SCORE", None)
 
     # --- Configurações do Spotify (Web API — OAuth PKCE) ---
     # PKCE não usa client_secret: o único segredo em disco é o refresh token.
@@ -187,6 +200,7 @@ class Settings:
                         or "Grolla05/J.A.R.V.I.S-Just-A-Rather-Very-Intelligent-System")
 
     # --- Pomodoro / Não Perturbe (services/focus.py, /focus e skill FOCUS_MODE) ---
+    CHAT_HISTORY_TURNS: int = _env_int("CHAT_HISTORY_TURNS", 10)  # turnos (pergunta+resposta) de memória do chat
     POMODORO_FOCUS_MIN: int = _env_int("POMODORO_FOCUS_MIN", 25)
     POMODORO_SHORT_BREAK_MIN: int = _env_int("POMODORO_SHORT_BREAK_MIN", 5)
     POMODORO_LONG_BREAK_MIN: int = _env_int("POMODORO_LONG_BREAK_MIN", 15)

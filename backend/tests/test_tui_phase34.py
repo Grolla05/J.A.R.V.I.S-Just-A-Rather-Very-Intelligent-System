@@ -407,15 +407,17 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
             self.assertEqual(str(info.render()), "microfone 1")
 
     async def test_quit_plays_crt_then_exits(self):
+        import frontend.screens.shutdown as shutdown
         app = self._app()
         async with app.run_test(size=(80, 24)) as pilot:
-            with patch.object(app, "exit") as exit_:
+            # Linhas lentas (1 s cada): mesmo com a máquina carregada, a pausa do
+            # teste não alcança o fim da animação antes do assert (era intermitente).
+            with patch.object(app, "exit") as exit_, patch.object(shutdown, "LINE_S", 1.0):
                 app.main_screen.query_one("#prompt").value = "/quit"
                 await pilot.press("enter")
-                await pilot.pause(0.02)
-                self.assertIsInstance(app.screen, tui_app.ShutdownScreen)
+                await self._wait(pilot, lambda: isinstance(app.screen, tui_app.ShutdownScreen))
                 exit_.assert_not_called()  # ainda animando
-                await self._wait(pilot, lambda: exit_.called)
+                await self._wait(pilot, lambda: exit_.called, timeout=20.0)
                 self.assertTrue(app.screen.query_one("#crt").display)
 
     async def test_escape_twice_skips_animation(self):
@@ -428,6 +430,20 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
                 await pilot.press("escape")
                 await pilot.pause(0.05)
                 exit_.assert_called()
+
+    async def test_skip_stops_shutdown_timer(self):
+        # #59: depois de sair, o timer não pode seguir consultando `#crt`.
+        app = self._app()
+        async with app.run_test(size=(80, 24)) as pilot:
+            with patch.object(app, "exit"):
+                await pilot.press("escape")
+                await self._wait(pilot, lambda: isinstance(app.screen, tui_app.ShutdownScreen))
+                screen = app.screen
+                await pilot.press("escape")
+                step = screen._step
+                await pilot.pause(0.5)
+                self.assertTrue(screen._finished)
+                self.assertEqual(screen._step, step)  # nenhum tick depois do fim
 
     async def test_escape_while_busy_only_stops_stream(self):
         app = self._app()

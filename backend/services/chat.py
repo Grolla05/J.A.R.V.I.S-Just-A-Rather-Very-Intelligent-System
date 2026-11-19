@@ -5,43 +5,50 @@ from core.llm import query_ollama, query_ollama_stream
 from core.logger import log
 from core.prompts import load_prompt
 
+# Texto que versões antigas gravavam no histórico quando o Ollama falhava (#54).
+# Linhas assim nunca voltam ao modelo.
+LEGACY_ERROR_REPLY = "Erro de processamento neural."
+
 SYSTEM_PROMPT = {
     'role': 'system',
     'content': load_prompt("system_prompt.md")
 }
 
 
-def get_session_history_for_ai(session_id, limit=8):
+def get_session_history_for_ai(session_id, limit=None):
     """Carrega o histórico recente do SQLite formatado para a IA.
-    Busca limit+1 e descarta a última entrada (user) pois é a mensagem
-    atual, já logada antes desta chamada, enviada separadamente no prompt."""
+
+    `limit` = linhas (padrão: `CHAT_HISTORY_TURNS` × 2). Busca limit+1 e descarta
+    a última entrada (user), que é a mensagem atual, já logada antes desta
+    chamada e enviada separadamente no prompt. Ordena por `id` (autoincremento):
+    o `timestamp` tem resolução de segundo e empata pergunta e resposta.
+    """
+    if limit is None:
+        limit = max(1, settings.CHAT_HISTORY_TURNS) * 2
     try:
-        conn = db._get_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT role, content FROM history
-            WHERE session_id = ?
-            ORDER BY timestamp DESC LIMIT ?
-        ''', (session_id, limit + 1))
-        rows = cursor.fetchall()
-        conn.close()
-
-        rows.reverse()
-        # Última entrada é a mensagem atual (logada antes desta chamada) — remover
-        if rows and rows[-1][0] == 'user':
-            rows = rows[:-1]
-
-        messages = []
-        for role, content in rows:
-            if content:
-                messages.append({
-                    'role': 'user' if role == 'user' else 'assistant',
-                    'content': content
-                })
-        return messages
+        with db.connection() as conn:
+            rows = conn.execute('''
+                SELECT role, content FROM history
+                WHERE session_id = ?
+                ORDER BY id DESC LIMIT ?
+            ''', (session_id, limit + 1)).fetchall()
     except Exception as e:
         log.error(f"Erro ao obter histórico do banco para a IA: {e}")
         return []
+
+    rows.reverse()
+    # Última entrada é a mensagem atual (logada antes desta chamada) — remover
+    if rows and rows[-1][0] == 'user':
+        rows = rows[:-1]
+
+    messages = []
+    for role, content in rows:
+        if content and not (role != 'user' and content.strip() == LEGACY_ERROR_REPLY):
+            messages.append({
+                'role': 'user' if role == 'user' else 'assistant',
+                'content': content
+            })
+    return messages
 
 
 # Modo da conversa → prompt de regras (voz = modo standalone, sem Markdown).
@@ -79,7 +86,7 @@ def build_messages(text, intent_type="CHAT", vault_context="", vault_filename=""
     if live_context:  # dados reais (agenda…) — services/live_context.py
         messages.append({'role': 'system', 'content': live_context})
 
-    return messages + get_session_history_for_ai(session_id, limit=8) + [{'role': 'user', 'content': text}]
+    return messages + get_session_history_for_ai(session_id) + [{'role': 'user', 'content': text}]
 
 
 def _temperature(intent_type, live_context):
@@ -93,11 +100,12 @@ def ask_local_ai(text, intent_type="CHAT", entity=None, vault_context="", vault_
     reply = query_ollama(messages, temperature=_temperature(intent_type, live_context))
     if reply:
         return reply.replace("*", "").replace("#", "").strip()
-    return "Erro de processamento neural."
+    return LEGACY_ERROR_REPLY
 
 
 def ask_local_ai_stream(text, intent_type="CHAT", entity=None, vault_context="", vault_filename="", session_id="default",
                         images=None, mode="chat", live_context=""):
+    """Stream da resposta. Falha do Ollama sobe como `core.llm.LLMError`."""
     if images:
         # Imagem anexada: roteia pro modelo de visão com um contexto mínimo e
         # dedicado. Moondream/LLaVA são modelos pequenos — empilhar a

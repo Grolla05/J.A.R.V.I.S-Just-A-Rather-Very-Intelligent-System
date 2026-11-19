@@ -39,6 +39,8 @@ class ShutdownScreen(Screen):
         self._timer = self.set_interval(LINE_S, self._tick)
 
     def _tick(self):
+        if not self.is_mounted or self._finished:
+            return
         lines = list(self.query(".shutdown-line"))
         if self._step < len(lines):
             label = lines[self._step]
@@ -61,6 +63,8 @@ class ShutdownScreen(Screen):
         self._step += 1
 
     def _crt_tick(self):
+        if not self.is_mounted or self._finished:
+            return
         crt = self.query_one("#crt", Static)
         if self._frame < len(self._frames):
             crt.update("\n".join(self._frames[self._frame]))
@@ -73,6 +77,11 @@ class ShutdownScreen(Screen):
     def _finish(self):
         if not self._finished:
             self._finished = True
+            # Para o timer antes de encerrar: o próximo tick consultaria
+            # `#crt` numa tela já desmontada (NoMatches).
+            timer = getattr(self, "_timer", None)
+            if timer is not None:
+                timer.stop()
             self._on_done()
 
     def action_now(self):

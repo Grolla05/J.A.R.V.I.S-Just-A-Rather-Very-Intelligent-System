@@ -70,8 +70,9 @@ def smooth_set_volume(target_vol):
             safe_val = max(0.0, min(1.0, current))
             try:
                 interface.SetMasterVolumeLevelScalar(safe_val, None)
-            except: 
-                break # Se falhar no meio, para o loop mas não crasha o app
+            except Exception as e:
+                log.debug(f"AUDIO_CONTROL: transição de volume interrompida: {e}")
+                break  # Se falhar no meio, para o loop mas não crasha o app
             time.sleep(0.02)
             
         interface.SetMasterVolumeLevelScalar(target, None)
@@ -90,7 +91,8 @@ def change_volume_relative_safe(delta):
         new_val = max(0.0, min(1.0, current + (delta / 100.0)))
         interface.SetMasterVolumeLevelScalar(new_val, None)
         return int(new_val * 100)
-    except:
+    except Exception as e:
+        log.debug(f"AUDIO_CONTROL: ajuste de volume falhou: {e}")
         return 0
 
 def toggle_mute_safe(force_mode=None):
@@ -103,14 +105,15 @@ def toggle_mute_safe(force_mode=None):
             interface.SetMute(not curr, None)
         elif curr != force_mode:
             interface.SetMute(force_mode, None)
-    except: pass
+    except Exception as e:
+        log.debug(f"AUDIO_CONTROL: mudo falhou: {e}")
 
 # --- EXECUÇÃO PRINCIPAL ---
 def execute(entity, command_text=""):
     try:
         CoInitialize()
-    except:
-        pass
+    except Exception as e:  # já inicializado nesta thread
+        log.debug(f"AUDIO_CONTROL: CoInitialize: {e}")
 
     if not command_text:
         return "Estou aguardando suas ordens, senhor."
@@ -170,6 +173,6 @@ def execute(entity, command_text=""):
         # LIMPEZA OBRIGATÓRIA
         try:
             CoUninitialize()
-        except:
-            pass
+        except Exception as e:
+            log.debug(f"AUDIO_CONTROL: CoUninitialize: {e}")
     return "O comando não consta em meus protocolos de áudio."

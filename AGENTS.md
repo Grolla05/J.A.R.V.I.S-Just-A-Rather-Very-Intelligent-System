@@ -67,7 +67,7 @@ J.A.R.V.I.S/
 │   │   ├── config.py        ← Settings Singleton (.env, paths)
 │   │   ├── database.py      ← DatabaseManager SQLite (6 tabelas)
 │   │   ├── logger.py        ← JarvisLogger (console fora da TUI, arquivo sempre)
-│   │   ├── obsidian.py      ← RAG sobre vault Obsidian via MCP
+│   │   ├── obsidian.py      ← RAG sobre vault Obsidian via API REST (plugin Local REST API)
 │   │   ├── oauth.py         ← OAuth Desktop genérico: PKCE + callback no loopback (Google Agenda, Spotify)
 │   │   ├── secrets_store.py ← Cofre de Credenciais do Windows (keyring) p/ tokens OAuth (Google e Spotify); fallback JSON
 │   │   ├── google_calendar.py ← Google Agenda (REST, só leitura): briefing, skill CALENDAR, is_busy(), upcoming() p/ os lembretes
@@ -86,7 +86,7 @@ J.A.R.V.I.S/
 │   │   ├── wt_profile.py    ← Fragmento do perfil JARVIS do Windows Terminal (logo na aba)
 │   │   ├── utils.py         ← TTLCache
 │   │   ├── selection.py     ← Copia a seleção (Ctrl+C; `restore=True` devolve o clipboard anterior) e lê/escreve o clipboard via Win32 (agente)
-│   │   ├── skill_loader.py  ← Auto-discovery de skills (plug-and-play)
+│   │   ├── skill_loader.py  ← Auto-discovery de skills (plug-and-play); carrega na etapa do boot (`manager.ensure_loaded()`), não no import
 │   │   └── SystemInfo.py    ← psutil — monitoramento de hardware
 │   ├── services/            ← Serviços cognitivos
 │   │   ├── brain.py         ← Roteador: execute_command (voz) / execute_command_stream (TUI, por modo)
@@ -192,7 +192,7 @@ J.A.R.V.I.S/
 - Ideias e brainstorms vão para `🧠 Brainstorms/J.A.R.V.I.S — Insights AAAA-MM.md` (`INSIGHTS_NOTE_PATH`), sempre por `obsidian.append_note()` (POST = append; `note_exists()` distingue 404 de Obsidian fora do ar). Com o Obsidian fora, `services/insights.py` enfileira em `insights_pending` e grava depois
 - RAG em 2 camadas via `core/obsidian.py`:
   - **Camada 1**: palavras de perfil pessoal (`_PROFILE_KEYWORDS`) → puxa `Sobre mim.md` inteiro
-  - **Camada 2**: busca semântica via MCP `obsidian_simple_search` → retorna arquivo de maior score
+  - **Camada 2**: busca no vault via REST (`obsidian.search_scored`) → retorna arquivo de maior score
 - Acesso: `from core.obsidian import obsidian, get_vault_context`
   - `obsidian.save_memory(key, value)` → salva nota no vault
   - `obsidian.get_memory(key)` → lê primeira linha útil da nota
@@ -286,8 +286,8 @@ O modo vai para `execute_command_stream(..., mode=)` e escolhe o prompt `mode_ch
 
 - Processo separado (pythonw, sem janela, bandeja via `pystray`) que segura `GLOBAL_HOTKEY` e sobe no logon (valor `JARVIS` em `HKCU\…\Run`, ligado pelo instalador, `/config` → SISTEMA ou bandeja). Fechar a TUI não o fecha
 - Fala com a TUI só por `core/presence.py` (arquivo `tui.json` + eventos nomeados) — nada de socket/HTTP. A TUI chama `register_tui` no `on_mount` (com serviços) e `unregister_tui` ao sair
-- Leve de propósito: registra um pacote `core` vazio em `sys.modules` para não rodar o `core/__init__` (banco, MCP, skills). Módulos usados por ele (`config`, `logger`, `hotkey`, `presence`, `autostart`, `launcher`, `window_utils`, `updater`) não podem importar o pacote `core` inteiro
-- Atualização automática (`core/updater.py`): `check_available()` (Release de `UPDATE_REPO` **mais novo** que `settings.VERSION`; nunca levanta; cache `updates/available.json` por `CACHE_TTL_S`) roda na abertura da TUI (`JarvisApp(update_fn=, install_fn=)`, depois do boot) e no agente com `--logon` (que então abre a TUI). Com versão nova a TUI mostra `UpdateScreen` (`frontend/screens/update.py`, orb parada); **qualquer tecla** chama `request_install()` → evento `presence.INSTALL_UPDATE` (agente → `install_latest`: espera a TUI fechar, baixa, confere o SHA-256 do `digest` e roda o setup `/VERYSILENT /SKIPOLLAMA /UPDATE`) ou, sem agente, sobe um com `--install-update`; a TUI fecha com o CRT. O agente se fecha e o `[Run]` com `Check: EhAtualizacao` o reabre. O setup fecha `python`/`pythonw` do runtime e apaga `{app}\app` e `{app}\runtime` antes de copiar: a versão nova substitui a antiga. Dev (sem `JARVIS_DATA_DIR`) nunca atualiza; `main.py --update-preview X` mostra a tela sem instalar. Toggle em `/config` → SISTEMA (registro `HKCU\Software\JARVIS\AutoUpdate`, padrão `AUTO_UPDATE`)
+- Leve de propósito: registra um pacote `core` vazio em `sys.modules` para não rodar o `core/__init__` (banco, skills). Módulos usados por ele (`config`, `logger`, `hotkey`, `presence`, `autostart`, `launcher`, `window_utils`, `updater`) não podem importar o pacote `core` inteiro
+- Atualização automática (`core/updater.py`): `check_available()` (Release de `UPDATE_REPO` **mais novo** que `settings.VERSION`; nunca levanta; cache `updates/available.json` por `CACHE_TTL_S`) roda na abertura da TUI (`JarvisApp(update_fn=, install_fn=, snooze_fn=)`, depois do boot) e no agente com `--logon` (que então abre a TUI). Com versão nova a TUI mostra `UpdateScreen` (`frontend/screens/update.py`, orb parada); **Enter** chama `request_install()` (Esc chama `snooze()`: adia aquela versão por 24 h em `updates/snooze.json`, inclusive no logon; teclas nos primeiros 0,5 s são ignoradas) → evento `presence.INSTALL_UPDATE` (agente → `install_latest`: espera a TUI fechar, baixa, confere o SHA-256 do `digest` e roda o setup `/VERYSILENT /SKIPOLLAMA /UPDATE`) ou, sem agente, sobe um com `--install-update`; a TUI fecha com o CRT. O agente se fecha e o `[Run]` com `Check: EhAtualizacao` o reabre. O setup fecha `python`/`pythonw` do runtime e apaga `{app}\app` e `{app}\runtime` antes de copiar: a versão nova substitui a antiga. Dev (sem `JARVIS_DATA_DIR`) nunca atualiza; `main.py --update-preview X` mostra a tela sem instalar. Toggle em `/config` → SISTEMA (registro `HKCU\Software\JARVIS\AutoUpdate`, padrão `AUTO_UPDATE`)
 
 ---
 

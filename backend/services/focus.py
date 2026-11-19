@@ -297,8 +297,8 @@ class FocusManager:
         if timer is not None:
             try:
                 timer.cancel()
-            except Exception:
-                pass
+            except Exception as e:
+                log.debug(f"Foco: timer não cancelado: {e}")
 
     def _say(self, text):
         try:

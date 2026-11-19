@@ -1,5 +1,6 @@
 """num_ctx / num_gpu opcionais em core.llm: default não muda nada; configurados vão em
 `options`; se o Ollama recusar num_gpu (VRAM), a opção é desativada e a chamada repete."""
+import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -101,9 +102,40 @@ class TestLlmOptions(unittest.TestCase):
         with patch.object(llm.settings, "OLLAMA_NUM_GPU", 99), \
              patch.object(llm.settings, "OLLAMA_NUM_CTX", None), \
              patch.object(llm, "_get_client", return_value=client):
-            out = list(llm.query_ollama_stream([{"role": "user", "content": "oi"}]))
-        self.assertEqual(out, ["parcial", "Erro de processamento neural."])
+            out = []
+            with self.assertRaises(llm.LLMError):
+                for chunk in llm.query_ollama_stream([{"role": "user", "content": "oi"}]):
+                    out.append(chunk)
+        self.assertEqual(out, ["parcial"])  # #54: o erro não vira texto da resposta
         self.assertEqual(client.chat.call_count, 1)
+
+    def test_stream_failure_before_output_raises(self):
+        client = MagicMock()
+        client.chat.side_effect = ConnectionError("ollama fora")
+        with patch.object(llm.settings, "OLLAMA_NUM_GPU", None), \
+             patch.object(llm, "_get_client", return_value=client):
+            with self.assertRaises(llm.LLMError):
+                list(llm.query_ollama_stream([{"role": "user", "content": "oi"}]))
+
+
+class TestClientReuse(unittest.TestCase):
+    """#61: um ollama.Client por timeout, reaproveitado entre chamadas."""
+
+    def setUp(self):
+        llm._clients.clear()
+        self.addCleanup(llm._clients.clear)
+
+    def test_same_timeout_reuses_client(self):
+        fake_ollama = MagicMock()
+        fake_ollama.Client.side_effect = lambda **kw: MagicMock(kw=kw)
+        with patch.dict(sys.modules, {"ollama": fake_ollama}):
+            a = llm._get_client()
+            b = llm._get_client(120)
+            c = llm._get_client(5)
+        self.assertIs(a, b)
+        self.assertIsNot(a, c)
+        self.assertEqual(fake_ollama.Client.call_count, 2)
+        self.assertEqual(c.kw["timeout"], 5)
 
 
 if __name__ == "__main__":

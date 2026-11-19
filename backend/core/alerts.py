@@ -1,13 +1,20 @@
 import re
-import time
 
 from core import pending
 from core.llm import query_ollama
 from core.logger import log
 from core.prompts import load_prompt
+from core.utils import TTLCache
 
-PROCESS_JUDGEMENT_CACHE = {}
-JUDGEMENT_TTL = 3600  # 1h — evita leak de memória em sessões longas
+JUDGEMENT_TTL = 3600  # 1h: o veredito do LLM sobre um processo vale por esse tempo
+# TTLCache remove as entradas vencidas e limita o tamanho (antes era um dict que só crescia)
+PROCESS_JUDGEMENT_CACHE = TTLCache(maxsize=256, ttl=JUDGEMENT_TTL)
+
+
+def _is_yes(decision):
+    """Veredito do LLM: só a PRIMEIRA palavra conta ("SIMPLESMENTE…" não é "SIM")."""
+    words = (decision or "").strip().upper().split()
+    return bool(words) and words[0].strip(".,!:;\"'*") == "SIM"
 
 
 def _close_process(name):
@@ -54,17 +61,15 @@ def process_system_alert(message, is_proactive=False):
             culprit_app = culprit_match.group(1).strip() if culprit_match else None
 
             if culprit_app:
-                cached = PROCESS_JUDGEMENT_CACHE.get(culprit_app)
-                if cached and time.time() < cached[1]:
-                    decision = cached[0]
-                else:
+                decision = PROCESS_JUDGEMENT_CACHE.get(culprit_app)
+                if decision is None:
                     judge_prompt = load_prompt("judge_process.md", culprit_app=culprit_app)
                     decision = query_ollama([{'role': 'user', 'content': judge_prompt}], temperature=0)
                     if decision:
                         decision = decision.strip().upper()
-                        PROCESS_JUDGEMENT_CACHE[culprit_app] = (decision, time.time() + JUDGEMENT_TTL)
+                        PROCESS_JUDGEMENT_CACHE.set(culprit_app, decision)
 
-                if decision and "SIM" in decision:
+                if _is_yes(decision):
                     log.info(f"🔇 [KERNEL]: Silenciando alerta para '{culprit_app}'")
                     return
 

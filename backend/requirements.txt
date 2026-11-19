@@ -46,7 +46,6 @@ keyring                     # Cofre de Credenciais do Windows (tokens OAuth das 
 pystray                     # Ícone na bandeja do agente residente (agent.py, Win+J)
 
 # --- MODEL CONTEXT PROTOCOL ---
-mcp                         # SDK oficial MCP (cliente para Obsidian MCP server)
 
 # --- LOGS COLORIDOS ---
 colorama                    # Cores nos logs do console (fora da TUI)

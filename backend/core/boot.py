@@ -24,7 +24,8 @@ def _check_database():
 
 def _check_skills():
     from .skill_loader import manager
-    skills = getattr(manager, "skills", {}) or {}
+    manager.ensure_loaded()  # as skills carregam aqui, na etapa visível do boot
+    skills = manager.skills or {}
     cats = {getattr(m, "CATEGORY", "?") for m in skills.values()}
     if not skills:
         return "warn", "nenhuma skill carregada"
