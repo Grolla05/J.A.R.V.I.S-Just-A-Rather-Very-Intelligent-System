@@ -56,7 +56,7 @@ class SystemInfo:
         self.brain_callback = brain_callback
         self.is_monitoring = False
         self.in_critical_state = False # Rastreia se o HUD está vermelho atualmente
-        self.critical_reasons = []     # Motivos do estado crítico (mostrados no topo da TUI)
+        self.critical_reasons = []     # Motivos do estado crítico (vão para o log)
 
         # --- CONFIGURAÇÃO DE LIMITES DE HARDWARE ---
         self.thresholds = dict(DEFAULT_THRESHOLDS)
@@ -486,7 +486,7 @@ class SystemInfo:
                 # Bateria crítica: só se não estiver carregando e abaixo do mínimo
                 is_battery_crit = (not bat['plugged'] and bat['percent'] <= self.thresholds['battery_min'])
 
-                # Estado Geral: Existe ALGUM problema agora? (motivos vão p/ o topo da TUI)
+                # Estado Geral: Existe ALGUM problema agora? (motivos vão p/ o log; o topo da TUI mostra só o selo)
                 reasons = critical_reasons(cpu, ram['percent'], gpu['temp'], disk, bat, self.thresholds)
                 self.critical_reasons = reasons
                 current_danger = bool(reasons)

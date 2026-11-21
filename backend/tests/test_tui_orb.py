@@ -64,15 +64,22 @@ class TestOrbGrid(unittest.TestCase):
         self.assertEqual(orb.to_halfblocks([["a"], ["a"]]), [[("█", "a", None)]])
 
 
-class TestCopilotHeroInfo(unittest.TestCase):
-    """Fim de stream com o app fechando chamava set_info sem o label montado
-    (NoMatches '#hero-info' derrubava o worker; falha intermitente no CI)."""
+class TestVoiceStageUnmounted(unittest.TestCase):
+    """Fim de stream com o app fechando chama a tela de voz já desmontada:
+    nada pode levantar NoMatches (derrubava o worker; falha intermitente no CI)."""
 
-    def test_set_info_without_mounted_label_keeps_values(self):
-        from frontend.widgets import CopilotHero
-        hero = CopilotHero(model="llama3.2", skills=3)
-        hero.set_info("gemma2:2b", 7)  # fora da árvore: não pode levantar
-        self.assertEqual(hero._info(), "gemma2:2b · 7 skills de automação")
+    def test_setters_without_mounted_children_do_not_raise(self):
+        from frontend.widgets import VoiceStage
+        stage = VoiceStage()
+        stage.set_level(0.8)
+        stage.set_state("pensando")
+        stage.set_transcript("abaixa o volume")
+        stage.set_awaiting(True)
+        self.assertAlmostEqual(stage.shown, 0.8)
+
+    def test_state_label_is_letter_spaced(self):
+        from frontend.widgets import VoiceStage
+        self.assertEqual(VoiceStage.state_label("ouvindo"), "O U V I N D O")
 
 
 if __name__ == "__main__":

@@ -19,7 +19,7 @@ Prefira o Windows Terminal.
 | Arquivo | Papel |
 |---|---|
 | `app.py` | `JarvisApp`: modos, atalhos, worker de stream, sessões, anexos, voz, alertas, telemetria, briefing automático, atualização |
-| `widgets.py` | `MessageView`, `PromptInput`, `StatusLine`, `JarvisOrb`, `PixelSprite`, `CopilotHero`, `VoiceBar`, `ConfirmScreen` (30 s) |
+| `widgets.py` | `MessageView`, `PromptInput`, `StatusLine`, `JarvisOrb`, `PixelSprite`, `Spectrum`, `VoiceStage`, `ConfirmScreen` (30 s) |
 | `commands.py` | Parser puro dos `/comandos` (fonte única: `COMMANDS`, `ALIASES`, `NEEDS_ARG`) e paleta (`palette_entries`, `filter_entries`) |
 | `orb.py` | Orb pixel-art 16×16 (quadros por estado e meio-bloco) — lógica pura |
 | `sprites.py` | Sprites 16-bit e efeitos (▰▱, sparkline, barras, CRT, scanline) — lógica pura |
@@ -32,7 +32,7 @@ Prefira o Windows Terminal.
 | Modo | Entra com | Como funciona |
 |---|---|---|
 | **Chat** | `Shift+Tab` | Texto em Markdown. Roda só skills de `productivity` e `web` (agenda, GitHub, trânsito, busca, briefing, foco, apresentação, leitura de tela), com o selo `[INTENT]`. Voz desligada |
-| **Copilot** | `Shift+Tab`, `Ctrl+T`, `Win+J` | Só voz: o input vira `VoiceBar` + orb (ouvindo → pensando → respondendo). Todas as skills; ações críticas pedem confirmação. A resposta é falada. Tudo em ciano |
+| **Copilot** | `Shift+Tab`, `Ctrl+T`, `Win+J` | Só voz: tela de voz inteira (`VoiceStage`: espectro, orb ouvindo → pensando → respondendo, fala no centro, VU em dB). Todas as skills; ações críticas pedem confirmação. A resposta é falada. Tudo em ciano |
 
 Comandos `/` só existem no Chat.
 
@@ -46,7 +46,7 @@ Comandos `/` só existem no Chat.
 | Cartuchos das skills | `/skills` | `screens/skills.py` |
 | Log de atividade + timeline do último turno | `/log` | `screens/log.py` |
 | Memória (vault do Obsidian) | `/vault` | `screens/vault.py` |
-| Configurações (VOZ, MICROFONE, ROTINAS, INTEGRAÇÕES, SISTEMA, MODELO, SOBRE) | `/config` | `screens/settings.py`, `screens/integrations_panel.py` |
+| Configurações (VOZ, MICROFONE, ROTINAS, INTEGRAÇÕES, SISTEMA, MODELO, SOBRE) | `/config` | `screens/settings.py`, `screens/settings_rows.py`, `screens/integrations_panel.py` |
 | Save slots (sessões) | `Ctrl+O`, `/sessions` | `screens/save_slots.py` |
 | Paleta de comandos | `Ctrl+K`, `/menu`, `/help` | `screens/palette.py` |
 | Desligamento CRT | `Esc`, `/quit` | `screens/shutdown.py` |

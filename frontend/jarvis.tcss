@@ -17,6 +17,10 @@ $j-ink: #001018;
 $j-white: #ffffff;
 $j-badge-ink: #0b1f3f;
 $j-neon-soft: #7ff2ff;
+$j-select: #12305e;
+$j-focus-help: #0f2142;
+$j-on-bg: #0f3d24;
+$j-on-fg: #86efac;
 /* Orb pixel-art do Copilot */
 $j-orb-core: #1e6fd9;
 $j-orb-shade: #1553a8;
@@ -194,21 +198,25 @@ StatusLine > .status--fail { color: $j-danger; }
     text-style: bold;
 }
 
-/* --- Copilot: orb + boas-vindas e barra de voz (no lugar do input) --- */
-#copilot-hero {
-    height: auto;
-    width: auto;
-    margin: 1 0 0 2;
-    padding: 0 2;
-    border: double $j-neon;
-    background: $j-panel;
+/* --- Copilot: tela de voz inteira (canvas "Visualizador de voz") --- */
+#voice-stage {
+    height: 1fr;
+    align: center middle;
+    border-left: outer $j-neon;
 }
 
-#hero-text { width: auto; height: auto; padding: 0 0 0 3; }
-#hero-title { color: $j-neon; }
-#hero-info { color: $j-text-soft; }
-#hero-state { color: $j-neon; }
-#hero-hint { color: $j-muted; }
+#voice-stage > * { width: auto; }
+#voice-row { height: 8; }
+Spectrum { margin: 0 3; }
+Spectrum > .spec--lo { color: $j-ocean; }
+Spectrum > .spec--mid { color: $j-neon; }
+Spectrum > .spec--hi { color: $j-pale; }
+#voice-state { margin-top: 2; color: $j-neon; text-style: bold; }
+#voice-text { margin-top: 1; color: $j-white; }
+VoiceStage > .voice--cursor { color: $j-neon; }
+#voice-level { height: 1; margin-top: 2; }
+#voice-level-label, #voice-db { color: $j-muted; }
+#voice-vu { width: auto; margin: 0 2; color: $j-neon; }
 
 JarvisOrb > .orb--ring { color: $j-orb-ring; }
 JarvisOrb > .orb--ring-dim { color: $j-orb-ring-dim; }
@@ -217,21 +225,6 @@ JarvisOrb > .orb--shade { color: $j-orb-shade; }
 JarvisOrb > .orb--hl { color: $j-orb-hl; }
 JarvisOrb > .orb--white { color: $j-orb-ring; }
 JarvisOrb > .orb--white-dim { color: $j-orb-white-dim; }
-
-#voicebar {
-    height: 3;
-    margin: 0 1;
-    padding: 0 1;
-    border: double $j-neon;
-    background: $j-panel;
-}
-
-#voicebar Static { width: auto; padding: 0 1 0 0; }
-#voice-mic { color: $j-neon; }
-#voice-wave { color: $j-neon-soft; }
-#voicebar #voice-text { width: 1fr; color: $j-text-soft; }
-#voice-hint { color: $j-muted; }
-#voice-vu { color: $j-neon; }
 
 /* --- Modo Copilot: tudo puxa pro ciano neon --- */
 Screen.-copilot #topbar { background: $j-neon; color: $j-ink; }
@@ -244,8 +237,12 @@ Screen.-critical #topbar { background: $j-danger-strong; color: $j-white; }
 Screen.-critical #topbar-info { text-style: bold; }
 Screen.-critical #log { border-left: outer $j-danger; }
 Screen.-critical #prompt { border: double $j-danger; }
-Screen.-critical #voicebar { border: double $j-danger; }
-Screen.-critical #voice-mic, Screen.-critical #voice-wave { color: $j-danger-soft; }
+Screen.-critical #voice-stage { border-left: outer $j-danger; }
+Screen.-critical #voice-state, Screen.-critical #voice-vu,
+Screen.-critical VoiceStage > .voice--cursor { color: $j-danger-soft; }
+Screen.-critical Spectrum > .spec--lo { color: $j-danger-strong; }
+Screen.-critical Spectrum > .spec--mid { color: $j-danger; }
+Screen.-critical Spectrum > .spec--hi { color: $j-danger-soft; }
 
 /* Linha de status do modal crítico: atalhos s/n em vermelho */
 ConfirmScreen .statusbar Footer FooterKey .footer-key--key { color: $j-danger-soft; }
@@ -564,12 +561,14 @@ SlotBar > .slot-bar--empty { color: $j-line; }
 }
 #radar { margin: 1 0; width: auto; }
 #radar-state { color: $j-neon; }
-#vault-results { height: 1fr; border: none; background: $j-panel; }
+#vault-results { width: 1fr; margin-top: 1; }
+ScoreList > .score--top { color: $j-neon; }
+ScoreList > .score--rest { color: $j-muted; }
 
-/* --- /config: menu RPG --- */
+/* --- /config: menu + cards de seção (canvas "10 · Configurações — Rotinas") --- */
 #cfg-body { height: 1fr; padding: 1 2; }
 #cfg-menu-box {
-    width: 28;
+    width: 30;
     border: double $j-neon;
     background: $j-panel;
     padding: 1 1;
@@ -577,18 +576,61 @@ SlotBar > .slot-bar--empty { color: $j-line; }
 }
 #cfg-menu-title { padding-left: 2; }
 #cfg-menu { border: none; background: $j-panel; height: auto; }
+#cfg-menu > .option-list--option-highlighted { background: $j-select; color: $j-white; text-style: bold; }
+#cfg-menu-spacer { height: 1fr; }
+#cfg-saved { color: $j-ok; padding: 0 1; }
+#cfg-saved-at { padding: 0 1; }
 #cfg-main { width: 1fr; }
-#cfg-panel {
-    height: 1fr;
-    border: double $j-neon;
+#cfg-head { height: 1; margin-bottom: 1; padding: 0 1; }
+#cfg-group { width: auto; color: $j-white; text-style: bold; margin-right: 2; }
+#cfg-sub { width: auto; }
+#cfg-head-spacer { width: 1fr; }
+#cfg-summary-on { width: auto; color: $j-ok; }
+#cfg-summary-off { width: auto; color: $j-line; }
+#cfg-summary-n { width: auto; color: $j-text-soft; }
+#cfg-panel { height: 1fr; scrollbar-size-vertical: 1; }
+#cfg-sections { height: auto; }
+.cfg-col { width: 1fr; max-width: 84; height: auto; }  /* nome não fica a 1 tela do valor */
+#cfg-col-0 { margin-right: 1; }
+.cfg-card {
+    height: auto;
+    border: round $j-line;
+    border-title-color: $j-white;
+    border-title-style: bold;
+    border-subtitle-color: $j-muted;
     background: $j-panel;
-    padding: 1 2;
+    margin-bottom: 1;
+    padding: 0 0 0 0;
 }
-#cfg-group { color: $j-white; text-style: bold; margin-bottom: 1; }
-#cfg-options { border: none; background: $j-panel; height: auto; }
-#cfg-info { color: $j-text-soft; margin-top: 1; }
-/* fala do JARVIS no pé do painel; quebra linha: instruções longas não somem na borda */
-#cfg-quip { width: 1fr; color: $j-neon; margin-top: 1; }
+.cfg-card:focus-within { border: double $j-neon; border-title-color: $j-neon; }
+.cfg-card-hint { color: $j-muted; padding: 0 1; }
+PrefRow > .pref--bar { color: $j-neon; }
+PrefRow > .pref--name { color: $j-text-soft; }
+PrefRow > .pref--arrow { color: $j-neon; }
+PrefRow > .pref--on { background: $j-on-bg; color: $j-on-fg; text-style: bold; }
+PrefRow > .pref--off { background: $j-line; color: $j-muted; text-style: bold; }
+PrefRow > .pref--value { color: $j-white; text-style: bold; }
+PrefRow > .pref--muted { color: $j-muted; text-style: bold; }
+PrefRow > .pref--flash { color: $j-neon; text-style: bold reverse; }
+PrefRow > .pref--dot-past { color: $j-ocean; }
+PrefRow > .pref--dot-now { color: $j-neon; }
+PrefRow > .pref--dot-next { color: $j-line; }
+PrefRow > .pref--focus { background: $j-select; color: $j-white; }
+PrefRow > .pref--help { background: $j-focus-help; color: $j-neon-soft; }
+#cfg-info { color: $j-text-soft; margin: 0 1; }
+/* fala do JARVIS: faixa própria no pé (rosto + "jarvis ›" + texto digitando) */
+#cfg-quip-box {
+    height: auto;
+    min-height: 3;
+    border: round $j-line;
+    background: $j-footer;
+    padding: 0 1;
+    margin-top: 1;
+}
+#cfg-quip-face { margin-right: 2; }
+#cfg-quip-who { width: auto; color: $j-neon; text-style: bold; margin-right: 1; }
+#cfg-quip { width: 1fr; color: $j-white; }
+QuipLine > .quip--cursor { color: $j-neon; }
 /* SISTEMA: fontes de notícias do briefing */
 #cfg-news { height: auto; margin-top: 1; }
 #cfg-news-row { height: auto; }

@@ -36,7 +36,7 @@ texto (TUI ou voz)
 | `skill_settings.py` | Lista skills e liga/desliga skill ou categoria (`disabled_skills`, `disabled_categories` na tabela `config`) |
 | `user_prefs.py` | Preferências do `/config`: voz, velocidade, volume, sensibilidade do mic, janela de atenção, briefing automático, manchetes, manchetes escolhidas pela IA (`news_ai`), monitor de clipboard, registro de insights, aviso de saída, lembretes da agenda (antecedência e aviso final), vigia de rede, silêncio em reunião/tela cheia, apresentação automática |
 | `integrations.py` | Cards de `/config` → INTEGRAÇÕES. Estados `on`/`wait`/`off`/`setup`; `connect`/`disconnect` devolvem texto e nunca levantam |
-| `listen.py` | Ouvido lazy (`get_ear()`): mic só abre com a voz ligada; wake word (`WAKE_WORDS`) por palavra inteira; Google STT; janela de atenção; `ear_pause`/`ear_resume`; nível do mic para a `VoiceBar` |
+| `listen.py` | Ouvido lazy (`get_ear()`): mic só abre com a voz ligada; wake word (`WAKE_WORDS`) por palavra inteira; Google STT; janela de atenção; `ear_pause`/`ear_resume`; nível do mic para a `VoiceStage` (espectro e VU) |
 | `speak.py` | TTS: edge-tts (voz da pref, padrão `pt-BR-AntonioNeural`) com fallback pyttsx3; `speech_lock`; limpa Markdown e símbolos e expande gírias (`SLANG_MAP`); no-op com a voz desligada ou em apresentação |
 | `focus.py` | `FocusManager`: Pomodoro (25/5, longa 15 a cada 4) e Não Perturbe (toasts do Windows off + backlog de alertas com resumo no fim) |
 | `presentation.py` | Modo Apresentação manual (`/silent`, skill) ou automático (PowerPoint, Canva, Google Slides, PDF em tela cheia) |
