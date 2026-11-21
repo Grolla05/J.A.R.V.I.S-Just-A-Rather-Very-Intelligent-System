@@ -31,7 +31,7 @@ pygame-ce>=2.5,<3           # Reprodução de arquivos de áudio MP3 (usando a C
 
 # --- CONTROLE DE SISTEMA & AUTOMAÇÃO ---
 pyautogui>=0.9.54,<0.10     # Controle programático de Teclado e Mouse (Atalhos, Clicks)
-comtypes>=1.4,<2            # Biblioteca COM para interação com APIs do Windows
+comtypes>=1.5.0,<2            # Biblioteca COM para interação com APIs do Windows
 pycaw>=20251023             # Python Core Audio Windows - Controle de volume, dispositivos de áudio
 
 # --- INTERFACE (TERMINAL) ---
