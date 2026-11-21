@@ -2,6 +2,66 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+## Melhorias da revisão geral (issues `enhancement`)
+
+**Data:** 2026-11-19
+**Escopo:** As 5 issues `enhancement` abertas pela revisão geral (DEV @ 87f6671): #51, #52, #57, #58 e #60.
+
+### 1. Skills desligadas lidas uma vez por mensagem (#52)
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `skill_settings.disabled_sets()` guarda as listas de skills/categorias desligadas em cache; `_toggle` invalida. Antes eram ~80 conexões SQLite por mensagem | `backend/services/skill_settings.py` |
+| 2 | `is_skill_enabled(intent, disabled=None)`; `classify_intent` calcula as skills oferecidas uma vez (antes, 2× por skill) | `backend/services/intent.py` |
+| 3 | `PRAGMA journal_mode=WAL` só na criação das tabelas (é persistente no arquivo); `busy_timeout` segue por conexão | `backend/core/database.py` |
+
+### 2. Classificador mais leve (#51)
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | Mensagem trivial ("oi", "valeu", "ok, obrigado") vira `CHAT` sem ida ao Ollama (`is_trivial`). "bom dia" sozinho continua indo ao classificador (pede o briefing) | `backend/services/intent.py` |
+| 2 | Contrato opcional `KEYWORDS` nas skills (sem acento, `*` = prefixo). Só o `PROMPT_TEXT` das skills que casam entra no prompt; nenhuma casou → todas. Prompt típico cai de ~6,3 mil para 300–900 caracteres | `backend/services/intent.py`, `backend/skills/**` |
+| 3 | Aviso no log quando o prompt passa de 70% do `num_ctx` (no máximo 1 por hora) | `backend/services/intent.py` |
+| 4 | Guia do campo `KEYWORDS` | `backend/skills/README.md`, `docs/arquitetura.md` |
+
+### 3. pytest no CI (#58)
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `main.yml`: job `lint` (ubuntu) + job `tests` em `windows-latest` com `pytest -n auto` | `.github/workflows/main.yml` |
+| 2 | `release.yml` roda a suíte inteira (sai o `--ignore` do arquivo que já não existe), em paralelo | `.github/workflows/release.yml` |
+| 3 | `requirements-dev.txt`: pytest, pytest-xdist, ruff fixo. Suíte de ~880 testes: ~4,5 min com `-n auto` | `backend/requirements-dev.txt` |
+| 4 | Testes do microfone (`TestLevelTap`) não dependem mais da ordem: `test_net_guard` não deixa mock de `services.listen` em `sys.modules` e `TestLevelTap` carrega o arquivo real | `backend/tests/test_net_guard.py`, `backend/tests/test_tui_phase34.py` |
+
+### 4. Dependências reproduzíveis (#57)
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | Faixas compatíveis no `requirements.txt` (ex.: `textual>=8.2,<9`) | `backend/requirements.txt` |
+| 2 | `requirements.lock` / `requirements-dev.lock` com hash (`uv pip compile --python-version 3.11 --python-platform windows --generate-hashes`) | `backend/*.lock` |
+| 3 | Instalador, CI e release instalam do lock com `--require-hashes` | `installer/build_runtime.ps1`, `.github/workflows/*.yml` |
+| 4 | Dependabot abre PR na `DEV` | `.github/dependabot.yml` |
+
+### 5. Setup assinado na atualização automática (#60)
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `core/minisign.py`: Ed25519 no formato Minisign (gerar chave, assinar, verificar), sem depender do pacote `core` | `backend/core/minisign.py` |
+| 2 | O updater exige `JARVIS-Setup.exe.minisig` no Release e confere contra a `PUBLIC_KEY` embutida antes de rodar o setup; falha apaga o download | `backend/core/updater.py` |
+| 3 | `installer/sign_release.py` (`--generate` e assinatura no CI, conferindo contra a `PUBLIC_KEY`) | `installer/sign_release.py` |
+| 4 | `release.yml` no environment `release` (secret `MINISIGN_SECRET_KEY`), assina e publica os dois assets | `.github/workflows/release.yml` |
+| 5 | `cryptography` explícita no `requirements.txt` + smoke do build | `backend/requirements.txt`, `installer/build_runtime.ps1` |
+
+> **Antes do próximo merge na main:** criar o environment `release` no GitHub com o secret `MINISIGN_SECRET_KEY` (conteúdo do arquivo da chave secreta gerado por `installer/sign_release.py --generate`). Sem ele o Release falha de propósito. Authenticode (aviso do SmartScreen) fica para depois — exige certificado pago.
+
+### Testes
+
+Suíte completa em Python 3.11 com o lock: **881 passaram** (`-n auto`, ~3,5 min); `ruff` limpo. Novos: `tests/test_skill_settings_cache.py`, `tests/test_intent_prefilter.py`, assinatura em `tests/test_updater.py`.
+
+---
+
+## Correção das issues `bug`
+
 **Data:** 2026-11-19
 **Escopo:** Correção das 9 issues abertas com a tag `bug` (revisão geral, DEV @ 87f6671): #48, #49, #50, #53, #54, #55, #56, #59 e #61.
 
