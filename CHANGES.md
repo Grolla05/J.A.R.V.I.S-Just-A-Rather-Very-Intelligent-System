@@ -2,6 +2,23 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+## Navegador: Abas, YouTube Pro e Extração de Conteúdo
+
+**Data:** 2026-11-21
+**Escopo:** Itens "Gestão Dinâmica de Abas", "Protocolo YouTube Pro" e "Extração de Conteúdo" (Nível 2-B, The Navigator) do brainstorm. Navegadores Chromium (Opera GX, Chrome, Edge, Brave, Vivaldi), sem extensão e sem `--remote-debugging-port`.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `core/browser.py`: janela do navegador (ordem Z, pula o terminal do JARVIS), atalhos só com foco confirmado (toque de Alt contra o foreground-lock), UI Automation via comtypes (URL da aba, listar/selecionar/fechar abas pelo botão "x"), `normalize_url`, `match_tab`, `clean_tab_title` (tira "- Memory usage - 86 MB", visto no Edge real) e `is_fetch_safe`. `CHROMIUM_APPS` em `window_utils` | `backend/core/browser.py`, `backend/core/window_utils.py` |
+| 2 | Skill `BROWSER_TABS` (automation, Copilot): aba nova (vazia/site/busca), fechar atual/por nome/número, ir para aba, próxima/anterior, reabrir, listar, recarregar, voltar/avançar, duplicar, anônima. Regex primeiro, LLM só no resto; fechar outras/todas pede confirmação (`pending`) | `backend/skills/automation/browser_tabs.py`, `backend/prompts/skills/browser_tabs.md`, `backend/prompts/skills/browser_tabs_decision.md` |
+| 3 | `core/youtube.py` + skill `YOUTUBE_CONTROL` (automation, Copilot): "toca X no YouTube" abre o 1º vídeo (página de resultados do YouTube; ddgs de reserva; sem vídeo, resultados); player pelas teclas oficiais na aba do YouTube (troca de aba se preciso, devolve o foco nas ações rápidas); velocidade exata; "que vídeo é esse?" | `backend/core/youtube.py`, `backend/skills/automation/youtube_control.py`, `backend/prompts/skills/youtube_control.md`, `backend/prompts/skills/youtube_decision.md` |
+| 4 | `SCREEN_READ` lê a página do navegador pela URL da aba (página inteira, inclusive fora da tela) antes do OCR; só URL pública sem parâmetro de credencial; página curta/logada ou falha → OCR. Prompt `page_read.md`; KEYWORDS `pagina*`, `artigo*`, `site` | `backend/skills/productivity/screen_read.py`, `backend/prompts/page_read.md`, `backend/prompts/skills/screen_read.md` |
+| 5 | Classificador: exemplos BROWSER_TABS × APP_CONTROL e YOUTUBE_CONTROL × SPOTIFY_CONTROL; "NÃO use para…" em APP_CONTROL e SPOTIFY_CONTROL | `backend/prompts/classify_intent.md`, `backend/prompts/skills/app_control.md`, `backend/prompts/skills/spotify_control.md` |
+| 6 | Instalador gera os wrappers COM da UI Automation no build (o runtime instalado é só leitura) | `installer/build_runtime.ps1` |
+| 7 | Testes: `core/browser` (janela, URL, URL segura, aba, título, UIA indisponível, sem foco), abas, YouTube, página no SCREEN_READ e KEYWORDS das skills novas | `backend/tests/test_browser.py`, `backend/tests/test_browser_tabs.py`, `backend/tests/test_youtube.py`, `backend/tests/test_screen_read.py`, `backend/tests/test_intent_prefilter.py` |
+| 9 | Achados tirando as fotos do post com a TUI real (gemma2 + Edge isolado): "avança 30 segundos" não casava nenhuma KEYWORD → o classificador recebia as 23 skills, estourava o contexto e caía no CHAT (KEYWORDS ganharam `avanc*`, `adiant*`, `retroced*`, `segundos`); a busca de vídeos do ddgs falhou por DNS → `find_video` lê primeiro a página de resultados do YouTube e tenta o ddgs 3× de reserva; o resumo de página inventava "Fórmula/Resposta" no fim → `page_read.md` limita a 6 tópicos e só resolve questão quando pedido. Atalhos validados ao vivo (abrir vídeo, avançar 30 s, legenda) | `backend/skills/automation/youtube_control.py`, `backend/core/youtube.py`, `backend/prompts/page_read.md`, `backend/tests/test_youtube.py`, `backend/tests/test_intent_prefilter.py` |
+| 8 | Documentação | `backend/docs/skills/automation/browser_tabs.md` (novo), `backend/docs/skills/automation/youtube_control.md` (novo), `backend/docs/skills/productivity/screen_read.md`, `backend/core/README.md`, `docs/arquitetura.md`, `SECURITY.md`, `AGENTS.md`, `README.md` |
+
 ## Leitura de Tela (OCR do Windows + modelo de texto)
 
 **Data:** 2026-11-21
@@ -11,12 +28,13 @@ Registro das mudanças aplicadas no J.A.R.V.I.S.
 |---|---------|----------|
 | 1 | Skill `SCREEN_READ` (productivity: Chat e Copilot): captura → OCR → segredos mascarados → prompt por tipo (erro → `explain_error.md`, código → `explain_code.md`, resto → `screen_read.md` com o pedido e o título da janela) → resposta em stream. Sem texto legível → avisa e sugere `/attach` | `backend/skills/productivity/screen_read.py`, `backend/prompts/screen_read.md`, `backend/prompts/skills/screen_read.md` |
 | 2 | `core/screen_capture.py`: janela-alvo = a em foco; se for o terminal do JARVIS (Chat), desce na ordem Z até a 1ª janela real. "tela inteira"/"monitor N" capturam o monitor. Imagem só em memória | `backend/core/screen_capture.py` |
-| 3 | `core/ocr.py`: `Windows.Media.Ocr` via pywinrt (import tardio), `OCR_LANGUAGE` → pt-BR → en-US → perfil, amplia ×2 imagens baixas; `mask_secrets()` mais rígido que o `looks_secret` do clipboard (não esconde `NameError:` nem `main.py:3`) | `backend/core/ocr.py` |
+| 3 | `core/ocr.py`: `Windows.Media.Ocr` via pywinrt (import tardio), `OCR_LANGUAGE` → pt-BR → en-US → perfil; `mask_secrets()` mais rígido que o `looks_secret` do clipboard (não esconde `NameError:` nem `main.py:3`) | `backend/core/ocr.py` |
 | 4 | Skill pode devolver um iterável (stream): `execute_command_stream` repassa pedaço a pedaço; `execute_command` (voz) junta | `backend/services/brain.py`, `backend/skills/README.md`, `CLAUDE.md` |
 | 5 | Classificador: exemplos `SCREEN_READ` × `SCREEN_CONTROL` e "NÃO use para…" em `SCREEN_CONTROL` e `CLIPBOARD` | `backend/prompts/classify_intent.md`, `backend/prompts/skills/screen_control.md`, `backend/prompts/skills/clipboard.md` |
 | 6 | Config `OCR_LANGUAGE` e `SCREEN_TEXT_MAX` (padrão 6000) | `backend/core/config.py`, `env.example` |
 | 7 | Dependências `winrt-*` (OCR, Imaging, Streams, Globalization, Foundation) no `requirements.txt` + lock regenerado; smoke de imports do instalador | `backend/requirements.txt`, `backend/requirements.lock`, `installer/build_runtime.ps1` |
 | 8 | Testes: escolha da janela/monitor, OCR (tamanho, idiomas, segredos, sem winrt), skill (prompt por tipo, pouco texto, corte, escopo, segredos) e skill em stream no `brain` | `backend/tests/test_screen_capture.py`, `backend/tests/test_ocr.py`, `backend/tests/test_screen_read.py`, `backend/tests/test_mode_routing.py` |
+| 11 | OCR lê dígitos de fonte de código: o motor pt-BR lia "80"→"8a" e "430"→"438" (Consolas, fundo escuro); o en-US acerta dígitos mas troca "ã"→"ä". `recognize` lê com os dois sobre o mesmo bitmap e `merge_readings` junta palavra a palavra (difflib): vale o en-US só onde os dois lados têm dígito e divergem. Ampliar ×2 piorava a leitura medida: agora só abaixo de 400 px. Achado ao tirar as fotos do post com a TUI real | `backend/core/ocr.py`, `backend/tests/test_ocr.py`, `docs/arquitetura.md`, `backend/docs/skills/productivity/screen_read.md` |
 | 10 | Corrida no fim do stream com o app fechando: `CopilotHero.set_info` tolera o label não montado e `_stream_done` ignora a atualização com a tela desmontada (`NoMatches '#hero-info'` derrubou o CI uma vez) | `frontend/widgets.py`, `frontend/app.py`, `backend/tests/test_tui_orb.py` |
 | 9 | Documentação: doc da skill, módulos novos no `core`, contrato de `execute` com stream, variáveis novas, risco de leitura de tela no SECURITY | `backend/docs/skills/productivity/screen_read.md` (novo), `backend/docs/skills/automation/screen_control.md`, `backend/docs/services/brain.md`, `backend/docs/core/config.md`, `backend/README.md`, `backend/core/README.md`, `backend/services/README.md`, `frontend/README.md`, `README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `SECURITY.md`, `docs/arquitetura.md` |
 
@@ -33,6 +51,7 @@ Registro das mudanças aplicadas no J.A.R.V.I.S.
 | 4 | `top_candidates()` devolve os 3 melhores por fonte; `rerank()` manda todos numa **única** chamada ao Ollama (`format="json"`, `temperature=0`), que escolhe o mais importante. Resposta inválida ou erro → vale a nota de palavras | `backend/core/news.py`, `backend/prompts/news_rank.md` |
 | 5 | Pref `news_ai` ("Manchetes escolhidas pela IA", `/config` → ROTINAS, padrão ligada) | `backend/services/user_prefs.py`, `frontend/screens/settings.py` |
 | 6 | Testes: radicais, palavras ambíguas, contexto, `top_candidates`, `rerank` (JSON válido/inválido/fora da faixa/erro) e uma chamada só por briefing | `backend/tests/test_news.py` |
+| 8 | Fonte acadêmica (Google Acadêmico, SciELO) não traz mais página de perfil como manchete: título que é só nome próprio ("DELIA TERESA SPONZA - Google Akademik", caso real) é descartado. A regra vale só para domínios acadêmicos; em portal de notícias, nome próprio no título é normal | `backend/core/news.py`, `backend/tests/test_news.py` |
 | 7 | Documentação das manchetes | `docs/arquitetura.md`, `backend/core/README.md`, `backend/services/README.md`, `backend/database/README.md`, `README.md`, `AGENTS.md` |
 
 ## Melhorias da revisão geral (issues `enhancement`)

@@ -93,6 +93,10 @@ foreach ($arq in 'env.example', 'LICENSE', 'README.md', 'VERSION') {
 }
 if ($Versao) { Set-Content -Path (Join-Path $app 'VERSION') -Value $Versao -Encoding ascii -NoNewline }
 
+# Wrappers COM da UI Automation (core/browser.py): o comtypes gera no 1o uso;
+# gerar aqui evita escrever no runtime instalado (pasta so leitura)
+Roda $py @('-c', 'import comtypes.client; comtypes.client.GetModule(''UIAutomationCore.dll''); from comtypes.gen import UIAutomationClient; print(''UIA OK'')')
+
 # Bytecode pre-compilado: a pasta instalada pode ser so leitura
 Roda $py @('-m', 'compileall', '-q', '-j', '0', $app, $site)
 

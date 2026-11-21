@@ -15,9 +15,10 @@ import io
 from core.config import settings
 from core.logger import log
 
-UPSCALE_BELOW_H = 900   # imagem mais baixa que isso é ampliada ×2 (fonte de IDE/terminal)
+UPSCALE_BELOW_H = 400   # só imagem bem pequena é ampliada ×2 (medido: em janela normal ampliar piora)
 MAX_DIMENSION = 10000   # OcrEngine.MaxImageDimension
 _FALLBACK_LANGS = ("pt-BR", "en-US")
+DIGITS_LANG = "en-US"   # 2ª leitura: o motor inglês lê dígitos de fonte de código bem melhor
 
 
 # ------------------------------------------------------------ lógica pura
@@ -31,6 +32,40 @@ def target_size(width, height):
         width, height = width * 2, height * 2
     scale = min(1.0, MAX_DIMENSION / max(width, height, 1))
     return max(1, int(width * scale)), max(1, int(height * scale))
+
+
+def _digits(tokens):
+    return sum(c.isdigit() for tok in tokens for c in tok)
+
+
+def merge_line(primary, english):
+    """Uma linha: palavras do motor principal, exceto trechos em que os dois
+    lados têm dígitos e divergem — aí vale o inglês ('8a'→'80', '438'→'430').
+    Se só o inglês tem dígito, não troca (evita 'linha' → '1inha')."""
+    import difflib
+    a, b = primary.split(), english.split()
+    out = []
+    for op, i1, i2, j1, j2 in difflib.SequenceMatcher(a=a, b=b, autojunk=False).get_opcodes():
+        left, right = a[i1:i2], b[j1:j2]
+        if op == "replace" and _digits(left) and _digits(right) >= _digits(left):
+            out.extend(right)
+        else:
+            out.extend(left)
+    return " ".join(out)
+
+
+def merge_readings(primary, english):
+    """Mescla duas leituras da mesma imagem linha a linha (pareadas pelo difflib).
+    Linhas sem par ficam como o motor principal leu."""
+    import difflib
+    p_lines, e_lines = primary.splitlines(), english.splitlines()
+    out = list(p_lines)
+    matcher = difflib.SequenceMatcher(a=p_lines, b=e_lines, autojunk=False)
+    for op, i1, i2, j1, j2 in matcher.get_opcodes():
+        if op == "replace" and (i2 - i1) == (j2 - j1):
+            for k in range(i2 - i1):
+                out[i1 + k] = merge_line(p_lines[i1 + k], e_lines[j1 + k])
+    return "\n".join(out)
 
 
 def language_order(preferred=""):
@@ -99,7 +134,20 @@ def _engine(lang):
     return OcrEngine.try_create_from_user_profile_languages()
 
 
-async def _recognize_png(png, lang):
+def _engine_exact(tag):
+    """Motor de um idioma específico, ou None se não instalado."""
+    from winrt.windows.globalization import Language
+    from winrt.windows.media.ocr import OcrEngine
+    try:
+        language = Language(tag)
+        if OcrEngine.is_language_supported(language):
+            return OcrEngine.try_create_from_language(language)
+    except Exception as e:
+        log.debug(f"[OCR] Idioma {tag} indisponível: {e}")
+    return None
+
+
+async def _decode(png):
     from winrt.windows.graphics.imaging import BitmapDecoder
     from winrt.windows.storage.streams import DataWriter, InMemoryRandomAccessStream
 
@@ -111,13 +159,30 @@ async def _recognize_png(png, lang):
     writer.detach_stream()
     stream.seek(0)
     decoder = await BitmapDecoder.create_async(stream)
-    bitmap = await decoder.get_software_bitmap_async()
+    return await decoder.get_software_bitmap_async()
+
+
+async def _read(engine, bitmap):
+    result = await engine.recognize_async(bitmap)
+    return "\n".join(line.text for line in result.lines)
+
+
+async def _recognize_png(png, lang):
+    """Leitura no idioma principal; se ele não for inglês, também em en-US, e
+    as duas são mescladas (`merge_readings`): o motor pt-BR acerta acentos mas
+    erra dígitos de fontes de código ('80' → '8a', '430' → '438')."""
+    bitmap = await _decode(png)
     engine = _engine(lang)
     if engine is None:
         log.warning("[OCR] Nenhum idioma de OCR instalado no Windows.")
         return ""
-    result = await engine.recognize_async(bitmap)
-    return "\n".join(line.text for line in result.lines)
+    primary = await _read(engine, bitmap)
+    if str(engine.recognizer_language.language_tag).lower().startswith("en"):
+        return primary
+    english = _engine_exact(DIGITS_LANG)
+    if english is None:
+        return primary
+    return merge_readings(primary, await _read(english, bitmap))
 
 
 def recognize(image, lang=None):

@@ -6,7 +6,8 @@
 
 - **Chat** (texto, Markdown) e **Copilot** (só voz, com wake word "Jarvis"), alternados com `Shift+Tab`.
 - **Skills** plug-and-play: abrir/fechar apps, volume, Spotify, brilho, limpeza, bloqueio, agenda do Google, GitHub, trânsito, pesquisa na web, Pomodoro, Modo Apresentação… No Chat só rodam as de consulta/produtividade; no Copilot, todas.
-- **Leitura de tela**: "explica o erro na minha tela", "resolve a questão aberta". O OCR do próprio Windows lê a janela (sem gastar VRAM) e o modelo local explica o erro, o código, o documento ou a questão.
+- **Leitura de tela**: "explica o erro na minha tela", "resolve a questão aberta". O OCR do próprio Windows lê a janela (sem gastar VRAM) e o modelo local explica o erro, o código, o documento ou a questão. Com o navegador em foco, "resume essa página" baixa a página inteira pela URL da aba (inclusive o que está fora da tela); página logada ou link com token cai no OCR.
+- **Navegador por voz** (Opera GX, Chrome, Edge, Brave, Vivaldi — sem extensão): abas ("abre uma aba no github", "fecha a aba do YouTube", "vai para a terceira aba", "lista as abas", "reabre a aba"; fechar várias pede confirmação) e **YouTube** ("toca lo-fi no YouTube" abre o vídeo direto, "pausa o vídeo", "avança 30 segundos", "legenda", "tela cheia", "velocidade 1.5", "próximo vídeo"). Usa a UI Automation do Windows e atalhos de teclado; tecla só sai com o navegador em foco.
 - **Briefing diário** no 1º boot do dia: clima, computador (CPU, RAM, GPU, internet), GitHub, agenda, trânsito e a manchete mais relevante de cada portal, escolhida pela IA entre as mais importantes do dia.
 - **Alertas de hardware** com filtro de interrupções (Não Perturbe, reunião, tela cheia, apresentação).
 - **Memória de longo prazo** no Obsidian (RAG) e histórico de sessões estilo *save slots*.

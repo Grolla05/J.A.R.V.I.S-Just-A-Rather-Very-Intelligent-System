@@ -122,6 +122,19 @@ class TestRelevance(unittest.TestCase):
         self.assertFalse(news._is_portal_title("Morre ex-presidente aos 90 anos - g1", "G1", "g1.globo.com"))
         self.assertTrue(news._is_portal_title("Scientific Electronic Library Online", "SciELO", "scielo.org"))
 
+    def test_academic_profile_pages_are_not_headlines(self):
+        # Caso real (21/11/2026): a busca do Google Acadêmico devolveu um perfil como "manchete"
+        self.assertTrue(news._is_portal_title("DELIA TERESA SPONZA - Google Akademik",
+                                              "Google Acadêmico", "scholar.google.com"))
+        self.assertTrue(news._is_portal_title("Maria da Silva Souza - Google Scholar",
+                                              "Google Acadêmico", "scholar.google.com"))
+        self.assertTrue(news._is_portal_title("João Pereira dos Santos | SciELO", "SciELO", "scielo.org"))
+        # artigo de verdade passa
+        self.assertFalse(news._is_portal_title("Prevalência de obesidade infantil no Brasil - SciELO",
+                                               "SciELO", "scielo.org"))
+        # nome próprio em fonte de notícias não é filtrado (só fontes acadêmicas listam perfis)
+        self.assertFalse(news._is_portal_title("Zelensky Meets Starmer Today - BBC News", "BBC", "bbc.com"))
+
     def test_clean_title_strips_portal_suffix(self):
         self.assertEqual(news.clean_title("Mercado recua - WSJ", "Wall Street Journal", "wsj.com"), "Mercado recua")
         self.assertEqual(news.clean_title("Chuva forte | g1", "G1", "g1.globo.com"), "Chuva forte")

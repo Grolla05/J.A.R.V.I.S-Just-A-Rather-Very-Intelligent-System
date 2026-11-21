@@ -203,7 +203,9 @@ Cada skill expõe `INTENT`, `PROMPT_TEXT`, `KEYWORDS` (opcional, pré-filtro), `
 | system | `NETWORK_SCAN` | Varredura da rede: aparelhos, portas expostas, programas na internet | não |
 | automation | `KEYBOARD_CONTROL` | Teclado fantasma (pyautogui) | não |
 | automation | `SCREEN_CONTROL` | Brilho, gamma ("retina") e janelas | não |
+| automation | `BROWSER_TABS` | Abas do navegador Chromium: abrir, fechar (várias com confirmação), ir, listar, reabrir, recarregar | não |
 | automation | `SPOTIFY_CONTROL` | Tocar, pausar, buscar no Spotify | não |
+| automation | `YOUTUBE_CONTROL` | Tocar/pesquisar vídeo e controlar o player do YouTube (teclas oficiais) | não |
 | automation | `WORK_MACRO` | Cenas de trabalho/estudo (apps, janelas, notificações) | não |
 | system | `SYSTEM_REPORT` | Relatório de status da máquina | não |
 | system | `SYSTEM_CLEANUP` | Lixeira, temporários, desinstalar app | não |
@@ -213,7 +215,7 @@ Cada skill expõe `INTENT`, `PROMPT_TEXT`, `KEYWORDS` (opcional, pré-filtro), `
 | productivity | `FOCUS_MODE` | Pomodoro e Não Perturbe | sim |
 | productivity | `GITHUB` | PRs, issues, commit, CI, criar issue (com confirmação) | sim |
 | productivity | `PRESENTATION_MODE` | Liga/desliga o Modo Apresentação | sim |
-| productivity | `SCREEN_READ` | Lê o texto da janela/monitor (OCR do Windows) e explica erro, código, questão ou documento | sim |
+| productivity | `SCREEN_READ` | Lê a página da aba (pela URL) ou o texto da janela/monitor (OCR do Windows) e explica erro, código, questão ou documento | sim |
 | productivity | `TRAFFIC` | Tempo entre locais cadastrados | sim |
 | web | `WEB_SEARCH` | Pesquisa e resume com fontes | sim |
 
@@ -254,12 +256,22 @@ Os sinais `CRITICAL_START`/`CRITICAL_END` pintam a TUI de vermelho (classe `-cri
 
 "Explica o erro na minha tela", "resolve a questão aberta", "resume o monitor 2". Sem modelo de visão: o modelo de texto (`OLLAMA_MODEL`) faz o trabalho, e a VRAM fica livre.
 
+0. **Navegador Chromium em foco** (só no escopo janela): `core/browser.active_url()` lê a URL da aba pela UI Automation; se `is_fetch_safe()` (http(s) público, sem usuário/senha e sem parâmetro com cara de credencial — link de reset/OAuth nunca é baixado de novo), `core/web.fetch_text()` baixa a página inteira (inclusive o que está fora da tela) e o prompt é `page_read.md`. Página com menos de 400 caracteres (login, SPA, bloqueio) ou qualquer falha → segue o OCR abaixo.
 1. `core/screen_capture.capture()`: a janela em foco; se for o próprio terminal do JARVIS (caso do Chat), desce na ordem Z até a 1ª janela real (visível, não minimizada, não oculta pelo DWM, com título, fora do shell). "tela inteira"/"monitor N" capturam o monitor. A imagem nunca vai para o disco.
-2. `core/ocr.recognize()`: OCR do Windows (`OCR_LANGUAGE` → pt-BR → en-US → perfil), ampliando ×2 imagens baixas. `mask_secrets()` troca por `[oculto]` linhas com token de cara de chave.
+2. `core/ocr.recognize()`: OCR do Windows (`OCR_LANGUAGE` → pt-BR → en-US → perfil). Com idioma principal não inglês, lê também em en-US e `merge_readings()` junta palavra a palavra: acentos do principal, dígitos do inglês quando os dois têm dígito e divergem (o motor pt-BR lê "80" como "8a" em fonte de código). `mask_secrets()` troca por `[oculto]` linhas com token de cara de chave.
 3. `core/clipboard.classify()` escolhe o prompt: erro → `explain_error.md`, código → `explain_code.md`, resto → `screen_read.md` (com o pedido do usuário e o título da janela). Texto cortado em `SCREEN_TEXT_MAX`.
 4. A skill devolve o gerador de `query_ollama_stream`: o `brain` repassa em stream na TUI e junta no modo voz.
 
 Sem texto legível, responde que imagem ainda não é interpretada e sugere `/attach`.
+
+### 5.6 Navegador: abas e YouTube (`BROWSER_TABS`, `YOUTUBE_CONTROL`)
+
+Sem extensão e sem `--remote-debugging-port` (com ele qualquer processo local dirigiria o navegador logado). Só Chromium (Opera GX, Chrome, Edge, Brave, Vivaldi). `core/browser.py` junta duas ferramentas:
+
+- **UI Automation** (comtypes, import tardio): URL da aba ativa, lista de abas (o nome vem limpo dos estados do Chromium, como "- Memory usage - 86 MB"), selecionar aba (`SelectionItemPattern`) e fechar pelo botão "x" (`InvokePattern`) — sem roubar o foco. Falha → `Ctrl+1..9` / `Ctrl+W` de reserva.
+- **Atalhos** (pyautogui): só depois de `focus()` confirmar que a janela está em primeiro plano; sem foco, nenhuma tecla sai (cairia em outra janela). Contra o foreground-lock do Windows, um toque sintético de Alt antes da 2ª tentativa.
+
+As duas skills roteiam como o Spotify: regex primeiro (sem Ollama), LLM só para a frase que sobrar (`*_decision.md`, ação validada contra uma tabela fixa — texto do modelo nunca vira atalho). `BROWSER_TABS`: fechar outras/todas as abas arma `pending` com a lista de títulos. `YOUTUBE_CONTROL`: "toca X no YouTube" → `core/youtube.find_video` (página de resultados do YouTube (1º `videoId` do HTML) → ddgs de reserva → senão abre os resultados); o player usa as teclas oficiais (k, j/l, f, t, i, c, m, Shift+N/P, >/<, 0–9) na aba do YouTube, achada pelo título — trocando de aba se preciso; em ação rápida (pausar, pular, legenda…) o foco volta para a janela anterior. Velocidade exata: desce ao mínimo com `<` e sobe com `>` (o YouTube não informa a atual).
 
 ## 6. Comandos e atalhos da TUI
 

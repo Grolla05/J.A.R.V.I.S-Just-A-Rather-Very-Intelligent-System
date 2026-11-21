@@ -81,6 +81,8 @@ J.A.R.V.I.S/
 │   │   ├── clipboard.py     ← Monitor de clipboard, classificação (url/erro/código/inglês) e ações (/clip, skill CLIPBOARD)
 │   │   ├── netwatch.py      ← Vigia de rede: foto (portas expostas, processos na internet, ARP), linha de base e diff
 │   │   ├── window_utils.py  ← Win32: monitores, janela em foco, tela cheia, detecção de apresentação
+│   │   ├── browser.py       ← Navegador Chromium sem CDP: janela (ordem Z), atalhos só com foco confirmado, UI Automation (URL da aba, lista/seleciona/fecha abas), is_fetch_safe
+│   │   ├── youtube.py       ← find_video (página de resultados do YouTube → 1º videoId; ddgs de reserva) e limpeza de título de aba
 │   │   ├── screen_capture.py← Captura da janela-alvo (pula o terminal do JARVIS) ou do monitor, só em memória (skill SCREEN_READ)
 │   │   ├── ocr.py           ← OCR nativo do Windows (winrt, 0 VRAM, import tardio) + mask_secrets
 │   │   ├── ollama_server.py ← Sobe `ollama serve` no boot se o Ollama local estiver fora
@@ -110,8 +112,8 @@ J.A.R.V.I.S/
 │   │   ├── listen.py        ← Ear lazy (STT + Wake Word "Jarvis") — mic só abre com a voz ligada
 │   │   └── speak.py         ← TTS (edge-tts → fallback pyttsx3), no-op com a voz desligada
 │   ├── skills/
-│   │   ├── automation/      ← app_control, audio_control, clipboard_assistant, keyboard_control,
-│   │   │                       screen_control, spotify_control, work_macros  (só Copilot/voz)
+│   │   ├── automation/      ← app_control, audio_control, browser_tabs, clipboard_assistant, keyboard_control,
+│   │   │                       screen_control, spotify_control, work_macros, youtube_control  (só Copilot/voz)
 │   │   ├── system/          ← network_guard, status_report, system_clear, system_security (só Copilot/voz)
 │   │   ├── productivity/    ← calendar_agenda, daily_briefing, focus_mode, github_control, insight_note,
 │   │   │                       presentation_mode, reminder, screen_read, traffic_commute (Chat e Copilot)
