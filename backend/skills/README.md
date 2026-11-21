@@ -9,6 +9,7 @@ from core.prompts import load_prompt
 
 INTENT = "NOME_UNICO"                          # chave do roteamento (única)
 PROMPT_TEXT = load_prompt("skills/nome.md")    # explica ao classificador quando usar
+KEYWORDS = ("spotify", "music*", "toc*")       # opcional: pré-filtro do classificador
 # CATEGORY é herdada da pasta (automation, system, productivity, web)
 
 def execute(entity: str, command: str) -> str:
@@ -18,6 +19,15 @@ def execute(entity: str, command: str) -> str:
 ```
 
 > `execute` recebe **dois** argumentos. Skill com um só quebra o roteamento.
+
+### `KEYWORDS` (pré-filtro do classificador)
+
+Antes de chamar o Ollama, `services/intent.py` compara a mensagem (minúsculas, sem acento e sem pontuação) com as `KEYWORDS` de cada skill. Só o `PROMPT_TEXT` das skills que casaram vai para o prompt; se nenhuma casar, vão todas (como antes). Isso corta o prompt de ~6 mil caracteres para algumas centenas na maioria dos comandos e evita estourar o `OLLAMA_NUM_CTX`.
+
+- Escreva sem acento. `"toc*"` casa o começo da palavra (toca, tocar, tocando); sem `*` só a palavra ou frase inteira (`"pr"` não casa "preciso").
+- Inclua os verbos e substantivos que o usuário usaria, inclusive os citados no `PROMPT_TEXT`. Falta de palavra-chave só faz a skill sair do prompt quando **outra** skill casou.
+- Skill sem `KEYWORDS` entra sempre (compatível com skills antigas).
+- Mensagem trivial ("oi", "valeu", "ok, obrigado") nem chega ao classificador: vira `CHAT` direto (`intent.is_trivial`).
 
 ## Onde cada categoria roda
 
@@ -57,7 +67,7 @@ O bloqueio no Chat vem de `CHAT_BLOCKED_CATEGORIES` em `services/intent.py`: ess
 
 ## Criar uma skill
 
-1. Crie `backend/skills/<categoria>/minha_skill.py` com `INTENT`, `PROMPT_TEXT` e `execute(entity, command)`.
+1. Crie `backend/skills/<categoria>/minha_skill.py` com `INTENT`, `PROMPT_TEXT`, `KEYWORDS` e `execute(entity, command)`.
 2. Escreva o `PROMPT_TEXT` em `backend/prompts/skills/minha_skill.md` (nunca string no `.py`).
 3. Se precisar do LLM, use `core.llm.query_ollama(..., format="json", temperature=0)` e um prompt `.md`. Resolva frases óbvias sem LLM primeiro (veja `parse_fast` em `focus_mode.py` e `github_control.py`).
 4. Ação destrutiva ou externa (apagar, publicar, encerrar)? Não execute direto: arme com `core.pending.arm(tipo, pergunta, on_confirm, target=...)` e devolva a pergunta (modelo: `request_issue` em `github_control.py`). Nunca atribua `state.pending_critical_action` direto: `arm` devolve `None` quando já há outra pergunta aberta (responda `pending.BUSY_REPLY`), e só ele dá o `id` que impede o "sim" de uma pergunta executar outra. Nunca confie num campo `confirmed` vindo do LLM, e nunca passe texto do LLM para `shell=True`. A TUI abre a `ConfirmScreen`; a voz aceita "sim".

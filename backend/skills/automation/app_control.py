@@ -18,6 +18,8 @@ from core.window_utils import find_window_by_pid, force_foreground
 # --- CONFIGURAÇÃO DA SKILL ---
 INTENT = "APP_CONTROL"
 PROMPT_TEXT = load_prompt("skills/app_control.md")
+# Pré-filtro do classificador (sem acento; `*` = prefixo). Ver skills/README.md
+KEYWORDS = ("abr*", "fech*", "foc*", "inici*", "execut*", "encerr*", "programa*", "aplicativo*", "app", "apps", "chrome", "code", "discord", "steam", "navegador", "spotify")
 
 # --- CÉREBRO ESPECÍFICO DA SKILL (APP EXPERT) ---
 APP_DECISION_PROMPT = load_prompt("skills/app_decision.md")

@@ -4,6 +4,8 @@ from core.prompts import load_prompt
 
 INTENT = "DAILY_BRIEFING"
 PROMPT_TEXT = load_prompt("skills/daily_briefing.md")
+# Pré-filtro do classificador (sem acento; `*` = prefixo). Ver skills/README.md
+KEYWORDS = ("bom dia", "briefing", "resumo do dia", "meu dia", "perdi")
 
 
 def execute(entity, command):

@@ -11,7 +11,7 @@ from tests._stubs import install
 
 install()
 
-from core import autostart, updater  # noqa: E402
+from core import autostart, minisign, updater  # noqa: E402
 from core.config import settings  # noqa: E402
 from tests.test_hotkey_agent import FakeWinreg  # noqa: E402
 
@@ -19,6 +19,29 @@ REPO = "dono/jarvis"
 PAYLOAD = b"setup-bytes" * 100
 SHA = hashlib.sha256(PAYLOAD).hexdigest()
 URL = f"https://github.com/{REPO}/releases/download/v1.2.0/JARVIS-Setup.exe"
+SIG_URL = URL + ".minisig"
+
+# Par de chaves só dos testes: PUBLIC_KEY do updater é trocada no setUpModule.
+SECRET, PUBLIC = minisign.generate_keypair()
+
+
+def _sign(payload, secret=SECRET):
+    with tempfile.TemporaryDirectory() as d:
+        f = Path(d) / "JARVIS-Setup.exe"
+        f.write_bytes(payload)
+        return minisign.sign_file(f, secret).encode()
+
+
+SIG = _sign(PAYLOAD)
+_pubkey_patch = patch.object(updater, "PUBLIC_KEY", PUBLIC)
+
+
+def setUpModule():
+    _pubkey_patch.start()
+
+
+def tearDownModule():
+    _pubkey_patch.stop()
 
 
 # `requests` é stub (MagicMock) nos testes: exceções de verdade para o updater
@@ -59,14 +82,18 @@ class FakeResp:
         return False
 
 
-def release(tag="v1.2.0", url=URL, digest=f"sha256:{SHA}", size=len(PAYLOAD), name="JARVIS-Setup.exe", **extra):
+def release(tag="v1.2.0", url=URL, digest=f"sha256:{SHA}", size=len(PAYLOAD), name="JARVIS-Setup.exe",
+            sig_url=SIG_URL, **extra):
     asset = {"name": name, "browser_download_url": url, "size": size}
     if digest is not None:
         asset["digest"] = digest
-    return {"tag_name": tag, "assets": [asset], **extra}
+    assets = [asset]
+    if sig_url is not None:
+        assets.append({"name": "JARVIS-Setup.exe.minisig", "browser_download_url": sig_url, "size": 300})
+    return {"tag_name": tag, "assets": assets, **extra}
 
 
-def fake_get(api_data=None, api_status=200, body=PAYLOAD, fail_times=0):
+def fake_get(api_data=None, api_status=200, body=PAYLOAD, fail_times=0, sig=SIG):
     calls = {"api": 0}
 
     def get(url, **_kw):
@@ -75,6 +102,8 @@ def fake_get(api_data=None, api_status=200, body=PAYLOAD, fail_times=0):
             if calls["api"] <= fail_times:
                 raise requests.ConnectionError("sem rede")
             return FakeResp(api_status, api_data)
+        if url.endswith(".minisig"):
+            return FakeResp(200, body=sig)
         return FakeResp(200, body=body)
     get.calls = calls
     return get
@@ -95,7 +124,8 @@ class TestVersions(unittest.TestCase):
 class TestFetchLatest(unittest.TestCase):
     def test_valid_release(self):
         info = updater.fetch_latest(fake_get(release()), repo=REPO)
-        self.assertEqual(info, {"version": "1.2.0", "url": URL, "size": len(PAYLOAD), "sha256": SHA})
+        self.assertEqual(info, {"version": "1.2.0", "url": URL, "size": len(PAYLOAD), "sha256": SHA,
+                                "sig_url": SIG_URL})
 
     def test_no_release_or_asset(self):
         self.assertIsNone(updater.fetch_latest(fake_get(api_status=404), repo=REPO))
@@ -122,7 +152,7 @@ class TestDownload(unittest.TestCase):
         self.tmp.cleanup()
 
     def info(self, **kw):
-        return {"version": "1.2.0", "url": URL, "size": len(PAYLOAD), "sha256": SHA, **kw}
+        return {"version": "1.2.0", "url": URL, "size": len(PAYLOAD), "sha256": SHA, "sig_url": SIG_URL, **kw}
 
     def test_ok(self):
         path = updater.download(self.info(), self.dir, fake_get())
@@ -137,6 +167,50 @@ class TestDownload(unittest.TestCase):
         with self.assertRaises(updater.UpdateError):
             updater.download(self.info(size=3), self.dir, fake_get())
         self.assertEqual(list(self.dir.iterdir()), [])
+
+    # --- #60: assinatura Minisign
+    def test_signature_from_other_key_deletes_file(self):
+        other_secret, _ = minisign.generate_keypair()
+        with self.assertRaises(updater.UpdateError):
+            updater.download(self.info(), self.dir, fake_get(sig=_sign(PAYLOAD, other_secret)))
+        self.assertEqual(list(self.dir.iterdir()), [])
+
+    def test_signature_of_other_file_fails(self):
+        with self.assertRaises(updater.UpdateError):
+            updater.download(self.info(), self.dir, fake_get(sig=_sign(b"outro setup")))
+        self.assertEqual(list(self.dir.iterdir()), [])
+
+    def test_tampered_trusted_comment_fails(self):
+        bad = SIG.replace(b"trusted comment: ", b"trusted comment: x")
+        with self.assertRaises(updater.UpdateError):
+            updater.download(self.info(), self.dir, fake_get(sig=bad))
+
+    def test_garbage_signature_fails(self):
+        with self.assertRaises(updater.UpdateError):
+            updater.download(self.info(), self.dir, fake_get(sig=b"nada a ver"))
+        self.assertEqual(list(self.dir.iterdir()), [])
+
+    def test_missing_sig_url_fails(self):
+        with self.assertRaises(updater.UpdateError):
+            updater.download(self.info(sig_url=None), self.dir, fake_get())
+        self.assertEqual(list(self.dir.iterdir()), [])
+
+
+class TestMinisign(unittest.TestCase):
+    def test_roundtrip_and_trusted_comment(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "a.bin"
+            f.write_bytes(b"abc")
+            sig = minisign.sign_file(f, SECRET, trusted_comment="version:1.0")
+            self.assertEqual(minisign.verify_file(f, sig, PUBLIC), "version:1.0")
+
+    def test_embedded_public_key_is_valid(self):
+        # a chave de verdade (não a dos testes) precisa ser uma chave minisign válida
+        import re
+        text = Path(updater.__file__).read_text(encoding="utf-8")
+        real = re.search(r'^PUBLIC_KEY = "([^"]+)"', text, re.MULTILINE).group(1)
+        key_id, _ = minisign.parse_public_key(real)
+        self.assertEqual(len(key_id), 8)
 
 
 class FakeReg(FakeWinreg):
@@ -227,6 +301,10 @@ class TestCheckAndUpdate(unittest.TestCase):
         self.assertEqual(self.run_check(get), "failed")
         self.popen.assert_not_called()
         self.assertFalse((updater.updates_dir() / updater.MARKER_NAME).exists())
+
+    def test_unsigned_release_is_rejected(self):
+        with self.assertRaises(updater.UpdateError):
+            updater.fetch_latest(fake_get(release(sig_url=None)), repo=REPO)
 
     def test_invalid_release_fails_without_retry(self):
         get = fake_get(release(digest=None))

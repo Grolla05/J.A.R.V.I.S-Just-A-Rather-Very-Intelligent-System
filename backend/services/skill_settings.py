@@ -2,15 +2,38 @@
 
 Extraído da antiga JarvisAPI para o comando /skills da TUI.
 """
+import threading
+
 from core.database import db
 from core.logger import log
 from core.skill_loader import manager
 
+# Cache das listas de desligados: o classificador consulta toda skill em toda
+# mensagem; sem isto eram ~80 conexões SQLite por mensagem. Só este módulo
+# grava as chaves, então `_toggle` invalida e o cache nunca fica velho.
+_disabled_cache = None
+_cache_lock = threading.Lock()
+
+
+def disabled_sets():
+    """(skills desligadas, categorias desligadas) como frozensets, em cache."""
+    global _disabled_cache
+    with _cache_lock:
+        if _disabled_cache is None:
+            _disabled_cache = (frozenset(db.get_config("disabled_skills") or ()),
+                               frozenset(db.get_config("disabled_categories") or ()))
+        return _disabled_cache
+
+
+def invalidate_cache():
+    global _disabled_cache
+    with _cache_lock:
+        _disabled_cache = None
+
 
 def list_skills():
     """Lista de categorias: {id, enabled, skills: [{id, enabled}]}, ordenadas."""
-    disabled_skills = db.get_config("disabled_skills") or []
-    disabled_categories = db.get_config("disabled_categories") or []
+    disabled_skills, disabled_categories = disabled_sets()
 
     categories = {}
     for intent, module in manager.skills.items():
@@ -32,6 +55,7 @@ def _toggle(config_key, item_id, enabled):
     elif not enabled and item_id not in disabled:
         disabled.append(item_id)
     db.save_config(config_key, disabled)
+    invalidate_cache()
 
 
 def set_enabled(target, enabled):

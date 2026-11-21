@@ -10,8 +10,10 @@ Duas etapas:
 - `install_latest()`: Enter nessa tela pede ao agente (evento
   `presence.INSTALL_UPDATE`, ou um agente novo com `--install-update`) que
   instale. Ele espera a TUI fechar, baixa o `JARVIS-Setup.exe`, confere o
-  SHA-256 publicado pelo GitHub (`digest` do asset) e roda o setup em silêncio
-  com `/UPDATE`. O agente então se fecha (o pythonw dele trava o runtime) e o
+  SHA-256 publicado pelo GitHub (`digest` do asset) e a assinatura Minisign
+  (`JARVIS-Setup.exe.minisig`, chave pública embutida em PUBLIC_KEY) e roda o
+  setup em silêncio com `/UPDATE`. O SHA-256 só pega download corrompido; a
+  assinatura impede rodar um setup publicado por quem não tem a chave do CI. O agente então se fecha (o pythonw dele trava o runtime) e o
   setup o reabre. O setup apaga `{app}\\app` e `{app}\\runtime` antes de copiar
   (AppId fixo, mesma pasta): a versão nova substitui a antiga, sem sobras.
 
@@ -26,11 +28,18 @@ import re
 import subprocess
 import time
 
+from . import minisign
 from .config import settings
 from .logger import log
 
 API_URL = "https://api.github.com/repos/{repo}/releases/latest"
 ASSET_NAME = "JARVIS-Setup.exe"
+SIG_NAME = ASSET_NAME + ".minisig"
+MAX_SIG_BYTES = 4096
+# Chave pública Minisign do CI (a secreta está só no secret MINISIGN_SECRET_KEY
+# do environment `release`). Trocar a chave = trocar esta linha num Release
+# assinado com a chave antiga. Ver installer/sign_release.py.
+PUBLIC_KEY = "RWRyU/zyTRP789sB4FfsNM/dxf8qD9RNGWulsvMzKCqYJ9lJNcY/LRMg"
 SETUP_ARGS = ("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SKIPOLLAMA", "/UPDATE")
 RETRY_DELAYS = (15, 45, 90, 180)  # logo após o logon a rede pode não estar pronta
 HTTP_TIMEOUT = 20
@@ -109,9 +118,16 @@ def _requests():
     return requests
 
 
+def _asset_url(asset, repo):
+    url = str(asset.get("browser_download_url", ""))
+    if not url.startswith(f"https://github.com/{repo}/releases/download/"):
+        raise UpdateError(f"URL do asset fora do repositório: {url[:80]}")
+    return url
+
+
 def fetch_latest(get=None, repo=None, timeout=HTTP_TIMEOUT):
-    """Último Release: {"version", "url", "size", "sha256"} ou None (sem
-    setup/tag válida). Erro de rede sobe como requests.RequestException."""
+    """Último Release: {"version", "url", "size", "sha256", "sig_url"} ou None
+    (sem setup/tag válida). Erro de rede sobe como requests.RequestException."""
     repo = repo or settings.UPDATE_REPO
     get = get or _requests().get
     resp = get(API_URL.format(repo=repo), timeout=timeout,
@@ -123,27 +139,49 @@ def fetch_latest(get=None, repo=None, timeout=HTTP_TIMEOUT):
     tag = str(data.get("tag_name", ""))
     if data.get("draft") or data.get("prerelease") or not parse_version(tag):
         return None
-    for asset in data.get("assets") or ():
-        if asset.get("name") != ASSET_NAME:
-            continue
-        url = str(asset.get("browser_download_url", ""))
-        if not url.startswith(f"https://github.com/{repo}/releases/download/"):
-            raise UpdateError(f"URL do setup fora do repositório: {url[:80]}")
-        digest = str(asset.get("digest") or "")
-        if not digest.startswith("sha256:"):
-            raise UpdateError("release sem SHA-256 do setup (digest)")
-        return {"version": tag.lstrip("v"), "url": url, "size": int(asset.get("size") or 0),
-                "sha256": digest.split(":", 1)[1].lower()}
-    return None
+    assets = {a.get("name"): a for a in data.get("assets") or ()}
+    asset = assets.get(ASSET_NAME)
+    if asset is None:
+        return None
+    url = _asset_url(asset, repo)
+    digest = str(asset.get("digest") or "")
+    if not digest.startswith("sha256:"):
+        raise UpdateError("release sem SHA-256 do setup (digest)")
+    if SIG_NAME not in assets:
+        raise UpdateError("release sem assinatura do setup (.minisig)")
+    return {"version": tag.lstrip("v"), "url": url, "size": int(asset.get("size") or 0),
+            "sha256": digest.split(":", 1)[1].lower(), "sig_url": _asset_url(assets[SIG_NAME], repo)}
 
 
 def updates_dir():
     return settings.DIR_DATA / "updates"
 
 
-def download(release, dest_dir=None, get=None):
-    """Baixa o setup e confere tamanho + SHA-256. Devolve o Path; se não
-    conferir, apaga o arquivo e levanta UpdateError."""
+def _fetch_signature(url, get):
+    with get(url, stream=True, timeout=HTTP_TIMEOUT, headers={"User-Agent": "JARVIS-updater"}) as resp:
+        resp.raise_for_status()
+        body = b""
+        for chunk in resp.iter_content(1024):
+            body += chunk or b""
+            if len(body) > MAX_SIG_BYTES:
+                raise UpdateError("assinatura maior que o limite")
+    try:
+        return body.decode("utf-8")
+    except UnicodeDecodeError as e:
+        raise UpdateError("assinatura ilegível") from e
+
+
+def verify_signature(path, sig_text, public_key=None):
+    """Confere a assinatura Minisign do setup; falha vira UpdateError."""
+    try:
+        return minisign.verify_file(path, sig_text, public_key or PUBLIC_KEY)
+    except minisign.SignatureError as e:
+        raise UpdateError(f"assinatura do setup inválida: {e}") from e
+
+
+def download(release, dest_dir=None, get=None, public_key=None):
+    """Baixa o setup e confere tamanho + SHA-256 + assinatura Minisign. Devolve
+    o Path; se algo não conferir, apaga o arquivo e levanta UpdateError."""
     dest_dir = dest_dir or updates_dir()
     dest_dir.mkdir(parents=True, exist_ok=True)
     path = dest_dir / f"JARVIS-Setup-{release['version']}.exe"
@@ -167,6 +205,9 @@ def download(release, dest_dir=None, get=None):
             raise UpdateError(f"tamanho não confere ({total} != {release['size']})")
         if sha.hexdigest() != release["sha256"]:
             raise UpdateError("SHA-256 do setup não confere")
+        if not release.get("sig_url"):
+            raise UpdateError("release sem assinatura do setup (.minisig)")
+        verify_signature(path, _fetch_signature(release["sig_url"], get), public_key)
     except BaseException:
         path.unlink(missing_ok=True)
         raise

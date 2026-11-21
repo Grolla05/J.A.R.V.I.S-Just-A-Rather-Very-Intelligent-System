@@ -13,6 +13,8 @@ from core.prompts import load_prompt
 # --- CONFIGURAÇÃO DA SKILL ---
 INTENT = "SYSTEM_SECURITY"
 PROMPT_TEXT = load_prompt("skills/system_security.md")
+# Pré-filtro do classificador (sem acento; `*` = prefixo). Ver skills/README.md
+KEYWORDS = ("deslig*", "bloque*", "suspend*", "hibern*", "sentinela", "afk", "proteg*", "power down", "reinici*")
 
 # --- CÉREBRO ESPECÍFICO DA SKILL ---
 SECURITY_DECISION_PROMPT = load_prompt("skills/system_security_decision.md")

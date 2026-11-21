@@ -11,8 +11,6 @@ from tests._stubs import install
 
 install()
 
-sys.modules.setdefault("services.listen", MagicMock())
-sys.modules.setdefault("services.speak", MagicMock())
 
 import core.state as state  # noqa: E402
 import services.brain as brain  # noqa: E402

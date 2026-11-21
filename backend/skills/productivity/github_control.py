@@ -15,6 +15,8 @@ from core.prompts import load_prompt
 
 INTENT = "GITHUB"
 PROMPT_TEXT = load_prompt("skills/github.md")
+# Pré-filtro do classificador (sem acento; `*` = prefixo). Ver skills/README.md
+KEYWORDS = ("github", "pr", "prs", "pull request*", "issue*", "commit*", "build*", "ci", "actions", "repositorio*", "repo", "workflow*")
 
 CONFIRM_TIMEOUT = 30  # s — igual ao ConfirmScreen
 _REPO_RE = re.compile(r"\b([\w.-]+/[\w.-]+)\b")

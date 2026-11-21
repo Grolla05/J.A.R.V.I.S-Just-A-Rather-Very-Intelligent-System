@@ -1,8 +1,8 @@
 name: Release
 
-# Cada merge na main (push na main) gera um Release novo com um único asset:
+# Cada merge na main (push na main) gera um Release novo com dois assets:
 # dist/JARVIS-Setup.exe, o instalador completo (Python embutido + todas as
-# libs + código). Versão: VERSION define major.minor; o patch sobe sozinho a
+# libs + código), e JARVIS-Setup.exe.minisig, a assinatura que o updater confere. Versão: VERSION define major.minor; o patch sobe sozinho a
 # partir da última tag vX.Y.* (sem tag ainda, usa o patch do VERSION). Depois
 # do Release, o CI grava a versão publicada de volta no VERSION da main e da
 # DEV (commit do github-actions[bot]). Para subir o minor/major, edite o
@@ -18,12 +18,16 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write   # criar tag e Release
+  contents: write   # criar tag e Release (nada além disso)
 
 jobs:
   release:
     name: Instalador (Windows) e Release
     runs-on: windows-latest
+    # Environment `release`: guarda o secret MINISIGN_SECRET_KEY e pode exigir
+    # aprovação manual antes de rodar (Settings -> Environments -> release).
+    # Sem ele o passo de assinatura falha e nenhum Release sai.
+    environment: release
     defaults:
       run:
         shell: pwsh
@@ -40,12 +44,10 @@ jobs:
       - name: Lint e testes (gate do release)
         working-directory: backend
         run: |
-          pip install -r requirements.txt
-          pip install ruff==0.16.8 pytest
+          pip install --require-hashes -r requirements.lock -r requirements-dev.lock
           ruff check .
           ruff check ../frontend
-          # test_work_macros_spotify.py: 11 testes já falhavam antes (ver main.yml)
-          python -m pytest tests -q --ignore=tests/test_work_macros_spotify.py
+          python -m pytest tests -q -n auto
 
       - name: Próxima versão
         id: versao
@@ -89,6 +91,18 @@ jobs:
         working-directory: 'J:\'
         run: ./installer/test_setup.ps1
 
+      # Assinatura Minisign (Ed25519). O app instalado só roda um setup cuja
+      # assinatura confere com a PUBLIC_KEY embutida em backend/core/updater.py;
+      # o script também confere contra ela antes de seguir.
+      - name: Assinar o setup (JARVIS-Setup.exe.minisig)
+        working-directory: 'J:\'
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          pip install --require-hashes -r backend/requirements.lock --quiet
+          python installer/sign_release.py dist/JARVIS-Setup.exe --version ${{ steps.versao.outputs.versao }}
+          if ($LASTEXITCODE -ne 0) { throw "assinatura falhou ($LASTEXITCODE)" }
+
       # Fora da main (workflow_dispatch em outra branch) é um ensaio: gera e
       # testa o setup, guarda como artifact, mas não cria tag nem Release
       - name: Guardar setup do ensaio (artifact)
@@ -96,7 +110,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: JARVIS-Setup-ensaio
-          path: dist/JARVIS-Setup.exe
+          path: |
+            dist/JARVIS-Setup.exe
+            dist/JARVIS-Setup.exe.minisig
           retention-days: 7
 
       - name: Publicar Release
@@ -108,7 +124,9 @@ jobs:
           name: J.A.R.V.I.S v${{ steps.versao.outputs.versao }}
           generate_release_notes: true
           make_latest: true
-          files: dist/JARVIS-Setup.exe
+          files: |
+            dist/JARVIS-Setup.exe
+            dist/JARVIS-Setup.exe.minisig
           fail_on_unmatched_files: true
 
       # Sem isto o VERSION do repositório ficava parado (ex.: 1.0.0 com o v1.0.5

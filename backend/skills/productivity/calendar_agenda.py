@@ -8,6 +8,8 @@ from core.prompts import load_prompt
 
 INTENT = "CALENDAR"
 PROMPT_TEXT = load_prompt("skills/calendar.md")
+# Pré-filtro do classificador (sem acento; `*` = prefixo). Ver skills/README.md
+KEYWORDS = ("agenda", "compromisso*", "reuni*", "evento*", "livre", "ocupad*", "amanha", "hoje", "semana", "segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo", "calendario")
 
 
 def execute(entity, command):

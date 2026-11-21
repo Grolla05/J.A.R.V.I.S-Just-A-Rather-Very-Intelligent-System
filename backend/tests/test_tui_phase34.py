@@ -27,8 +27,14 @@ def _pcm(amplitude, n=1600):
 
 class TestLevelTap(unittest.TestCase):
     def setUp(self):
+        # Outros testes trocam services.listen por MagicMock em sys.modules (e no
+        # xdist a ordem muda): carrega o arquivo real com outro nome, como test_wake_words.
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "_listen_real_phase34", Path(__file__).resolve().parents[1] / "services" / "listen.py")
+        listen = importlib.util.module_from_spec(spec)
         try:
-            import services.listen as listen
+            spec.loader.exec_module(listen)
         except ImportError as e:  # speech_recognition ausente no ambiente
             self.skipTest(f"speech_recognition indisponível: {e}")
         self.listen = listen

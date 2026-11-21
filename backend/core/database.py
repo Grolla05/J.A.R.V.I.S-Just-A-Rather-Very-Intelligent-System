@@ -17,13 +17,13 @@ class DatabaseManager:
     def _get_connection(self):
         """Cria uma conexão robusta com o banco de dados.
 
-        WAL + busy_timeout eliminam o 'database is locked' sob múltiplas threads
-        (telemetria + TUI + workers). check_same_thread=False libera o acesso
-        multi-thread (cada chamada abre/fecha sua própria conexão).
+        busy_timeout (por conexão) + WAL (gravado no arquivo uma vez, em
+        `_initialize_tables`) eliminam o 'database is locked' sob múltiplas
+        threads (telemetria + TUI + workers). check_same_thread=False libera o
+        acesso multi-thread (cada chamada abre/fecha sua própria conexão).
         """
         try:
             conn = sqlite3.connect(self.db_path, check_same_thread=False)
-            conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA busy_timeout=5000")
             return conn
         except sqlite3.Error as e:
@@ -51,6 +51,8 @@ class DatabaseManager:
         """Cria a estrutura de tabelas (Config, Histórico e Hardware)."""
         try:
             with self.connection() as conn:
+                # WAL é persistente no arquivo: basta ligar uma vez, não a cada conexão.
+                conn.execute("PRAGMA journal_mode=WAL")
                 cursor = conn.cursor()
                 # 1. Config (Estado da aplicação: skills ativas/inativas, preferências de UI)
                 cursor.execute('''
