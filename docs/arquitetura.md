@@ -182,7 +182,8 @@ Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub
 | `presence.py` | Ponte TUI ⇄ agente: `tui.json` + eventos nomeados |
 | `autostart.py` | Valor `JARVIS` em `HKCU\…\Run` (`--logon`) e início do agente |
 | `launcher.py` | Abre a TUI numa janela nova (Windows Terminal ou console) |
-| `updater.py` | Release do GitHub mais novo → tela → setup silencioso com SHA-256 |
+| `updater.py` | Release do GitHub mais novo → tela → setup silencioso com SHA-256 + assinatura Minisign |
+| `minisign.py` | Gera chave, assina e verifica (Ed25519, formato Minisign); sem dependência do pacote `core` |
 | `wt_profile.py` | Fragmento do perfil "JARVIS" do Windows Terminal |
 | `utils.py` | `TTLCache` |
 
@@ -277,7 +278,7 @@ Em dev tudo fica em `backend/`. Instalado, `JARVIS_DATA_DIR=%APPDATA%\JARVIS` co
 ## 8. Agente residente e instalação
 
 - **Agente (`backend/agent.py`)**: sobe no logon (`HKCU\…\Run`, `--logon`), segura os atalhos globais, oferece a bandeja ("Abrir J.A.R.V.I.S", "Iniciar com o Windows", "Sair do agente") e conversa com a TUI só por `core/presence.py`. Carrega um pacote `core` vazio para não iniciar banco e skills.
-- **Atualização (`core/updater.py`)**: a TUI e o agente comparam o último Release do GitHub com o `VERSION`. Com versão nova, a TUI mostra a tela de atualização; Enter pede ao agente baixar o `JARVIS-Setup.exe`, conferir o SHA-256 e instalar em silêncio; Esc adia aquela versão por 24 h (`updates/snooze.json`, vale também para o logon). Dev (sem `JARVIS_DATA_DIR`) nunca atualiza.
+- **Atualização (`core/updater.py`)**: a TUI e o agente comparam o último Release do GitHub com o `VERSION`. Com versão nova, a TUI mostra a tela de atualização; Enter pede ao agente baixar o `JARVIS-Setup.exe`, conferir o SHA-256 e a assinatura Minisign (`JARVIS-Setup.exe.minisig`, contra a `PUBLIC_KEY` embutida no `updater.py`) e instalar em silêncio. O SHA-256 vem da mesma API do Release e só pega download corrompido; a assinatura é feita no CI com a chave do secret `MINISIGN_SECRET_KEY` (environment `release`, `installer/sign_release.py`), então um Release publicado por quem não tem a chave nunca roda; Esc adia aquela versão por 24 h (`updates/snooze.json`, vale também para o logon). Dev (sem `JARVIS_DATA_DIR`) nunca atualiza.
 - **Instalador (`installer/`)**: `build_runtime.ps1` monta Python 3.11 + libs; `jarvis.iss` (Inno Setup 6) exige o Ollama, deixa escolher o modelo e faz `ollama pull`. O workflow `release.yml` publica um Release a cada push na `main`.
 
 ## 9. Testes
