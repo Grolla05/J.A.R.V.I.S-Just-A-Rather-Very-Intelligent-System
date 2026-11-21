@@ -32,6 +32,7 @@ Registro das mudanças aplicadas no J.A.R.V.I.S.
 | 2 | `release.yml` roda a suíte inteira (sai o `--ignore` do arquivo que já não existe), em paralelo | `.github/workflows/release.yml` |
 | 3 | `requirements-dev.txt`: pytest, pytest-xdist, ruff fixo. Suíte de ~880 testes: ~4,5 min com `-n auto` | `backend/requirements-dev.txt` |
 | 4 | Testes do microfone (`TestLevelTap`) não dependem mais da ordem: `test_net_guard` não deixa mock de `services.listen` em `sys.modules` e `TestLevelTap` carrega o arquivo real | `backend/tests/test_net_guard.py`, `backend/tests/test_tui_phase34.py` |
+| 5 | `_refresh_status` ignora a atualização quando a tela da conversa já foi desmontada (worker terminando com o app fechando dava `NoMatches '#status-left'`; derrubou o 1º ensaio do release) | `frontend/app.py` |
 
 ### 4. Dependências reproduzíveis (#57)
 
@@ -53,6 +54,8 @@ Registro das mudanças aplicadas no J.A.R.V.I.S.
 | 5 | `cryptography` explícita no `requirements.txt` + smoke do build | `backend/requirements.txt`, `installer/build_runtime.ps1` |
 
 > **Antes do próximo merge na main:** criar o environment `release` no GitHub com o secret `MINISIGN_SECRET_KEY` (conteúdo do arquivo da chave secreta gerado por `installer/sign_release.py --generate`). Sem ele o Release falha de propósito. Authenticode (aviso do SmartScreen) fica para depois — exige certificado pago.
+>
+> **Feito em 21/11:** environment `release` criado (revisor obrigatório, só `main` e `DEV`) com o secret cadastrado. Ensaio do release na DEV passou e a assinatura do setup gerado no CI confere com a `PUBLIC_KEY` embutida.
 
 ### Testes
 
