@@ -21,7 +21,7 @@ Pillow>=12,<13              # Validação/normalização de imagem antes de envi
 python-dotenv>=1.2,<2       # Gerenciamento de variáveis de ambiente (.env)
 
 # --- RECONHECIMENTO DE VOZ (Speech to Text) ---
-SpeechRecognition>=3.16,<4  # Biblioteca para reconhecimento de voz via Google Speech API
+SpeechRecognition>=3.17.0,<4  # Biblioteca para reconhecimento de voz via Google Speech API
 PyAudio>=0.2.14,<0.3        # Interface para captura de áudio do microfone
 
 # --- TEXT-TO-SPEECH (Síntese de Voz) ---
