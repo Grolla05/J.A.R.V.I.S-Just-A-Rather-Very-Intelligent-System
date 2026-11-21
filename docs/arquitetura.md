@@ -178,6 +178,8 @@ Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub
 | `uploads.py` | Valida e grava anexos (imagem/áudio) |
 | `notifications.py` | Liga/desliga os toasts do Windows (HKCU) |
 | `window_utils.py` | Win32: monitores, janela em foco, tela cheia, detecção de apresentação |
+| `screen_capture.py` | Captura da janela-alvo (pula o terminal do JARVIS na ordem Z) ou de um monitor, só em memória |
+| `ocr.py` | OCR nativo do Windows (`Windows.Media.Ocr`, 0 VRAM) + máscara de tokens com cara de segredo |
 | `hotkey.py` | Atalho global (`RegisterHotKey`) do agente |
 | `presence.py` | Ponte TUI ⇄ agente: `tui.json` + eventos nomeados |
 | `autostart.py` | Valor `JARVIS` em `HKCU\…\Run` (`--logon`) e início do agente |
@@ -211,6 +213,7 @@ Cada skill expõe `INTENT`, `PROMPT_TEXT`, `KEYWORDS` (opcional, pré-filtro), `
 | productivity | `FOCUS_MODE` | Pomodoro e Não Perturbe | sim |
 | productivity | `GITHUB` | PRs, issues, commit, CI, criar issue (com confirmação) | sim |
 | productivity | `PRESENTATION_MODE` | Liga/desliga o Modo Apresentação | sim |
+| productivity | `SCREEN_READ` | Lê o texto da janela/monitor (OCR do Windows) e explica erro, código, questão ou documento | sim |
 | productivity | `TRAFFIC` | Tempo entre locais cadastrados | sim |
 | web | `WEB_SEARCH` | Pesquisa e resume com fontes | sim |
 
@@ -246,6 +249,17 @@ Os sinais `CRITICAL_START`/`CRITICAL_END` pintam a TUI de vermelho (classe `-cri
 ### 5.4 Trânsito e aviso de saída
 
 `/rota <local> <endereço>` geocodifica no Nominatim e guarda o local. A skill `TRAFFIC` entende origem e destino na frase. Sem `TOMTOM_API_KEY`, usa o OSRM público (tempo médio); com a chave, trânsito ao vivo. A pref `commute_alert` avisa a hora de sair.
+
+### 5.5 Leitura de tela (`SCREEN_READ`)
+
+"Explica o erro na minha tela", "resolve a questão aberta", "resume o monitor 2". Sem modelo de visão: o modelo de texto (`OLLAMA_MODEL`) faz o trabalho, e a VRAM fica livre.
+
+1. `core/screen_capture.capture()`: a janela em foco; se for o próprio terminal do JARVIS (caso do Chat), desce na ordem Z até a 1ª janela real (visível, não minimizada, não oculta pelo DWM, com título, fora do shell). "tela inteira"/"monitor N" capturam o monitor. A imagem nunca vai para o disco.
+2. `core/ocr.recognize()`: OCR do Windows (`OCR_LANGUAGE` → pt-BR → en-US → perfil), ampliando ×2 imagens baixas. `mask_secrets()` troca por `[oculto]` linhas com token de cara de chave.
+3. `core/clipboard.classify()` escolhe o prompt: erro → `explain_error.md`, código → `explain_code.md`, resto → `screen_read.md` (com o pedido do usuário e o título da janela). Texto cortado em `SCREEN_TEXT_MAX`.
+4. A skill devolve o gerador de `query_ollama_stream`: o `brain` repassa em stream na TUI e junta no modo voz.
+
+Sem texto legível, responde que imagem ainda não é interpretada e sugere `/attach`.
 
 ## 6. Comandos e atalhos da TUI
 

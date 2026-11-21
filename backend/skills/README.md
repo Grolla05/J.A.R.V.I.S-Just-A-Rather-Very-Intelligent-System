@@ -20,6 +20,8 @@ def execute(entity: str, command: str) -> str:
 
 > `execute` recebe **dois** argumentos. Skill com um só quebra o roteamento.
 
+> Resposta longa vinda do LLM pode sair em **stream**: `execute` devolve um iterável de pedaços de texto (ex.: o gerador de `query_ollama_stream`) em vez de `str`. O `brain` repassa pedaço a pedaço na TUI (`execute_command_stream`) e junta tudo no modo voz standalone (`execute_command`). Exemplo: `skills/productivity/screen_read.py`.
+
 ### `KEYWORDS` (pré-filtro do classificador)
 
 Antes de chamar o Ollama, `services/intent.py` compara a mensagem (minúsculas, sem acento e sem pontuação) com as `KEYWORDS` de cada skill. Só o `PROMPT_TEXT` das skills que casaram vai para o prompt; se nenhuma casar, vão todas (como antes). Isso corta o prompt de ~6 mil caracteres para algumas centenas na maioria dos comandos e evita estourar o `OLLAMA_NUM_CTX`.

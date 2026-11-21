@@ -41,6 +41,8 @@ Importar `core` abre o banco, carrega as skills e prepara o cliente MCP. Por iss
 | `alerts.py` | `process_system_alert`: passa pelo `services/notify_filter`, fala/notifica, guarda no backlog ou pede confirmação para matar processo (`PROCESS_JUDGEMENT_CACHE`) |
 | `notifications.py` | Liga/desliga os toasts do Windows (HKCU) |
 | `window_utils.py` | Win32: monitores, janela em foco, tela cheia, detecção de apresentação |
+| `screen_capture.py` | Captura para a skill `SCREEN_READ`: janela em foco ou, se for o terminal do JARVIS, a 1ª janela real abaixo na ordem Z; "monitor N" captura o monitor. Imagem só em memória |
+| `ocr.py` | OCR nativo do Windows (`Windows.Media.Ocr` via pywinrt, import tardio, 0 VRAM): `OCR_LANGUAGE` → pt-BR → en-US; `mask_secrets()` esconde linhas com token de cara de chave |
 
 ## Memória
 

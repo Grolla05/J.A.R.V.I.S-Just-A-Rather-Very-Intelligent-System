@@ -35,6 +35,9 @@ instalar ou contribuir:
 
 - Controle de teclado e mouse (`Skill — Keyboard Control`)
 - Captura e controle de tela (`Skill — Screen Control`)
+- Leitura do texto da tela por OCR (`Skill — Screen Read`): a captura fica só
+  em memória, linhas com token de cara de chave viram `[oculto]` e o texto vai
+  apenas ao modelo local (Ollama); a resposta fica no histórico da sessão
 - Abertura e encerramento de processos/aplicativos (`Skill — App Control`)
 - Shutdown, suspend e "sentry mode" da máquina (`Skill — System Security`)
 - Sistema de skills plugável (`skill_loader.py`) que **importa e executa

@@ -12,11 +12,12 @@ texto (TUI ou voz)
        │     Chat: exclude_categories=("automation", "system")
        ├─ MEMORY_WRITE            → memory.extract_fact_to_memory → Obsidian
        ├─ skill ligada/permitida  → on_route(intent) → skill.execute(entity, texto)
+       │     str → 1 pedaço · iterável (ex.: SCREEN_READ) → repassado em stream
        └─ CHAT / HARDWARE / MEMORY_READ
              → chat.ask_local_ai_stream(histórico + vault + live_context + telemetria)
 ```
 
-`execute_command` (sem stream) é a versão do modo voz standalone (`python -m services.brain`), sempre com todas as skills.
+`execute_command` (sem stream) é a versão do modo voz standalone (`python -m services.brain`), sempre com todas as skills; resposta de skill em stream é juntada num texto só.
 
 ## Módulos
 

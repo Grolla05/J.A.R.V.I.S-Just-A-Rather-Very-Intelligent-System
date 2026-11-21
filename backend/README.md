@@ -32,7 +32,7 @@ backend/
 - [main.py — boot](docs/main_orchestrator.md)
 - Core: [config](docs/core/config.md) · [database](docs/core/database.md) · [logger](docs/core/logger.md) · [obsidian](docs/core/obsidian.md) · [skill_loader](docs/core/skill_loader.md) · [SystemInfo](docs/core/SystemInfo.md)
 - Services: [brain](docs/services/brain.md) · [listen](docs/services/listen.md) · [speak](docs/services/speak.md)
-- Skills: [app_control](docs/skills/automation/app_control.md) · [audio_control](docs/skills/automation/audio_control.md) · [keyboard_control](docs/skills/automation/keyboard_control.md) · [screen_control](docs/skills/automation/screen_control.md) · [work_macros](docs/skills/automation/work_macros.md) · [status_report](docs/skills/system/status_report.md) · [system_clear](docs/skills/system/system_clear.md) · [system_security](docs/skills/system/system_security.md)
+- Skills: [app_control](docs/skills/automation/app_control.md) · [audio_control](docs/skills/automation/audio_control.md) · [keyboard_control](docs/skills/automation/keyboard_control.md) · [screen_control](docs/skills/automation/screen_control.md) · [work_macros](docs/skills/automation/work_macros.md) · [screen_read](docs/skills/productivity/screen_read.md) · [status_report](docs/skills/system/status_report.md) · [system_clear](docs/skills/system/system_clear.md) · [system_security](docs/skills/system/system_security.md)
 
 ## Rodar
 
