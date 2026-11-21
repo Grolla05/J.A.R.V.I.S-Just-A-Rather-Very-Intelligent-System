@@ -34,6 +34,7 @@ Registro das mudanças aplicadas no J.A.R.V.I.S.
 | 4 | `top_candidates()` devolve os 3 melhores por fonte; `rerank()` manda todos numa **única** chamada ao Ollama (`format="json"`, `temperature=0`), que escolhe o mais importante. Resposta inválida ou erro → vale a nota de palavras | `backend/core/news.py`, `backend/prompts/news_rank.md` |
 | 5 | Pref `news_ai` ("Manchetes escolhidas pela IA", `/config` → ROTINAS, padrão ligada) | `backend/services/user_prefs.py`, `frontend/screens/settings.py` |
 | 6 | Testes: radicais, palavras ambíguas, contexto, `top_candidates`, `rerank` (JSON válido/inválido/fora da faixa/erro) e uma chamada só por briefing | `backend/tests/test_news.py` |
+| 8 | Fonte acadêmica (Google Acadêmico, SciELO) não traz mais página de perfil como manchete: título que é só nome próprio ("DELIA TERESA SPONZA - Google Akademik", caso real) é descartado. A regra vale só para domínios acadêmicos; em portal de notícias, nome próprio no título é normal | `backend/core/news.py`, `backend/tests/test_news.py` |
 | 7 | Documentação das manchetes | `docs/arquitetura.md`, `backend/core/README.md`, `backend/services/README.md`, `backend/database/README.md`, `README.md`, `AGENTS.md` |
 
 ## Melhorias da revisão geral (issues `enhancement`)

@@ -105,6 +105,9 @@ _PORTAL_WORDS = {"portal", "noticias", "news", "home", "homepage", "inicial", "u
                  "latest", "breaking", "videos", "jornal", "journal", "online", "library",
                  "biblioteca", "scholar", "academico"}
 _DOMAIN_NOISE = {"www", "com", "br", "org", "net", "co", "uk", "gov"}
+# Fontes acadêmicas: a busca devolve páginas de perfil ("Nome - Google Scholar"), não notícia
+_ACADEMIC_DOMAINS = {"scholar.google.com", "scielo.org"}
+_NAME_PARTICLES = {"de", "da", "do", "dos", "das", "e", "del", "di", "van", "von"}
 _DOI_NAMES = {"doi", "artigos com doi", "artigo com doi", "artigos doi", "crossref"}
 _DOMAIN_RE = re.compile(r"^(?:https?://)?([a-z0-9-]+(?:\.[a-z0-9-]+)+)/?$", re.I)
 
@@ -240,11 +243,23 @@ def relevance(title):
                if words & exact or any(w.startswith(prefixes) for w in words))
 
 
+def _looks_like_name(text):
+    """'DELIA TERESA SPONZA', 'Maria da Silva Souza' — só nome próprio (2 a 6 palavras,
+    cada uma com inicial maiúscula ou partícula 'de/da/dos…'), sem número."""
+    words = text.split()
+    if not 2 <= len(words) <= 6:
+        return False
+    return all(w.lower() in _NAME_PARTICLES or (w.isalpha() and w[0].isupper()) for w in words)
+
+
 def _is_portal_title(title, name, domain=None):
-    """Título de página inicial ('g1 - O portal de notícias da Globo', 'U.S. News - WSJ.com')."""
+    """Título de página inicial ('g1 - O portal de notícias da Globo', 'U.S. News - WSJ.com')
+    ou, em fonte acadêmica, página de perfil ('DELIA TERESA SPONZA - Google Akademik')."""
     head = re.split(r"\s+[-|–—·:]\s+", _plain(title))[0]
     words = head.split()
     if len(words) < 3:
+        return True
+    if domain in _ACADEMIC_DOMAINS and _looks_like_name(re.split(r"\s+[-|–—·:]\s+", title.strip())[0]):
         return True
     brands = {_plain(name)}
     if domain:
