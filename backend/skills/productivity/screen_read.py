@@ -1,3 +1,6 @@
+# ⚠️ ACESSO SENSÍVEL: captura a tela (janela em foco ou monitor) e lê o texto por OCR.
+# A imagem fica só em memória, segredos viram [oculto] e o texto vai só ao Ollama local.
+# Ver SECURITY.md.
 """Skill SCREEN_READ — "explica o erro na minha tela", "resolve a questão aberta".
 
 Pipeline sem modelo de visão (decisão: o modelo de texto faz tudo o que puder):
