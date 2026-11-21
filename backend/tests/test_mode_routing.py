@@ -161,5 +161,42 @@ class TestModeRouting(unittest.TestCase):
         self.skill.execute.assert_not_called()
 
 
+class TestStreamingSkill(unittest.TestCase):
+    """Skill que devolve um iterável (ex.: SCREEN_READ) sai em stream na TUI e junta na voz."""
+
+    def setUp(self):
+        self.reader = MagicMock(CATEGORY="productivity")
+        self.reader.execute.side_effect = lambda e, c: iter(["Erro ", "na linha ", "3."])
+        self._patches = [
+            patch.dict(brain.manager.skills, {"SCREEN_READ": self.reader}, clear=True),
+            patch.object(brain, "is_skill_enabled", return_value=True),
+            patch.object(brain, "classify_intent",
+                         return_value={"intent": "SCREEN_READ", "entity": None, "confidence": 1.0}),
+        ]
+        for p in self._patches:
+            p.start()
+        state.pending_critical_action = None
+
+    def tearDown(self):
+        for p in reversed(self._patches):
+            p.stop()
+
+    def test_stream_yields_each_chunk_in_chat(self):
+        routed = []
+        chunks = list(brain.execute_command_stream("explica o erro na tela", "s1", mode=brain.MODE_CHAT,
+                                                   on_route=routed.append))
+        self.assertEqual(chunks, ["Erro ", "na linha ", "3."])
+        self.assertEqual(routed, ["SCREEN_READ"])
+
+    def test_voice_pipeline_joins_chunks(self):
+        self.assertEqual(brain.execute_command("explica o erro na tela"), "Erro na linha 3.")
+
+    def test_plain_string_still_single_chunk(self):
+        self.reader.execute.side_effect = None
+        self.reader.execute.return_value = "Sem texto."
+        self.assertEqual(list(brain.execute_command_stream("lê a tela", "s1")), ["Sem texto."])
+        self.assertEqual(brain.execute_command("lê a tela"), "Sem texto.")
+
+
 if __name__ == "__main__":
     unittest.main()

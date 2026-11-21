@@ -1381,12 +1381,15 @@ class JarvisApp(App, inherit_bindings=False):
         if pending and pending.get("on_confirm"):
             # Skill do Copilot pediu confirmação (ex.: criar issue no GitHub)
             self._ask_pending_confirmation(pending.get("question", "Confirma a ação?"))
-        if session_id == self.session_id:
-            if self.session_title == sessions.DEFAULT_TITLE:
-                self.session_title = sessions.get_session_title(session_id)
-            self._refresh_counts()
-            self._refresh_topbar()
-        self.log_view.scroll_end(animate=False)
+        try:
+            if session_id == self.session_id:
+                if self.session_title == sessions.DEFAULT_TITLE:
+                    self.session_title = sessions.get_session_title(session_id)
+                self._refresh_counts()
+                self._refresh_topbar()
+            self.log_view.scroll_end(animate=False)
+        except NoMatches:
+            return  # app fechando: o stream terminou depois da tela da conversa ser desmontada
 
     # ------------------------------------------------------- alerts / announce
     def _announce_from_any_thread(self, text):

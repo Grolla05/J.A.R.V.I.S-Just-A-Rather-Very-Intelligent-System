@@ -7,7 +7,7 @@ O `brain` recebe cada mensagem (digitada ou falada) e decide o destino: confirma
 | Função | Uso |
 |---|---|
 | `execute_command_stream(command, session_id, images=None, mode="chat", on_route=None)` | Pipeline da TUI (Chat e Copilot). Generator de texto |
-| `execute_command(command, session_id)` | Pipeline do modo voz standalone. Devolve a resposta inteira; todas as skills liberadas |
+| `execute_command(command, session_id)` | Pipeline do modo voz standalone. Devolve a resposta inteira (skill em stream é juntada por `_join_reply`); todas as skills liberadas |
 | `confirm_pending_action(approved, explicit_decline, pending_id)` | Retira a pendência por `core.pending.take` (com `pending_id` diferente: "foi substituída", nada executa) e chama `on_confirm()` da skill ou, sem ele, `APP_CONTROL.close_now(target)` |
 | `start_brain()` | Laço de voz sem interface (`python -m services.brain`) |
 
@@ -20,6 +20,7 @@ O `brain` recebe cada mensagem (digitada ou falada) e decide o destino: confirma
 3. intent == MEMORY_WRITE         → memory.extract_fact_to_memory(command)
 4. skill ligada e permitida       → on_route(intent); skill.execute(entity, command)
       copilot: qualquer skill · chat: só skill_allowed_in_chat()
+      resposta str → 1 pedaço · iterável → yield from (stream; ex.: SCREEN_READ)
 5. resto (CHAT, HARDWARE, MEMORY_READ, skill bloqueada)
       → get_vault_context(command) + live_context.build(command)
       → chat.ask_local_ai_stream(..., mode=mode)

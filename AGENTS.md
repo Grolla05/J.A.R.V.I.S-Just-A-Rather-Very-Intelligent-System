@@ -72,7 +72,7 @@ J.A.R.V.I.S/
 │   │   ├── secrets_store.py ← Cofre de Credenciais do Windows (keyring) p/ tokens OAuth (Google e Spotify); fallback JSON
 │   │   ├── google_calendar.py ← Google Agenda (REST, só leitura): briefing, skill CALENDAR, is_busy(), upcoming() p/ os lembretes
 │   │   ├── traffic.py       ← Trânsito entre locais fixos (/rota <local> <endereço>): Nominatim + OSRM (grátis) ou TomTom (ao vivo)
-│   │   ├── news.py          ← Manchetes do briefing (/config → SISTEMA): 1 por fonte, a mais relevante (RSS oficial ou busca; Crossref p/ DOI)
+│   │   ├── news.py          ← Manchetes do briefing (/config → SISTEMA): 1 por fonte, a mais relevante (RSS oficial ou busca; Crossref p/ DOI; radicais `morr*` + `_FALSE_CONTEXT`; desempate pelo Ollama numa chamada só com a pref `news_ai`)
 │   │   ├── briefing.py      ← Briefing diário em seções fixas (Clima, Computador, GitHub, Agenda, Trânsito, Manchetes); LLM só no fecho
 │   │   ├── weather.py       ← Clima (Open-Meteo + local por IP) e saudação por horário
 │   │   ├── github_client.py ← PyGithub: PRs, issues, commit, CI, create_issue (confirmação fica com quem chama)
@@ -81,6 +81,8 @@ J.A.R.V.I.S/
 │   │   ├── clipboard.py     ← Monitor de clipboard, classificação (url/erro/código/inglês) e ações (/clip, skill CLIPBOARD)
 │   │   ├── netwatch.py      ← Vigia de rede: foto (portas expostas, processos na internet, ARP), linha de base e diff
 │   │   ├── window_utils.py  ← Win32: monitores, janela em foco, tela cheia, detecção de apresentação
+│   │   ├── screen_capture.py← Captura da janela-alvo (pula o terminal do JARVIS) ou do monitor, só em memória (skill SCREEN_READ)
+│   │   ├── ocr.py           ← OCR nativo do Windows (winrt, 0 VRAM, import tardio) + mask_secrets
 │   │   ├── ollama_server.py ← Sobe `ollama serve` no boot se o Ollama local estiver fora
 │   │   ├── boot.py          ← Etapas da tela de boot (run_boot)
 │   │   ├── wt_profile.py    ← Fragmento do perfil JARVIS do Windows Terminal (logo na aba)
@@ -112,7 +114,7 @@ J.A.R.V.I.S/
 │   │   │                       screen_control, spotify_control, work_macros  (só Copilot/voz)
 │   │   ├── system/          ← network_guard, status_report, system_clear, system_security (só Copilot/voz)
 │   │   ├── productivity/    ← calendar_agenda, daily_briefing, focus_mode, github_control, insight_note,
-│   │   │                       presentation_mode, reminder, traffic_commute     (Chat e Copilot)
+│   │   │                       presentation_mode, reminder, screen_read, traffic_commute (Chat e Copilot)
 │   │   └── web/             ← web_search                                          (Chat e Copilot)
 │   ├── prompts/             ← Arquivos .md de prompt (system_prompt, classify_intent, mode_chat, mode_copilot, briefing...; skills/ p/ PROMPT_TEXT)
 │   ├── tests/               ← pytest (backend + TUI)
@@ -222,7 +224,8 @@ def execute(entity: str, command: str) -> str:
 ```
 
 > ⚠️ `execute()` recebe **2 argumentos**: `entity` e `command`. Skills antigas com 1 argumento quebrarão o routing.
-> No modo **Copilot** (e no modo voz) todas as skills executam. No modo **Chat** só as de categoria fora de `CHAT_BLOCKED_CATEGORIES` (`automation` e `system`, em `services/intent.py`): o classificador roda com `exclude_categories=` e o `brain` confere `skill_allowed_in_chat()`. Productivity e web (agenda, trânsito, GitHub, busca, briefing, foco, apresentação) rodam nos dois modos.
+> `execute()` devolve `str` ou, para resposta longa do LLM, um iterável de pedaços (stream): o `brain` repassa na TUI e junta na voz (ex.: `SCREEN_READ`).
+> No modo **Copilot** (e no modo voz) todas as skills executam. No modo **Chat** só as de categoria fora de `CHAT_BLOCKED_CATEGORIES` (`automation` e `system`, em `services/intent.py`): o classificador roda com `exclude_categories=` e o `brain` confere `skill_allowed_in_chat()`. Productivity e web (agenda, trânsito, GitHub, busca, briefing, foco, apresentação, leitura de tela) rodam nos dois modos.
 > Dado externo que o Chat precisa responder (ex.: agenda) entra como contexto via `services/live_context.py` (detecção por palavra-chave + bloco de sistema em `prompts/*_context.md` com "não invente") — nunca deixe o LLM responder sobre dado pessoal sem a fonte no prompt.
 
 ### Configurações
@@ -349,6 +352,8 @@ AUTO_UPDATE=True                 # atualiza no logon pelo Release do GitHub (só
 UPDATE_REPO=                     # dono/nome dos Releases; vazio = repositório oficial
 GOOGLE_CLIENT_ID=                # client OAuth "App para computador" do próprio usuário (+ GOOGLE_CLIENT_SECRET)
 TOMTOM_API_KEY=                  # opcional: trânsito ao vivo (sem ela, OSRM)
+OCR_LANGUAGE=                    # leitura de tela (SCREEN_READ); vazio = pt-BR → en-US → idiomas do Windows
+SCREEN_TEXT_MAX=6000             # caracteres do OCR enviados ao modelo
 POMODORO_FOCUS_MIN=25            # + POMODORO_SHORT_BREAK_MIN, _LONG_BREAK_MIN, _CYCLES
 DEFAULT_LANGUAGE=pt-BR
 DEBUG_MODE=False

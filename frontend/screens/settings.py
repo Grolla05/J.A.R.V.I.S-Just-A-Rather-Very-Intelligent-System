@@ -33,6 +33,7 @@ QUIPS = {
     "attention_window": "Fico atento por esse tempo depois de cada pedido.",
     "briefing_auto": "Briefing matinal ajustado. Prometo ser breve. Quase sempre.",
     "briefing_news": "Manchetes ajustadas. Filtrar o drama fica por sua conta.",
+    "news_ai": "Eu leio as três primeiras de cada jornal e escolho a que importa. Fofoca fica para depois.",
     "clipboard_monitor": "De olho no clipboard. Só sugiro — não leio seus segredos em voz alta.",
     "auto_insights": "Suas ideias vão para 🧠 Brainstorms no vault. As ruins também, Senhor.",
     "commute_alert": "Aviso de saída ajustado: clima, trânsito e o 1º compromisso, só em dias úteis.",

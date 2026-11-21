@@ -2,6 +2,39 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+## Leitura de Tela (OCR do Windows + modelo de texto)
+
+**Data:** 2026-11-21
+**Escopo:** Item "Visão de Tela" do brainstorm, na versão só texto. A tela vira texto pelo OCR nativo do Windows (0 VRAM) e o `OLLAMA_MODEL` (gemma2) responde. Interpretar imagem (modelo de visão) fica para o plano da Thinking Layer.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | Skill `SCREEN_READ` (productivity: Chat e Copilot): captura → OCR → segredos mascarados → prompt por tipo (erro → `explain_error.md`, código → `explain_code.md`, resto → `screen_read.md` com o pedido e o título da janela) → resposta em stream. Sem texto legível → avisa e sugere `/attach` | `backend/skills/productivity/screen_read.py`, `backend/prompts/screen_read.md`, `backend/prompts/skills/screen_read.md` |
+| 2 | `core/screen_capture.py`: janela-alvo = a em foco; se for o terminal do JARVIS (Chat), desce na ordem Z até a 1ª janela real. "tela inteira"/"monitor N" capturam o monitor. Imagem só em memória | `backend/core/screen_capture.py` |
+| 3 | `core/ocr.py`: `Windows.Media.Ocr` via pywinrt (import tardio), `OCR_LANGUAGE` → pt-BR → en-US → perfil, amplia ×2 imagens baixas; `mask_secrets()` mais rígido que o `looks_secret` do clipboard (não esconde `NameError:` nem `main.py:3`) | `backend/core/ocr.py` |
+| 4 | Skill pode devolver um iterável (stream): `execute_command_stream` repassa pedaço a pedaço; `execute_command` (voz) junta | `backend/services/brain.py`, `backend/skills/README.md`, `CLAUDE.md` |
+| 5 | Classificador: exemplos `SCREEN_READ` × `SCREEN_CONTROL` e "NÃO use para…" em `SCREEN_CONTROL` e `CLIPBOARD` | `backend/prompts/classify_intent.md`, `backend/prompts/skills/screen_control.md`, `backend/prompts/skills/clipboard.md` |
+| 6 | Config `OCR_LANGUAGE` e `SCREEN_TEXT_MAX` (padrão 6000) | `backend/core/config.py`, `env.example` |
+| 7 | Dependências `winrt-*` (OCR, Imaging, Streams, Globalization, Foundation) no `requirements.txt` + lock regenerado; smoke de imports do instalador | `backend/requirements.txt`, `backend/requirements.lock`, `installer/build_runtime.ps1` |
+| 8 | Testes: escolha da janela/monitor, OCR (tamanho, idiomas, segredos, sem winrt), skill (prompt por tipo, pouco texto, corte, escopo, segredos) e skill em stream no `brain` | `backend/tests/test_screen_capture.py`, `backend/tests/test_ocr.py`, `backend/tests/test_screen_read.py`, `backend/tests/test_mode_routing.py` |
+| 10 | Corrida no fim do stream com o app fechando: `CopilotHero.set_info` tolera o label não montado e `_stream_done` ignora a atualização com a tela desmontada (`NoMatches '#hero-info'` derrubou o CI uma vez) | `frontend/widgets.py`, `frontend/app.py`, `backend/tests/test_tui_orb.py` |
+| 9 | Documentação: doc da skill, módulos novos no `core`, contrato de `execute` com stream, variáveis novas, risco de leitura de tela no SECURITY | `backend/docs/skills/productivity/screen_read.md` (novo), `backend/docs/skills/automation/screen_control.md`, `backend/docs/services/brain.md`, `backend/docs/core/config.md`, `backend/README.md`, `backend/core/README.md`, `backend/services/README.md`, `frontend/README.md`, `README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `SECURITY.md`, `docs/arquitetura.md` |
+
+## Manchetes mais espertas + CNN Brasil
+
+**Data:** 2026-11-21
+**Escopo:** Itens "Manchetes mais espertas" e "CNN internacional" do brainstorm de melhorias.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | Fonte padrão "CNN" vira "CNN Brasil": os feeds `rss.cnn.com` estão parados desde abril de 2023; o da CNN Brasil está vivo e já estava em `FEEDS`. "CNN" digitado continua indo pela busca `site:cnn.com` | `backend/core/news.py` |
+| 2 | Relevância com radicais (`morr*`, `despenc*`, `bombarde*`…; `*` = prefixo, como nas `KEYWORDS`); palavras ambíguas seguem exatas ("bolsa" não casa "Bolsonaro") | `backend/core/news.py` |
+| 3 | `_FALSE_CONTEXT`: "bolsa de estudos", "bolsa família", "morrer de rir", "queda de cabelo"… saem do título antes da contagem | `backend/core/news.py` |
+| 4 | `top_candidates()` devolve os 3 melhores por fonte; `rerank()` manda todos numa **única** chamada ao Ollama (`format="json"`, `temperature=0`), que escolhe o mais importante. Resposta inválida ou erro → vale a nota de palavras | `backend/core/news.py`, `backend/prompts/news_rank.md` |
+| 5 | Pref `news_ai` ("Manchetes escolhidas pela IA", `/config` → ROTINAS, padrão ligada) | `backend/services/user_prefs.py`, `frontend/screens/settings.py` |
+| 6 | Testes: radicais, palavras ambíguas, contexto, `top_candidates`, `rerank` (JSON válido/inválido/fora da faixa/erro) e uma chamada só por briefing | `backend/tests/test_news.py` |
+| 7 | Documentação das manchetes | `docs/arquitetura.md`, `backend/core/README.md`, `backend/services/README.md`, `backend/database/README.md`, `README.md`, `AGENTS.md` |
+
 ## Melhorias da revisão geral (issues `enhancement`)
 
 **Data:** 2026-11-19

@@ -92,7 +92,8 @@ skill segue regras extras:
 
 1. **Contrato obrigatório** — o módulo precisa expor:
    - `INTENT` (string única, não pode colidir com uma skill existente)
-   - `execute(entity, command)` (dois argumentos: o alvo extraído e a frase original)
+   - `execute(entity, command)` (dois argumentos: o alvo extraído e a frase original);
+     devolve `str` ou, para resposta longa do LLM, um iterável de pedaços (stream)
    - `PROMPT_TEXT` — texto usado pelo classificador, carregado de
      `backend/prompts/skills/*.md` com `load_prompt` (nada de prompt em string Python)
    - a categoria vem da pasta (`automation` e `system` só rodam no

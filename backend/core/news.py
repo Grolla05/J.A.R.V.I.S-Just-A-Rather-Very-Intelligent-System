@@ -2,13 +2,17 @@
 
 As fontes são um texto livre separado por vírgula (/config → SISTEMA), guardado
 na chave `news_sources` da tabela `config`. Cada nome vira uma fonte:
-- nome conhecido (G1, BBC, CNN, NYT, WSJ, SciELO, Google Acadêmico) → `site:<domínio>`;
+- nome conhecido (G1, BBC, CNN Brasil, NYT, WSJ, SciELO, Google Acadêmico) → `site:<domínio>`;
 - algo com cara de domínio (`exemplo.com`) → `site:` direto;
 - "DOI" / "artigos com DOI" → artigos recentes com DOI registrado no Crossref;
 - qualquer outro nome → busca "<nome> notícias hoje".
 
 `headlines()` traz UMA notícia por fonte — a mais relevante entre as últimas
 (morte, bolsa em queda, guerra, desastre… pesam mais; empate → a mais nova).
+A nota casa radicais (`morr*` pega "morreram") e ignora contexto enganoso
+("bolsa de estudos" não é mercado). Com a pref `news_ai`, os até 3 melhores
+títulos de cada fonte vão numa ÚNICA chamada ao Ollama, que escolhe o mais
+importante; sem resposta, fica a nota de palavras.
 Fontes conhecidas com RSS (`FEEDS`) leem o feed; as demais usam a busca e
 descartam títulos de página inicial ("g1 - O portal de notícias da Globo").
 As fontes rodam em paralelo. Nunca levanta.
@@ -21,14 +25,14 @@ from core.config import settings
 from core.logger import log
 
 CONFIG_KEY = "news_sources"
-DEFAULT_SOURCES = "G1, BBC, CNN, New York Times, Wall Street Journal, SciELO, Google Acadêmico, DOI"
+DEFAULT_SOURCES = "G1, BBC, CNN Brasil, New York Times, Wall Street Journal, SciELO, Google Acadêmico, DOI"
 MAX_SOURCES = 12
 CROSSREF_URL = "https://api.crossref.org/works"
 
 KNOWN = {
     "g1": "g1.globo.com",
     "bbc": "bbc.com",
-    "cnn": "cnn.com",
+    "cnn": "cnn.com",  # CNN internacional não tem RSS vivo (parado desde 2023): vai pela busca
     "cnn brasil": "cnnbrasil.com.br",
     "new york times": "nytimes.com",
     "the new york times": "nytimes.com",
@@ -52,20 +56,51 @@ FEEDS = {
 MAX_AGE_H = 48     # notícia mais velha que isso não entra (feed parado cai na busca)
 FEED_WINDOW = 15   # só as N primeiras do feed (as mais novas) disputam a relevância
 
-# Assuntos que pesam (palavras sem acento, minúsculas): (peso, {palavras}).
+RERANK_TOP = 3     # títulos por fonte que o Ollama compara no desempate
+
+# Assuntos que pesam (sem acento, minúsculas): (peso, termos). `*` no fim = prefixo
+# ("morr*" casa morre/morreu/morreram); sem `*` só a palavra inteira. Curtas ou
+# ambíguas ficam exatas: "bolsa*" casaria "bolsonaro", "crise*" casaria "crisemar".
 _RELEVANT = (
-    (3, {"morre", "morreu", "morte", "mortos", "morto", "mortes", "falece", "faleceu", "luto", "assassinado",
-         "dies", "died", "dead", "death", "killed", "deaths"}),
-    (3, {"guerra", "ataque", "atentado", "bombardeio", "invasao", "terremoto", "tsunami", "furacao",
-         "explosao", "tiroteio", "tragedia", "enchente", "war", "attack", "strike", "invasion", "earthquake",
-         "hurricane", "explosion", "shooting", "flood"}),
-    (2, {"bolsa", "ibovespa", "acoes", "dolar", "juros", "selic", "inflacao", "recessao", "stocks", "shares",
-         "market", "markets", "dow", "nasdaq", "inflation", "recession", "rates", "fed", "tarifa", "tariffs"}),
-    (2, {"queda", "despenca", "desaba", "dispara", "recorde", "crise", "colapso", "plunge", "plunges",
-         "tumble", "soar", "surge", "record", "crisis", "collapse", "crash"}),
-    (1, {"presidente", "eleicao", "eleicoes", "stf", "congresso", "governo", "urgente", "president",
-         "election", "congress", "government", "breaking"}),
+    (3, ("morr*", "mort*", "falec*", "luto", "assassin*", "obito*",
+         "dies", "died", "dead", "death", "deaths", "killed", "killing*")),
+    (3, ("guerra", "guerras", "ataq*", "atentad*", "bombarde*", "invas*", "invad*", "terremot*", "tsunami*",
+         "furac*", "explos*", "tirote*", "tragedi*", "enchent*", "desastre*",
+         "war", "wars", "attack*", "strike", "strikes", "invasion*", "earthquake*", "hurricane*",
+         "explosion*", "shooting*", "flood*")),
+    (2, ("bolsa", "bolsas", "ibovespa", "acoes", "dolar", "juro", "juros", "selic", "inflac*", "recess*",
+         "stocks", "shares", "market", "markets", "dow", "nasdaq", "inflation", "recession*", "rates", "fed",
+         "tarifa*", "tariff*")),
+    (2, ("queda", "quedas", "despenc*", "desab*", "dispar*", "recorde*", "crise", "crises", "colaps*",
+         "plung*", "tumbl*", "soar*", "surge", "surges", "record", "records", "crisis", "collaps*", "crash*")),
+    (1, ("presidente*", "eleic*", "stf", "congresso", "governo", "urgente", "president*",
+         "election*", "congress", "government", "breaking")),
 )
+# Frases que anulam o peso ("bolsa de estudos" não é mercado). `*` no fim = prefixo.
+_FALSE_CONTEXT = (
+    "bolsa de estud*", "bolsas de estud*", "bolsa famil*", "bolsa auxil*", "queda de cabel*",
+    "morr* de rir", "morr* de medo", "ataque de ris*", "guerra de travesseir*", "mercado de trabalh*",
+)
+
+
+def _compile(terms):
+    """('morr*', 'luto') → ({'luto'}, ('morr',)): palavras exatas e prefixos."""
+    exact = {t for t in terms if not t.endswith("*")}
+    prefixes = tuple(t[:-1] for t in terms if t.endswith("*"))
+    return exact, prefixes
+
+
+def _context_re(phrases):
+    """Regex única que casa qualquer frase de `phrases` (palavra inteira; `*` = prefixo)."""
+    parts = []
+    for phrase in phrases:
+        words = [re.escape(w[:-1]) + r"\w*" if w.endswith("*") else re.escape(w) for w in phrase.split()]
+        parts.append(r"\b" + r"\s+".join(words) + r"\b")
+    return re.compile("|".join(parts))
+
+
+_RELEVANT_C = tuple((weight, _compile(terms)) for weight, terms in _RELEVANT)
+_FALSE_CONTEXT_RE = _context_re(_FALSE_CONTEXT)
 _PORTAL_WORDS = {"portal", "noticias", "news", "home", "homepage", "inicial", "ultimas", "headlines",
                  "latest", "breaking", "videos", "jornal", "journal", "online", "library",
                  "biblioteca", "scholar", "academico"}
@@ -198,9 +233,11 @@ def fetch_feed(url, get=None):
 
 
 def relevance(title):
-    """Peso do assunto: morte, mercado em queda/alta, guerra, desastre, eleição…"""
-    words = set(re.findall(r"\w+", _plain(title)))
-    return sum(weight for weight, keys in _RELEVANT if words & keys)
+    """Peso do assunto: morte, mercado em queda/alta, guerra, desastre, eleição…
+    Cada grupo soma uma vez; frases de `_FALSE_CONTEXT` saem antes da contagem."""
+    words = set(re.findall(r"\w+", _FALSE_CONTEXT_RE.sub(" ", _plain(title))))
+    return sum(weight for weight, (exact, prefixes) in _RELEVANT_C
+               if words & exact or any(w.startswith(prefixes) for w in words))
 
 
 def _is_portal_title(title, name, domain=None):
@@ -215,9 +252,8 @@ def _is_portal_title(title, name, domain=None):
     return words[0] in brands or head in brands or any(w in words for w in _PORTAL_WORDS)
 
 
-def pick_relevant(titles, now=None, max_age_h=MAX_AGE_H):
-    """Manchete mais relevante entre as recentes; empate → a mais nova (1ª do feed).
-    `titles`: [(título, datetime|None)]. Itens sem data contam como recentes."""
+def _fresh(titles, now=None, max_age_h=MAX_AGE_H):
+    """Títulos recentes entre os FEED_WINDOW primeiros (sem data conta como recente)."""
     now = now or datetime.datetime.now(datetime.timezone.utc)
     fresh = []
     for title, when in titles[:FEED_WINDOW]:
@@ -227,28 +263,81 @@ def pick_relevant(titles, now=None, max_age_h=MAX_AGE_H):
             if (now - when).total_seconds() > max_age_h * 3600:
                 continue
         fresh.append(title)
-    if not fresh:
-        return None
-    return max(enumerate(fresh), key=lambda it: (relevance(it[1]), -it[0]))[1]
+    return fresh
 
 
-def _top_for(name, search, get=None):
-    """A notícia mais relevante de uma fonte, ou None."""
+def top_candidates(titles, n=RERANK_TOP, now=None, max_age_h=MAX_AGE_H):
+    """Até `n` manchetes recentes, da mais relevante à menos; empate → a mais nova.
+    `titles`: [(título, datetime|None)]."""
+    ranked = sorted(enumerate(_fresh(titles, now, max_age_h)), key=lambda it: (-relevance(it[1]), it[0]))
+    return [title for _, title in ranked[:n]]
+
+
+def pick_relevant(titles, now=None, max_age_h=MAX_AGE_H):
+    """Manchete mais relevante entre as recentes; empate → a mais nova (1ª do feed).
+    `titles`: [(título, datetime|None)]. Itens sem data contam como recentes."""
+    best = top_candidates(titles, n=1, now=now, max_age_h=max_age_h)
+    return best[0] if best else None
+
+
+def _candidates_for(name, search, get=None):
+    """Até RERANK_TOP manchetes limpas de uma fonte, da mais relevante à menos."""
     kind, value = resolve(name)
     if kind == "doi":
-        articles = doi_articles(limit=1)
-        return articles[0] if articles else None
+        return doi_articles(limit=1)
     feed = FEEDS.get(value) if kind == "site" else None
     if feed:  # item de feed sem data não prova que é de hoje → fica de fora
-        best = pick_relevant([it for it in fetch_feed(feed, get=get) if it[1] is not None])
+        best = top_candidates([it for it in fetch_feed(feed, get=get) if it[1] is not None])
         if best:
-            return clean_title(best, name, value)
+            return [clean_title(t, name, value) for t in best]
     query = f"notícias hoje site:{value}" if kind == "site" else value
     domain = value if kind == "site" else None
     titles = [r["title"] for r in search(query, max_results=5)
               if r.get("title") and not _is_portal_title(r["title"], name, domain)]
-    best = pick_relevant([(t, None) for t in titles])
-    return clean_title(best, name, domain) if best else None
+    return [clean_title(t, name, domain) for t in top_candidates([(t, None) for t in titles])]
+
+
+def rerank(candidates, ask=None):
+    """{fonte: índice} escolhido pelo Ollama numa ÚNICA chamada.
+    `candidates`: {fonte: [títulos]}; só fontes com 2+ opções vão ao modelo.
+    Resposta inválida, índice fora da faixa ou erro → a fonte fica de fora
+    (quem chama usa o índice 0, a nota de palavras). Nunca levanta."""
+    import json
+    multi = {name: titles for name, titles in candidates.items() if len(titles) > 1}
+    if not multi:
+        return {}
+    try:
+        if ask is None:
+            from core.llm import query_ollama as ask
+        from core.prompts import load_prompt
+        numbered = {name: {str(i): t for i, t in enumerate(titles)} for name, titles in multi.items()}
+        prompt = load_prompt("news_rank.md", candidates=json.dumps(numbered, ensure_ascii=False, indent=2))
+        raw = ask([{"role": "user", "content": prompt}], format="json", temperature=0)
+        data = json.loads(raw) if isinstance(raw, str) else None
+    except Exception as e:
+        log.warning(f"[NEWS] Desempate pela IA falhou: {e}")
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    out = {}
+    for name, titles in multi.items():
+        try:
+            idx = int(data.get(name))
+        except (TypeError, ValueError):
+            continue
+        if 0 <= idx < len(titles):
+            out[name] = idx
+    return out
+
+
+def _ai_enabled():
+    """Pref `news_ai` (/config → ROTINAS); qualquer falha = desligada."""
+    try:
+        from services import user_prefs
+        return bool(user_prefs.get("news_ai"))
+    except Exception as e:
+        log.debug(f"[NEWS] Pref news_ai indisponível: {e}")
+        return False
 
 
 def clean_title(title, name, domain=None):
@@ -264,9 +353,10 @@ def clean_title(title, name, domain=None):
     return title.strip()
 
 
-def headlines(sources=None, search=None, get=None):
+def headlines(sources=None, search=None, get=None, ai=None, ask=None):
     """[(fonte, manchete)] — a última notícia mais relevante de cada fonte, na
-    ordem configurada. As fontes rodam em paralelo; a que falha é pulada."""
+    ordem configurada. As fontes rodam em paralelo; a que falha é pulada.
+    `ai` (padrão: pref `news_ai`) liga o desempate pelo Ollama — uma chamada só."""
     from concurrent.futures import ThreadPoolExecutor
     if search is None:
         from core.web import search
@@ -276,11 +366,13 @@ def headlines(sources=None, search=None, get=None):
 
     def one(name):
         try:
-            return _top_for(name, search, get=get)
+            return _candidates_for(name, search, get=get)
         except Exception as e:
             log.warning(f"[NEWS] Fonte '{name}' falhou: {e}")
-            return None
+            return []
 
     with ThreadPoolExecutor(max_workers=min(6, len(sources))) as pool:
-        results = list(pool.map(one, sources))
-    return [(name, title) for name, title in zip(sources, results) if title]
+        results = dict(zip(sources, pool.map(one, sources)))
+    use_ai = _ai_enabled() if ai is None else ai
+    chosen = rerank(results, ask=ask) if use_ai else {}
+    return [(name, results[name][chosen.get(name, 0)]) for name in sources if results[name]]

@@ -6,6 +6,7 @@ A skill `screen_control.py` atua na categoria **Automation** e é indiscutivelme
 
 - **INTENT**: `SCREEN_CONTROL`
 - **PROMPT_TEXT**: Carregado na IA global para capturar requisições espaciais (Ex: "Joga o Chrome pra outra tela", "Minimiza isso", "Tá muito claro, escurece", "Ativa o modo noturno").
+- **Não lê conteúdo**: ler, explicar ou resumir o que está na tela é da skill [`SCREEN_READ`](../productivity/screen_read.md). O `PROMPT_TEXT` das duas tem um "NÃO use para…" e o `classify_intent.md` traz exemplos que separam uma da outra.
 
 ---
 

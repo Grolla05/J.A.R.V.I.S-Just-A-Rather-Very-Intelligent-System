@@ -117,6 +117,10 @@ class Settings:
     OLLAMA_VISION_KEEP_ALIVE = os.getenv("OLLAMA_VISION_KEEP_ALIVE", "5m")
     TIMEOUT_VISION: int = int(os.getenv("TIMEOUT_VISION", "60"))  # 1ª carga na VRAM é lenta
 
+    # --- Leitura de Tela (skill SCREEN_READ: OCR do Windows + modelo de texto) ---
+    OCR_LANGUAGE: str = os.getenv("OCR_LANGUAGE", "")              # vazio = pt-BR → en-US → perfil
+    SCREEN_TEXT_MAX: int = int(os.getenv("SCREEN_TEXT_MAX", "6000"))  # caracteres do OCR enviados ao modelo
+
     # --- Configurações de Transcrição (faster-whisper — upload de áudio no Chat) ---
     WHISPER_MODEL_SIZE: str = os.getenv("WHISPER_MODEL_SIZE", "base")
     WHISPER_DEVICE: str = os.getenv("WHISPER_DEVICE", "auto")           # "cpu" | "cuda" | "auto"

@@ -31,7 +31,7 @@ Prefira o Windows Terminal.
 
 | Modo | Entra com | Como funciona |
 |---|---|---|
-| **Chat** | `Shift+Tab` | Texto em Markdown. Roda só skills de `productivity` e `web` (agenda, GitHub, trânsito, busca, briefing, foco, apresentação), com o selo `[INTENT]`. Voz desligada |
+| **Chat** | `Shift+Tab` | Texto em Markdown. Roda só skills de `productivity` e `web` (agenda, GitHub, trânsito, busca, briefing, foco, apresentação, leitura de tela), com o selo `[INTENT]`. Voz desligada |
 | **Copilot** | `Shift+Tab`, `Ctrl+T`, `Win+J` | Só voz: o input vira `VoiceBar` + orb (ouvindo → pensando → respondendo). Todas as skills; ações críticas pedem confirmação. A resposta é falada. Tudo em ciano |
 
 Comandos `/` só existem no Chat.

@@ -21,9 +21,9 @@ Chaves em uso:
 | Chave | Dono | Conteúdo |
 |---|---|---|
 | `disabled_skills`, `disabled_categories` | `services/skill_settings.py` | listas de INTENT / categorias desligadas em `/skills` |
-| `pref_<nome>` | `services/user_prefs.py` | preferências do `/config` (`pref_tts_voice`, `pref_briefing_auto`…) |
+| `pref_<nome>` | `services/user_prefs.py` | preferências do `/config` (`pref_tts_voice`, `pref_briefing_auto`, `pref_news_ai`…) |
 | `briefing_last_date` | `core/briefing.py` | data do último briefing (automático 1× por dia) |
-| `news_sources` | `core/news.py` | fontes de notícias do briefing ("G1, BBC, …") |
+| `news_sources` | `core/news.py` | fontes de notícias do briefing ("G1, BBC, CNN Brasil, …") |
 | `commute_home`, `commute_work`, `place_<local>`, `places_index` | `core/traffic.py` | locais cadastrados com `/rota` |
 | `commute_alert_last` | `core/traffic.py` | último aviso de saída (evita repetir) |
 | `dnd_restore` | `services/focus.py` | estado dos toasts do Windows a restaurar ao sair do Não Perturbe |

@@ -66,6 +66,13 @@ def _check_pending_action(command):
                                   pending_id=current.get("id"))
 
 
+def _join_reply(result):
+    """Resposta de skill como texto: `str` passa direto; iterável (stream) é juntado."""
+    if result is None or isinstance(result, str):
+        return result
+    return "".join(chunk for chunk in result if chunk)
+
+
 def execute_command(command, session_id='default'):
     """Pipeline do modo voz: sempre com skills liberadas (como o Copilot)."""
     res = _check_pending_action(command)
@@ -84,7 +91,7 @@ def execute_command(command, session_id='default'):
 
     elif intent in manager.skills and is_skill_enabled(intent):
         skill_module = manager.skills[intent]
-        return skill_module.execute(entity, command)
+        return _join_reply(skill_module.execute(entity, command))
 
     else:
         vault_file, vault_ctx = get_vault_context(command)
@@ -129,7 +136,11 @@ def execute_command_stream(command, session_id='default', images=None, mode=MODE
         if on_route:
             on_route(intent)
         skill_module = manager.skills[intent]
-        yield skill_module.execute(entity, command)
+        result = skill_module.execute(entity, command)
+        if result is None or isinstance(result, str):
+            yield result
+        else:  # skill que responde em stream (ex.: SCREEN_READ) devolve um iterável de pedaços
+            yield from result
 
     else:
         vault_file, vault_ctx = get_vault_context(command)
