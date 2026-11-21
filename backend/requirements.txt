@@ -27,7 +27,7 @@ winrt-Windows.Globalization>=4!10.0,<4!11
 winrt-Windows.Foundation>=4!10.0,<4!11
 
 # --- CONFIGURAÇÃO E AMBIENTE ---
-python-dotenv>=1.2,<2       # Gerenciamento de variáveis de ambiente (.env)
+python-dotenv>=1.2.4,<2       # Gerenciamento de variáveis de ambiente (.env)
 
 # --- RECONHECIMENTO DE VOZ (Speech to Text) ---
 SpeechRecognition>=3.17.0,<4  # Biblioteca para reconhecimento de voz via Google Speech API
