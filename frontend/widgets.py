@@ -11,6 +11,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.content import Content
+from textual.css.query import NoMatches
 from textual.message import Message
 from textual.reactive import reactive
 from textual.screen import ModalScreen
@@ -314,7 +315,11 @@ class CopilotHero(Horizontal):
 
     def set_info(self, model, skills):
         self._model, self._skills = model, skills
-        self.query_one("#hero-info", Label).update(self._info())
+        try:
+            label = self.query_one("#hero-info", Label)
+        except NoMatches:
+            return  # ainda não montado ou já desmontado: o compose() usa os valores guardados
+        label.update(self._info())
 
     @property
     def state(self):

@@ -17,6 +17,7 @@ Registro das mudanças aplicadas no J.A.R.V.I.S.
 | 6 | Config `OCR_LANGUAGE` e `SCREEN_TEXT_MAX` (padrão 6000) | `backend/core/config.py`, `env.example` |
 | 7 | Dependências `winrt-*` (OCR, Imaging, Streams, Globalization, Foundation) no `requirements.txt` + lock regenerado; smoke de imports do instalador | `backend/requirements.txt`, `backend/requirements.lock`, `installer/build_runtime.ps1` |
 | 8 | Testes: escolha da janela/monitor, OCR (tamanho, idiomas, segredos, sem winrt), skill (prompt por tipo, pouco texto, corte, escopo, segredos) e skill em stream no `brain` | `backend/tests/test_screen_capture.py`, `backend/tests/test_ocr.py`, `backend/tests/test_screen_read.py`, `backend/tests/test_mode_routing.py` |
+| 10 | Corrida no fim do stream com o app fechando: `CopilotHero.set_info` tolera o label não montado e `_stream_done` ignora a atualização com a tela desmontada (`NoMatches '#hero-info'` derrubou o CI uma vez) | `frontend/widgets.py`, `frontend/app.py`, `backend/tests/test_tui_orb.py` |
 | 9 | Documentação: doc da skill, módulos novos no `core`, contrato de `execute` com stream, variáveis novas, risco de leitura de tela no SECURITY | `backend/docs/skills/productivity/screen_read.md` (novo), `backend/docs/skills/automation/screen_control.md`, `backend/docs/services/brain.md`, `backend/docs/core/config.md`, `backend/README.md`, `backend/core/README.md`, `backend/services/README.md`, `frontend/README.md`, `README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `SECURITY.md`, `docs/arquitetura.md` |
 
 ## Manchetes mais espertas + CNN Brasil

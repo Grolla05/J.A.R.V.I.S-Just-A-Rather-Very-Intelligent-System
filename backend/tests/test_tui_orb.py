@@ -64,5 +64,16 @@ class TestOrbGrid(unittest.TestCase):
         self.assertEqual(orb.to_halfblocks([["a"], ["a"]]), [[("█", "a", None)]])
 
 
+class TestCopilotHeroInfo(unittest.TestCase):
+    """Fim de stream com o app fechando chamava set_info sem o label montado
+    (NoMatches '#hero-info' derrubava o worker; falha intermitente no CI)."""
+
+    def test_set_info_without_mounted_label_keeps_values(self):
+        from frontend.widgets import CopilotHero
+        hero = CopilotHero(model="llama3.2", skills=3)
+        hero.set_info("gemma2:2b", 7)  # fora da árvore: não pode levantar
+        self.assertEqual(hero._info(), "gemma2:2b · 7 skills de automação")
+
+
 if __name__ == "__main__":
     unittest.main()
