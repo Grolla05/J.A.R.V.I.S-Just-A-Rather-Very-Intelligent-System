@@ -6,7 +6,7 @@
 
 - **Chat** (texto, Markdown) e **Copilot** (só voz, com wake word "Jarvis"), alternados com `Shift+Tab`.
 - **Skills** plug-and-play: abrir/fechar apps, volume, Spotify, brilho, limpeza, bloqueio, agenda do Google, GitHub, trânsito, pesquisa na web, Pomodoro, Modo Apresentação… No Chat só rodam as de consulta/produtividade; no Copilot, todas.
-- **Briefing diário** no 1º boot do dia: clima, computador (CPU, RAM, GPU, internet), GitHub, agenda, trânsito e a manchete mais relevante de cada portal.
+- **Briefing diário** no 1º boot do dia: clima, computador (CPU, RAM, GPU, internet), GitHub, agenda, trânsito e a manchete mais relevante de cada portal, escolhida pela IA entre as mais importantes do dia.
 - **Alertas de hardware** com filtro de interrupções (Não Perturbe, reunião, tela cheia, apresentação).
 - **Memória de longo prazo** no Obsidian (RAG) e histórico de sessões estilo *save slots*.
 - **Agente residente** na bandeja: `Win+J` abre/foca o JARVIS de qualquer lugar e `Ctrl+Alt+T` traduz o texto selecionado em qualquer app.

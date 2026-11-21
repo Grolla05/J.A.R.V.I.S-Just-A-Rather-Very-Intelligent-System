@@ -224,8 +224,9 @@ Cada skill expõe `INTENT`, `PROMPT_TEXT`, `KEYWORDS` (opcional, pré-filtro), `
 
 1. Fontes com RSS oficial (G1, BBC, NYT, WSJ, CNN Brasil) leem o feed; fontes sem RSS usam a busca e descartam títulos de página inicial; "DOI" busca no Crossref.
 2. Entram as 15 mais novas das últimas 48 h (item de feed sem data fica de fora).
-3. Cada título ganha pontos por palavra-chave: morte (3), guerra/ataque/desastre (3), mercado (2), queda/disparada/recorde (2), política (1).
-4. Vence a maior nota; empate fica com a mais nova.
+3. Cada título ganha pontos por assunto: morte (3), guerra/ataque/desastre (3), mercado (2), queda/disparada/recorde (2), política (1). Os termos aceitam radical (`morr*` casa "morreram", `despenc*` casa "despencou"); palavras ambíguas ficam exatas ("bolsa" não casa "Bolsonaro"). Frases de `_FALSE_CONTEXT` ("bolsa de estudos", "morrer de rir") saem antes da contagem.
+4. Os 3 melhores de cada fonte (empate → o mais novo) vão, com a pref `news_ai` ligada (`/config` → ROTINAS, padrão ligada), numa **única** chamada ao Ollama (`prompts/news_rank.md`, JSON `{fonte: índice}`), que escolhe o mais importante. Sem resposta válida, vence a maior nota.
+5. A CNN internacional não tem RSS vivo (parado desde 2023): "CNN" vai pela busca, e o padrão das fontes usa "CNN Brasil".
 
 ### 5.2 Foco, Não Perturbe e Apresentação
 

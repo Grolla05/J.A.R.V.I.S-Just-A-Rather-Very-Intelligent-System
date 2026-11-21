@@ -28,6 +28,10 @@ class TestParse(unittest.TestCase):
     def test_empty_falls_back_to_default(self):
         self.assertEqual(news.normalize("  , ,"), news.DEFAULT_SOURCES)
         self.assertIn("SciELO", news.parse_sources(news.DEFAULT_SOURCES))
+        # CNN internacional não tem RSS vivo: o padrão é a CNN Brasil (feed em FEEDS)
+        self.assertIn("CNN Brasil", news.parse_sources(news.DEFAULT_SOURCES))
+        self.assertNotIn("CNN", news.parse_sources(news.DEFAULT_SOURCES))
+        self.assertIn(news.resolve("CNN Brasil")[1], news.FEEDS)
 
     def test_limit(self):
         self.assertEqual(len(news.parse_sources(",".join(f"f{i}" for i in range(30)))), news.MAX_SOURCES)
@@ -70,6 +74,33 @@ class TestRelevance(unittest.TestCase):
                            news.relevance("Presidente visita feira"))
         self.assertEqual(news.relevance("Receita de bolo de cenoura"), 0)
 
+    def test_stems_match_inflections(self):
+        self.assertGreater(news.relevance("Três pessoas morreram em acidente"), 0)
+        self.assertGreater(news.relevance("Ações da Petrobras despencaram"), 0)
+        self.assertGreater(news.relevance("Bombardeios atingem a capital"), 0)
+        self.assertGreater(news.relevance("Eleições municipais terminam hoje"), 0)
+
+    def test_ambiguous_words_stay_exact(self):
+        self.assertEqual(news.relevance("Cristo Redentor recebe visitantes"), 0)
+        self.assertEqual(news.relevance("Nova diet de verão"), 0)
+        self.assertEqual(news.relevance("Bolsonaro visita feira"), 0)
+
+    def test_false_context_cancels_weight(self):
+        self.assertEqual(news.relevance("Governo amplia bolsa de estudos para universitários"),
+                         news.relevance("Governo amplia programa para universitários"))
+        self.assertEqual(news.relevance("Plateia morre de rir com comediante"), 0)
+        self.assertEqual(news.relevance("Queda de cabelo: o que fazer"), 0)
+        self.assertGreater(news.relevance("Bolsa despenca 3% com tensão externa"), 0)
+
+    def test_top_candidates_order_limit_age(self):
+        old = NOW - datetime.timedelta(days=5)
+        titles = [("Festival agita a cidade", NOW), ("Morre cantor famoso", NOW), ("Velha guerra", old),
+                  ("Presidente viaja", NOW), ("Bolsa despenca", NOW)]
+        self.assertEqual(news.top_candidates(titles, now=NOW),
+                         ["Bolsa despenca", "Morre cantor famoso", "Presidente viaja"])
+        self.assertEqual(news.top_candidates(titles, n=1, now=NOW), ["Bolsa despenca"])
+        self.assertEqual(news.top_candidates([("Velha guerra", old)], now=NOW), [])
+
     def test_pick_most_relevant_then_newest(self):
         titles = [("Festival de música agita a cidade", NOW), ("Presidente visita feira agrícola", NOW),
                   ("Morre cantor famoso aos 70", NOW)]
@@ -110,7 +141,38 @@ class TestFeed(unittest.TestCase):
                                                                                    content=b"<html"))), [])
 
 
+class TestRerank(unittest.TestCase):
+    CANDS = {"G1": ["Chuva fecha estradas", "Morre jornalista"], "BBC": ["Only one"], "WSJ": ["A", "B", "C"]}
+
+    def test_valid_json_picks_index_only_for_multi_sources(self):
+        ask = MagicMock(return_value='{"G1": 1, "WSJ": "2", "BBC": 0}')
+        self.assertEqual(news.rerank(self.CANDS, ask=ask), {"G1": 1, "WSJ": 2})
+        ask.assert_called_once()
+        prompt = ask.call_args.args[0][0]["content"]
+        self.assertIn("Morre jornalista", prompt)
+        self.assertNotIn("Only one", prompt)  # fonte com 1 opção não vai ao modelo
+        self.assertEqual(ask.call_args.kwargs, {"format": "json", "temperature": 0})
+
+    def test_out_of_range_or_garbage_is_ignored(self):
+        self.assertEqual(news.rerank(self.CANDS, ask=MagicMock(return_value='{"G1": 9, "WSJ": "x"}')), {})
+        self.assertEqual(news.rerank(self.CANDS, ask=MagicMock(return_value="não é json")), {})
+        self.assertEqual(news.rerank(self.CANDS, ask=MagicMock(return_value=None)), {})
+        self.assertEqual(news.rerank(self.CANDS, ask=MagicMock(return_value="[1, 2]")), {})
+        self.assertEqual(news.rerank(self.CANDS, ask=MagicMock(side_effect=RuntimeError("off"))), {})
+
+    def test_nothing_to_rank_skips_model(self):
+        ask = MagicMock()
+        self.assertEqual(news.rerank({"BBC": ["só uma"], "G1": []}, ask=ask), {})
+        ask.assert_not_called()
+
+
 class TestHeadlines(unittest.TestCase):
+    def setUp(self):
+        # Sem isto a pref real (padrão ligada) mandaria o desempate ao Ollama.
+        patcher = patch.object(news, "_ai_enabled", return_value=False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def _search(self, query, max_results=5):
         site = query.split("site:")[-1].split()[0]
         return [{"title": f"{site} - Portal de notícias"}, {"title": f"Ministro anuncia plano para {site}"}]
@@ -134,6 +196,27 @@ class TestHeadlines(unittest.TestCase):
         stale = MagicMock(return_value=_rss(("Velha", "Mon, 01 Jan 2024 10:00:00 GMT")))
         out = news.headlines(["G1"], search=search, get=stale)
         self.assertEqual(out, [("G1", "Ministro anuncia plano para g1.globo.com")])
+
+    def test_ai_off_never_asks(self):
+        ask = MagicMock()
+        news.headlines(["SciELO", "Estadão"], search=self._search, ask=ask)
+        ask.assert_not_called()
+
+    def test_ai_on_asks_once_for_all_sources(self):
+        def search(query, max_results=5):
+            city = query.split()[0]
+            return [{"title": f"Festival anima a cidade de {city}"},
+                    {"title": f"Morre figura conhecida em {city}"}]
+
+        ask = MagicMock(return_value='{"Estadão": 1}')
+        out = news.headlines(["Estadão", "Folha"], search=search, ai=True, ask=ask)
+        ask.assert_called_once()
+        prompt = ask.call_args.args[0][0]["content"]
+        self.assertIn("Estadão", prompt)
+        self.assertIn("Folha", prompt)
+        # Estadão: o modelo escolheu o índice 1; Folha ficou sem resposta → índice 0 (maior nota)
+        self.assertEqual(out, [("Estadão", "Festival anima a cidade de Estadão"),
+                               ("Folha", "Morre figura conhecida em Folha")])
 
     def test_failing_source_is_skipped(self):
         def search(query, max_results=5):

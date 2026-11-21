@@ -2,6 +2,21 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+## Manchetes mais espertas + CNN Brasil
+
+**Data:** 2026-11-21
+**Escopo:** Itens "Manchetes mais espertas" e "CNN internacional" do brainstorm de melhorias.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | Fonte padrão "CNN" vira "CNN Brasil": os feeds `rss.cnn.com` estão parados desde abril de 2023; o da CNN Brasil está vivo e já estava em `FEEDS`. "CNN" digitado continua indo pela busca `site:cnn.com` | `backend/core/news.py` |
+| 2 | Relevância com radicais (`morr*`, `despenc*`, `bombarde*`…; `*` = prefixo, como nas `KEYWORDS`); palavras ambíguas seguem exatas ("bolsa" não casa "Bolsonaro") | `backend/core/news.py` |
+| 3 | `_FALSE_CONTEXT`: "bolsa de estudos", "bolsa família", "morrer de rir", "queda de cabelo"… saem do título antes da contagem | `backend/core/news.py` |
+| 4 | `top_candidates()` devolve os 3 melhores por fonte; `rerank()` manda todos numa **única** chamada ao Ollama (`format="json"`, `temperature=0`), que escolhe o mais importante. Resposta inválida ou erro → vale a nota de palavras | `backend/core/news.py`, `backend/prompts/news_rank.md` |
+| 5 | Pref `news_ai` ("Manchetes escolhidas pela IA", `/config` → ROTINAS, padrão ligada) | `backend/services/user_prefs.py`, `frontend/screens/settings.py` |
+| 6 | Testes: radicais, palavras ambíguas, contexto, `top_candidates`, `rerank` (JSON válido/inválido/fora da faixa/erro) e uma chamada só por briefing | `backend/tests/test_news.py` |
+| 7 | Documentação das manchetes | `docs/arquitetura.md`, `backend/core/README.md`, `backend/services/README.md`, `backend/database/README.md`, `README.md`, `AGENTS.md` |
+
 ## Melhorias da revisão geral (issues `enhancement`)
 
 **Data:** 2026-11-19

@@ -55,7 +55,7 @@ Importar `core` abre o banco, carrega as skills e prepara o cliente MCP. Por iss
 | Módulo | Papel |
 |---|---|
 | `briefing.py` | Briefing diário: coleta isolada por fonte, seções fixas, frase de fecho do LLM |
-| `news.py` | Manchetes: uma por fonte, a mais relevante (RSS oficial ou busca; Crossref para DOI) |
+| `news.py` | Manchetes: uma por fonte, a mais relevante (RSS oficial ou busca; Crossref para DOI). Nota por assunto com radicais (`morr*`) e contexto que anula ("bolsa de estudos"); com a pref `news_ai`, os 3 melhores de cada fonte vão numa única chamada ao Ollama (`prompts/news_rank.md`) |
 | `weather.py` | Clima (Open-Meteo, local por IP guardado no Obsidian) e saudação |
 | `google_calendar.py` | Google Agenda só leitura: briefing, skill `CALENDAR`, `is_busy()` para o filtro |
 | `traffic.py` | Locais fixos (`/rota`), rota OSRM (grátis) ou TomTom (ao vivo), aviso de saída |
