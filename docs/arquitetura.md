@@ -255,7 +255,7 @@ Os sinais `CRITICAL_START`/`CRITICAL_END` pintam a TUI de vermelho (classe `-cri
 "Explica o erro na minha tela", "resolve a questão aberta", "resume o monitor 2". Sem modelo de visão: o modelo de texto (`OLLAMA_MODEL`) faz o trabalho, e a VRAM fica livre.
 
 1. `core/screen_capture.capture()`: a janela em foco; se for o próprio terminal do JARVIS (caso do Chat), desce na ordem Z até a 1ª janela real (visível, não minimizada, não oculta pelo DWM, com título, fora do shell). "tela inteira"/"monitor N" capturam o monitor. A imagem nunca vai para o disco.
-2. `core/ocr.recognize()`: OCR do Windows (`OCR_LANGUAGE` → pt-BR → en-US → perfil), ampliando ×2 imagens baixas. `mask_secrets()` troca por `[oculto]` linhas com token de cara de chave.
+2. `core/ocr.recognize()`: OCR do Windows (`OCR_LANGUAGE` → pt-BR → en-US → perfil). Com idioma principal não inglês, lê também em en-US e `merge_readings()` junta palavra a palavra: acentos do principal, dígitos do inglês quando os dois têm dígito e divergem (o motor pt-BR lê "80" como "8a" em fonte de código). `mask_secrets()` troca por `[oculto]` linhas com token de cara de chave.
 3. `core/clipboard.classify()` escolhe o prompt: erro → `explain_error.md`, código → `explain_code.md`, resto → `screen_read.md` (com o pedido do usuário e o título da janela). Texto cortado em `SCREEN_TEXT_MAX`.
 4. A skill devolve o gerador de `query_ollama_stream`: o `brain` repassa em stream na TUI e junta no modo voz.
 

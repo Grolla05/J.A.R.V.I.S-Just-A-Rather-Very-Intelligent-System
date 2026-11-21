@@ -21,7 +21,8 @@ execute(entity, command)
   │     janela em foco; se for o terminal do JARVIS (Chat), desce na ordem Z até a 1ª janela real
   │     (visível, não minimizada, não "cloaked", com título, fora do shell, não é janela de ferramenta)
   │     imagem só em memória — nunca vai para disco nem SQLite
-  ├─ ocr.recognize()        Windows.Media.Ocr · OCR_LANGUAGE → pt-BR → en-US → perfil · ×2 se altura < 900 px
+  ├─ ocr.recognize()        Windows.Media.Ocr · OCR_LANGUAGE → pt-BR → en-US → perfil · ×2 só se altura < 400 px
+  │                         + 2ª leitura em en-US e merge_readings (acentos do pt-BR, dígitos do en-US)
   ├─ ocr.mask_secrets()     linha com token de cara de chave (sk-, ghp_…, ou 20+ caracteres aleatórios) → [oculto]
   ├─ < 20 caracteres?       → NO_TEXT_REPLY (sugere /attach)
   ├─ clip_text()            corta em SCREEN_TEXT_MAX (6000) no fim de linha + "[texto cortado]"
