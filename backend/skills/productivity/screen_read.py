@@ -10,12 +10,17 @@ texto (`core.clipboard.classify`) escolhe o prompt: erro → explain_error.md,
 código → explain_code.md, resto → screen_read.md (com o pedido do usuário) →
 resposta em stream do OLLAMA_MODEL.
 
+Navegador (Chromium) em foco: antes do OCR, pega a URL da aba pela UI Automation
+(`core.browser`) e baixa a página inteira (`core.web.fetch_text`) — lê também o que
+está fora da área visível. Só para URL pública e sem parâmetro com cara de
+credencial (`browser.is_fetch_safe`); página logada, vazia ou SPA cai no OCR.
+
 Tela sem texto legível: avisa e sugere o /attach — interpretar imagem ainda não
 é suportado (fica para a Thinking Layer).
 """
 import re
 
-from core import ocr, screen_capture
+from core import browser, ocr, screen_capture, web
 from core.config import settings
 from core.logger import log
 from core.prompts import load_prompt
@@ -24,9 +29,10 @@ INTENT = "SCREEN_READ"
 PROMPT_TEXT = load_prompt("skills/screen_read.md")
 # Pré-filtro do classificador (sem acento; `*` = prefixo). Ver skills/README.md
 KEYWORDS = ("tela", "telas", "janela*", "monitor*", "print", "printscreen", "aberto", "aberta",
-            "questao", "questoes", "exercicio*")
+            "questao", "questoes", "exercicio*", "pagina", "paginas", "artigo*", "site")
 
 MIN_OCR_CHARS = 20
+MIN_PAGE_CHARS = 400   # menos que isso = página de login, SPA ou bloqueio → OCR
 NO_TEXT_REPLY = ("Não encontrei texto legível nessa janela, Senhor. Por enquanto eu leio só texto da tela "
                  "(código, erro, documento, questão); interpretar imagem ainda não está disponível. "
                  "Se for uma imagem, anexe com `/attach`.")
@@ -39,6 +45,9 @@ _WHOLE_RE = re.compile(r"\b(tela\s+(inteira|toda|cheia)|toda\s+a\s+tela|monitor)
 # Pontos de injeção para os testes.
 capture = screen_capture.capture
 recognize = ocr.recognize
+target = screen_capture.target_window
+page_url = browser.active_url
+fetch = web.fetch_text
 
 
 def ask(messages):
@@ -81,8 +90,47 @@ def build_prompt(text, command, window):
                        window=window or "desconhecida")
 
 
+def read_page(win):
+    """(url, texto) da aba ativa do navegador-alvo, ou None (vai para o OCR)."""
+    if not browser.is_browser(win):
+        return None
+    url = page_url(win)
+    if not url:
+        return None
+    if not browser.is_fetch_safe(url):
+        log.info("👁️ [SCREEN_READ] URL da aba não é pública/segura para baixar de novo; usando OCR")
+        return None
+    text = ocr.mask_secrets(fetch(url, max_chars=settings.SCREEN_TEXT_MAX) or "")
+    if len(text.strip()) < MIN_PAGE_CHARS:
+        log.info(f"👁️ [SCREEN_READ] Página com pouco texto ({len(text)} caracteres); usando OCR")
+        return None
+    return url, text
+
+
+def build_page_prompt(url, text, command, window):
+    return load_prompt("page_read.md", url=url, text=text, window=window or "desconhecida",
+                       question=command or "resuma o conteúdo desta página")
+
+
+def _window_with_process(win):
+    if win and "process" not in win:
+        win = dict(win, process=browser._process_name(win["hwnd"]))
+    return win
+
+
 def execute(entity, command=""):
     scope, monitor_idx = scope_for(entity, command)
+    if scope == "window":
+        try:
+            win = _window_with_process(target())
+            page = read_page(win)
+        except Exception as e:
+            log.warning(f"[SCREEN_READ] Leitura da página falhou, usando OCR: {e}")
+            win, page = None, None
+        if page:
+            url, text = page
+            log.info(f"👁️ [SCREEN_READ] página {url}: {len(text)} caracteres baixados")
+            return ask([{"role": "user", "content": build_page_prompt(url, text, command, win.get("title"))}])
     image, window = capture(scope=scope, monitor_idx=monitor_idx)
     if image is None:
         return NO_CAPTURE_REPLY

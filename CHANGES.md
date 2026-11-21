@@ -2,6 +2,23 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+## Navegador: Abas, YouTube Pro e Extração de Conteúdo
+
+**Data:** 2026-11-21
+**Escopo:** Itens "Gestão Dinâmica de Abas", "Protocolo YouTube Pro" e "Extração de Conteúdo" (Nível 2-B, The Navigator) do brainstorm. Navegadores Chromium (Opera GX, Chrome, Edge, Brave, Vivaldi), sem extensão e sem `--remote-debugging-port`.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `core/browser.py`: janela do navegador (ordem Z, pula o terminal do JARVIS), atalhos só com foco confirmado (toque de Alt contra o foreground-lock), UI Automation via comtypes (URL da aba, listar/selecionar/fechar abas pelo botão "x"), `normalize_url`, `match_tab`, `clean_tab_title` (tira "- Memory usage - 86 MB", visto no Edge real) e `is_fetch_safe`. `CHROMIUM_APPS` em `window_utils` | `backend/core/browser.py`, `backend/core/window_utils.py` |
+| 2 | Skill `BROWSER_TABS` (automation, Copilot): aba nova (vazia/site/busca), fechar atual/por nome/número, ir para aba, próxima/anterior, reabrir, listar, recarregar, voltar/avançar, duplicar, anônima. Regex primeiro, LLM só no resto; fechar outras/todas pede confirmação (`pending`) | `backend/skills/automation/browser_tabs.py`, `backend/prompts/skills/browser_tabs.md`, `backend/prompts/skills/browser_tabs_decision.md` |
+| 3 | `core/youtube.py` + skill `YOUTUBE_CONTROL` (automation, Copilot): "toca X no YouTube" abre o 1º vídeo (página de resultados do YouTube; ddgs de reserva; sem vídeo, resultados); player pelas teclas oficiais na aba do YouTube (troca de aba se preciso, devolve o foco nas ações rápidas); velocidade exata; "que vídeo é esse?" | `backend/core/youtube.py`, `backend/skills/automation/youtube_control.py`, `backend/prompts/skills/youtube_control.md`, `backend/prompts/skills/youtube_decision.md` |
+| 4 | `SCREEN_READ` lê a página do navegador pela URL da aba (página inteira, inclusive fora da tela) antes do OCR; só URL pública sem parâmetro de credencial; página curta/logada ou falha → OCR. Prompt `page_read.md`; KEYWORDS `pagina*`, `artigo*`, `site` | `backend/skills/productivity/screen_read.py`, `backend/prompts/page_read.md`, `backend/prompts/skills/screen_read.md` |
+| 5 | Classificador: exemplos BROWSER_TABS × APP_CONTROL e YOUTUBE_CONTROL × SPOTIFY_CONTROL; "NÃO use para…" em APP_CONTROL e SPOTIFY_CONTROL | `backend/prompts/classify_intent.md`, `backend/prompts/skills/app_control.md`, `backend/prompts/skills/spotify_control.md` |
+| 6 | Instalador gera os wrappers COM da UI Automation no build (o runtime instalado é só leitura) | `installer/build_runtime.ps1` |
+| 7 | Testes: `core/browser` (janela, URL, URL segura, aba, título, UIA indisponível, sem foco), abas, YouTube, página no SCREEN_READ e KEYWORDS das skills novas | `backend/tests/test_browser.py`, `backend/tests/test_browser_tabs.py`, `backend/tests/test_youtube.py`, `backend/tests/test_screen_read.py`, `backend/tests/test_intent_prefilter.py` |
+| 9 | Achados tirando as fotos do post com a TUI real (gemma2 + Edge isolado): "avança 30 segundos" não casava nenhuma KEYWORD → o classificador recebia as 23 skills, estourava o contexto e caía no CHAT (KEYWORDS ganharam `avanc*`, `adiant*`, `retroced*`, `segundos`); a busca de vídeos do ddgs falhou por DNS → `find_video` lê primeiro a página de resultados do YouTube e tenta o ddgs 3× de reserva; o resumo de página inventava "Fórmula/Resposta" no fim → `page_read.md` limita a 6 tópicos e só resolve questão quando pedido. Atalhos validados ao vivo (abrir vídeo, avançar 30 s, legenda) | `backend/skills/automation/youtube_control.py`, `backend/core/youtube.py`, `backend/prompts/page_read.md`, `backend/tests/test_youtube.py`, `backend/tests/test_intent_prefilter.py` |
+| 8 | Documentação | `backend/docs/skills/automation/browser_tabs.md` (novo), `backend/docs/skills/automation/youtube_control.md` (novo), `backend/docs/skills/productivity/screen_read.md`, `backend/core/README.md`, `docs/arquitetura.md`, `SECURITY.md`, `AGENTS.md`, `README.md` |
+
 ## Leitura de Tela (OCR do Windows + modelo de texto)
 
 **Data:** 2026-11-21

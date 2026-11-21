@@ -62,6 +62,8 @@ Importar `core` abre o banco, carrega as skills e prepara o cliente MCP. Por iss
 | `google_calendar.py` | Google Agenda só leitura: briefing, skill `CALENDAR`, `is_busy()` para o filtro |
 | `traffic.py` | Locais fixos (`/rota`), rota OSRM (grátis) ou TomTom (ao vivo), aviso de saída |
 | `github_client.py` | PRs, issues, último commit, CI, `create_issue` (quem chama confirma antes) |
+| `browser.py` | Navegador Chromium sem CDP: acha a janela (ordem Z, pula o terminal do JARVIS), manda atalhos só com foco confirmado e usa a UI Automation (comtypes) para URL da aba, listar/selecionar/fechar abas; `is_fetch_safe` decide se a página pode ser baixada de novo |
+| `youtube.py` | `find_video` (página de resultados do YouTube (1º `videoId` do HTML) → ddgs de reserva → senão abre os resultados), `clean_title`/`is_youtube_title` |
 | `spotify.py` | OAuth PKCE, Web API (busca, playlists, dispositivos) e player |
 | `oauth.py` | OAuth Desktop genérico: PKCE + callback no loopback |
 | `secrets_store.py` | Tokens no Cofre de Credenciais do Windows (`keyring`); fallback JSON |

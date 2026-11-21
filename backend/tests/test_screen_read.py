@@ -90,6 +90,76 @@ class TestScope(Base):
         self.assertEqual(sr.clip_text("curto", limit=100), "curto")
 
 
+ARTICLE = "\n".join(f"Parágrafo {i}: a fotossíntese converte luz em energia química nas plantas." for i in range(40))
+BROWSER = {"hwnd": 7, "title": "Fotossíntese – Wikipédia - Opera", "process": "opera.exe"}
+
+
+class TestBrowserPage(unittest.TestCase):
+    """Navegador em foco: a página vem pela URL da aba; o OCR é só a reserva."""
+
+    def run_skill(self, url, page_text, win=BROWSER, command="resume essa página"):
+        self.capture = MagicMock(return_value=("IMG", win["title"]))
+        self.recognize = MagicMock(return_value=PROSE)
+        self.ask = MagicMock(return_value=iter(["ok"]))
+        self.fetch = MagicMock(return_value=page_text)
+        self.page_url = MagicMock(return_value=url)
+        with patch.object(sr, "capture", self.capture), patch.object(sr, "recognize", self.recognize),                 patch.object(sr, "ask", self.ask), patch.object(sr, "target", MagicMock(return_value=win)),                 patch.object(sr, "page_url", self.page_url), patch.object(sr, "fetch", self.fetch):
+            return list(sr.execute(None, command))
+
+    def prompt(self):
+        return self.ask.call_args.args[0][0]["content"]
+
+    def test_public_page_is_downloaded_and_ocr_skipped(self):
+        url = "https://pt.wikipedia.org/wiki/Fotoss%C3%ADntese"
+        self.assertEqual(self.run_skill(url, ARTICLE), ["ok"])
+        self.fetch.assert_called_once()
+        self.assertEqual(self.fetch.call_args.args[0], url)
+        self.capture.assert_not_called()
+        self.recognize.assert_not_called()
+        self.assertIn(url, self.prompt())
+        self.assertIn("Parágrafo 39", self.prompt())   # o que estava fora da tela
+        self.assertIn("resume essa página", self.prompt())
+
+    def test_unsafe_url_goes_to_ocr_without_download(self):
+        self.run_skill("https://site.com/reset?token=abc123", ARTICLE)
+        self.fetch.assert_not_called()
+        self.capture.assert_called_once()
+
+    def test_private_host_goes_to_ocr(self):
+        self.run_skill("http://192.168.0.1/admin", ARTICLE)
+        self.fetch.assert_not_called()
+        self.recognize.assert_called_once()
+
+    def test_short_page_falls_back_to_ocr(self):
+        self.run_skill("https://mail.google.com/mail/u/0/", "Faça login para continuar")
+        self.fetch.assert_called_once()
+        self.recognize.assert_called_once()
+        self.assertIn("OCR", self.prompt())
+
+    def test_no_url_falls_back_to_ocr(self):
+        self.run_skill("", ARTICLE)
+        self.fetch.assert_not_called()
+        self.recognize.assert_called_once()
+
+    def test_non_browser_never_asks_url(self):
+        self.run_skill("https://x.com", ARTICLE, win={"hwnd": 2, "title": "VS Code", "process": "code.exe"})
+        self.page_url.assert_not_called()
+        self.recognize.assert_called_once()
+
+    def test_monitor_scope_skips_page(self):
+        self.run_skill("https://pt.wikipedia.org/wiki/X", ARTICLE, command="lê a tela inteira")
+        self.page_url.assert_not_called()
+
+    def test_secrets_in_page_are_masked(self):
+        self.run_skill("https://blog.dev/post", ARTICLE + "\nTOKEN: ghp_AbCdEf1234567890XyZ")
+        self.assertNotIn("ghp_AbCdEf1234567890XyZ", self.prompt())
+
+    def test_page_error_falls_back_to_ocr(self):
+        with patch.object(sr, "read_page", side_effect=RuntimeError("uia")):
+            self.run_skill("https://pt.wikipedia.org/wiki/X", ARTICLE)
+        self.recognize.assert_called_once()
+
+
 class TestContract(unittest.TestCase):
     def test_skill_contract(self):
         self.assertEqual(sr.INTENT, "SCREEN_READ")

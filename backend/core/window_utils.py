@@ -91,6 +91,8 @@ PRESENTATION_APPS = {"powerpnt.exe", "canva.exe", "acrord32.exe", "acrobat.exe",
                      "foxitpdfreader.exe", "foxitreader.exe"}
 # Navegadores: em tela cheia só contam quando o título da aba é de um editor de slides
 BROWSER_APPS = {"chrome.exe", "msedge.exe", "firefox.exe", "opera.exe", "brave.exe", "vivaldi.exe"}
+# Navegadores Chromium: mesmos atalhos e mesma árvore de UI Automation (core/browser.py)
+CHROMIUM_APPS = BROWSER_APPS - {"firefox.exe"}
 SLIDE_TITLE_HINTS = ("canva", "google slides", "apresentações google", "powerpoint")
 # Pref `presentation_open`: o PowerPoint em foco conta mesmo sem tela cheia (.pptx aberto)
 OPEN_APPS = {"powerpnt.exe"}
