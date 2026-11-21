@@ -107,7 +107,7 @@ jobs:
       # testa o setup, guarda como artifact, mas não cria tag nem Release
       - name: Guardar setup do ensaio (artifact)
         if: github.ref != 'refs/heads/main'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: JARVIS-Setup-ensaio
           path: |
@@ -117,7 +117,7 @@ jobs:
 
       - name: Publicar Release
         if: github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ steps.versao.outputs.versao }}
           target_commitish: ${{ github.sha }}
