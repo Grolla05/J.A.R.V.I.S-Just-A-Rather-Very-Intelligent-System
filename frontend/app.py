@@ -19,6 +19,7 @@ from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, VerticalScroll
+from textual.css.query import NoMatches
 from textual.reactive import reactive
 from textual.widgets import Footer, Static
 from textual.worker import get_current_worker
@@ -475,7 +476,11 @@ class JarvisApp(App, inherit_bindings=False):
         return "   ".join(parts) + busy
 
     def _refresh_status(self):
-        self.main_screen.query_one("#status-left", StatusLine).update(self.status_text())
+        try:
+            line = self.main_screen.query_one("#status-left", StatusLine)
+        except NoMatches:
+            return  # app fechando: um worker terminou depois da tela ser desmontada
+        line.update(self.status_text())
 
     # --------------------------------------------------------------- watchers
     @property
