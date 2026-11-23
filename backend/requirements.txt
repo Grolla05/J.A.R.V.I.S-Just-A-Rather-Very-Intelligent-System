@@ -60,7 +60,7 @@ keyring>=25.7,<26           # Cofre de Credenciais do Windows (tokens OAuth das 
 pystray>=0.19.5,<0.20       # Ícone na bandeja do agente residente (agent.py, Win+J)
 
 # --- SEGURANÇA ---
-cryptography>=48,<51        # Ed25519: confere a assinatura Minisign do setup na atualização (core/minisign.py)
+cryptography>=50.0.2,<51        # Ed25519: confere a assinatura Minisign do setup na atualização (core/minisign.py)
 
 # --- MODEL CONTEXT PROTOCOL ---
 
