@@ -91,13 +91,19 @@ def _connections():
 
 
 def _proc_info(pid):
-    """(nome, hora de criação) do processo; ('?', 0.0) se sumiu ou é protegido."""
+    """(nome, hora de criação, executável) do processo; ('?', 0.0, '') se sumiu ou é protegido.
+    O executável sai '' quando o Windows nega acesso (processo de outro usuário/elevado)."""
     try:
         import psutil
         proc = psutil.Process(pid)
-        return proc.name(), float(proc.create_time())
+        name, created = proc.name(), float(proc.create_time())
     except Exception:
-        return "?", 0.0
+        return "?", 0.0, ""
+    try:
+        exe = proc.exe() or ""
+    except Exception:
+        exe = ""
+    return name, created, exe
 
 
 def _addr(value):
@@ -127,8 +133,9 @@ def snapshot(connections=_connections, proc_info=_proc_info, arp=_arp_table, gat
         if status not in ("LISTEN", "ESTABLISHED") or not pid:
             continue
         if pid not in names:
-            names[pid] = proc_info(pid)
-        name, created = names[pid]
+            info = tuple(proc_info(pid)) + ("",)   # proc_info antigo devolvia só (nome, criação)
+            names[pid] = info[:3]
+        name, created, exe = names[pid]
         if not name or name == "?":
             continue
         lip, lport = _addr(getattr(conn, "laddr", None))
@@ -136,11 +143,11 @@ def snapshot(connections=_connections, proc_info=_proc_info, arp=_arp_table, gat
             if lip in _WILDCARD or is_public(lip) or _is_lan(lip):
                 key = f"{name}:{lport}"
                 listeners.setdefault(key, {"proc": name, "port": lport, "addr": lip or "0.0.0.0",
-                                           "pid": pid, "created": created})
+                                           "pid": pid, "created": created, "exe": exe})
         else:
             rip, rport = _addr(getattr(conn, "raddr", None))
             if is_public(rip):
-                entry = talkers.setdefault(name, {"proc": name, "pid": pid, "created": created,
+                entry = talkers.setdefault(name, {"proc": name, "pid": pid, "created": created, "exe": exe,
                                                   "ip": rip, "port": rport, "count": 0})
                 entry["count"] += 1
     devices = gw = None

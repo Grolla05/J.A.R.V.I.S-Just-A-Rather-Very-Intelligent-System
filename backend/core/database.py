@@ -115,6 +115,30 @@ class DatabaseManager:
                     )
                 ''')
 
+                # 7. Softwares que o usuário manteve no Vigia de rede (services/net_trust.py)
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS net_trusted_apps (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL,
+                        name_key TEXT NOT NULL,
+                        exe TEXT NOT NULL DEFAULT '',
+                        exe_key TEXT NOT NULL DEFAULT '',
+                        kind TEXT,
+                        reason TEXT,
+                        decided_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(name_key, exe_key)
+                    )
+                ''')
+
+                # 8. Apelidos de contato de e-mail confirmados (services/email_contacts.py)
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS email_contacts (
+                        alias TEXT PRIMARY KEY,
+                        address TEXT NOT NULL,
+                        last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+
                 # Migração automática e retrocompatível: garante que banco existente ganhe a coluna session_id
                 cursor.execute("PRAGMA table_info(history)")
                 columns = [col[1] for col in cursor.fetchall()]

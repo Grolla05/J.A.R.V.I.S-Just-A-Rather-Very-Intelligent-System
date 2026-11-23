@@ -46,7 +46,8 @@ J.A.R.V.I.S/
 │
 ├── backend/                 ← Python (cérebro cognitivo)
 │   ├── main.py              ← Boot: sanity check, ensure_ollama_running, raiz no sys.path, JarvisApp(boot_fn=run_boot).run() (--copilot abre no modo voz)
-│   ├── agent.py             ← Agente residente (pythonw, bandeja): atalho global Win+J abre/foca a TUI; sobe com o Windows
+│   ├── agent.py             ← Agente residente (pythonw, bandeja): atalho global Win+J abre/foca a TUI; sobe com o Windows (e sobe a ponte se algum canal estiver ligado)
+│   ├── messenger.py         ← Ponte Telegram/Discord (pythonw, mutex próprio): o cérebro roda no PC, a plataforma é só o fio; modo Chat; reconcilia os canais ligados a cada 30 s
 │   ├── core/                ← Infraestrutura
 │   │   ├── state.py         ← Estado global (sys_monitor, pending_critical_action, voice_enabled, announce)
 │   │   ├── pending.py       ← Ação crítica pendente: arm (sem sobrescrever, com id) / take / parse_reply (só frase de confirmação aprova)
@@ -65,12 +66,18 @@ J.A.R.V.I.S/
 │   │   ├── uploads.py       ← load_local_file() + save_base64_upload() (/attach)
 │   │   ├── transcription.py ← Whisper local (faster-whisper)
 │   │   ├── config.py        ← Settings Singleton (.env, paths)
-│   │   ├── database.py      ← DatabaseManager SQLite (6 tabelas)
+│   │   ├── database.py      ← DatabaseManager SQLite (8 tabelas)
 │   │   ├── logger.py        ← JarvisLogger (console fora da TUI, arquivo sempre)
 │   │   ├── obsidian.py      ← RAG sobre vault Obsidian via API REST (plugin Local REST API)
 │   │   ├── oauth.py         ← OAuth Desktop genérico: PKCE + callback no loopback (Google Agenda, Spotify)
 │   │   ├── secrets_store.py ← Cofre de Credenciais do Windows (keyring) p/ tokens OAuth (Google e Spotify); fallback JSON
 │   │   ├── google_calendar.py ← Google Agenda (REST, só leitura): briefing, skill CALENDAR, is_busy(), upcoming() p/ os lembretes
+│   │   ├── google_auth.py   ← GoogleAccount genérico (OAuth PKCE + token no Cofre + request autenticado): um segredo/card por integração
+│   │   ├── gmail.py         ← Gmail (escopo gmail.modify): inbox, read_body, build_mime (resposta/anexo), send, save_draft, ensure_label, batch_modify, find_contacts — sem trash/delete
+│   │   ├── winget.py        ← winget: search (parser pt/en), best_match, install/download sem shell, id validado
+│   │   ├── telegram_bot.py  ← Bot API por long polling (requests): só chat privado, token fora do log, backoff só em erro
+│   │   ├── discord_bot.py   ← discord.py (gateway): responde DM ou menção
+│   │   ├── messenger_ctl.py ← Ponte: canais ativos (token + pref), is_running (mutex), start (leve: o agente usa)
 │   │   ├── traffic.py       ← Trânsito entre locais fixos (/rota <local> <endereço>): Nominatim + OSRM (grátis) ou TomTom (ao vivo)
 │   │   ├── news.py          ← Manchetes do briefing (/config → SISTEMA): 1 por fonte, a mais relevante (RSS oficial ou busca; Crossref p/ DOI; radicais `morr*` + `_FALSE_CONTEXT`; desempate pelo Ollama numa chamada só com a pref `news_ai`)
 │   │   ├── briefing.py      ← Briefing diário em seções fixas (Clima, Computador, GitHub, Agenda, Trânsito, Manchetes); LLM só no fecho
@@ -104,6 +111,15 @@ J.A.R.V.I.S/
 │   │   ├── insights.py      ← Registro de insights: ideias da conversa → nota mensal em 🧠 Brainstorms (/ideia, skill INSIGHT_SAVE)
 │   │   ├── clip_history.py  ← Histórico persistente do clipboard (tabela clipboard_history): busca, reuso, filtro de segredos
 │   │   ├── net_guard.py     ← Guarda de rede: julga achados do netwatch, alerta, encerra processo/bloqueia IP com confirmação (/rede)
+│   │   ├── net_trust.py     ← Softwares mantidos no Vigia de rede (tabela net_trusted_apps: nome + executável); conferido antes do juiz, sobrevive ao /rede reset
+│   │   ├── mailbox.py       ← Caixa de entrada p/ TUI/voz/briefing/ponte: lista priorizada (cache = numeração vista), resumo como dado, VIP, /email
+│   │   ├── email_triage.py  ← Prioridade (ALTA/MÉDIA/BAIXA) e categoria (urgente/financeiro/promoções/social) — regras puras
+│   │   ├── email_compose.py ← Rascunho pelo LLM (só assunto/corpo), confirmação obrigatória; não = rascunho no Gmail; outra frase = ajuste (on_other)
+│   │   ├── email_contacts.py← "Guilherme" → endereço (tabela email_contacts + histórico do Gmail; vários = pergunta)
+│   │   ├── email_organize.py← Plano (arquivar promoções, marcadores JARVIS/Financeiro e JARVIS/Urgente) → "sim" → batchModify; nunca apaga
+│   │   ├── local_files.py   ← Acha arquivo do usuário p/ anexar (Desktop/Documentos/Downloads/OneDrive); bloqueia sensíveis, fora do perfil e >25 MB
+│   │   ├── software.py      ← Download inteligente: winget → confirmação → instala/baixa numa thread e anuncia
+│   │   ├── remote_chat.py   ← Núcleo da ponte: allowlist, sessão por usuário, brain em modo chat com owner canal:usuário, split por limite
 │   │   ├── presentation.py  ← Modo Apresentação: /silent, skill PRESENTATION_MODE ou slides em tela cheia (PowerPoint, PDF, Canva, Google Slides no navegador) / PowerPoint aberto (pref) → mic fechado, TTS mudo, selo [SILENT]
 │   │   ├── notify_filter.py ← Filtro de interrupções: prioridade × contexto (DND, reunião, tela cheia)
 │   │   ├── integrations.py  ← Registro dos cards de /config → INTEGRAÇÕES (estado, conectar, desconectar)
@@ -113,10 +129,10 @@ J.A.R.V.I.S/
 │   │   └── speak.py         ← TTS (edge-tts → fallback pyttsx3), no-op com a voz desligada
 │   ├── skills/
 │   │   ├── automation/      ← app_control, audio_control, browser_tabs, clipboard_assistant, keyboard_control,
-│   │   │                       screen_control, spotify_control, work_macros, youtube_control  (só Copilot/voz)
+│   │   │                       screen_control, software_install, spotify_control, work_macros, youtube_control  (só Copilot/voz)
 │   │   ├── system/          ← network_guard, status_report, system_clear, system_security (só Copilot/voz)
-│   │   ├── productivity/    ← calendar_agenda, daily_briefing, focus_mode, github_control, insight_note,
-│   │   │                       presentation_mode, reminder, screen_read, traffic_commute (Chat e Copilot)
+│   │   ├── productivity/    ← calendar_agenda, daily_briefing, email_organize, email_read, email_send, focus_mode,
+│   │   │                       github_control, insight_note, presentation_mode, reminder, screen_read, traffic_commute (Chat e Copilot)
 │   │   └── web/             ← web_search                                          (Chat e Copilot)
 │   ├── prompts/             ← Arquivos .md de prompt (system_prompt, classify_intent, mode_chat, mode_copilot, briefing...; skills/ p/ PROMPT_TEXT)
 │   ├── tests/               ← pytest (backend + TUI)
@@ -183,7 +199,7 @@ J.A.R.V.I.S/
 
 - Toda operação SQL **deve** terminar com `conn.close()` em bloco `finally`
 - Novas colunas: sempre adicionar fallback `PRAGMA table_info` + `ALTER TABLE` para bancos antigos
-- Arquivo gerado em `backend/database/jarvis_memory.db` com 6 tabelas: `config`, `history`, `sessions`, `hardware`, `clipboard_history`, `reminders`
+- Arquivo gerado em `backend/database/jarvis_memory.db` com 8 tabelas: `config`, `history`, `sessions`, `hardware`, `clipboard_history`, `reminders`, `net_trusted_apps`, `email_contacts`
 - UPSERT via `ON CONFLICT(key) DO UPDATE SET` — nunca checar existência manualmente antes de inserir
 - Acesso: `from core.database import db` → `db.log_interaction()`, `db.get_config()`, `db.save_config()`, `db.update_hardware_spec()`
 - Sessões/histórico do chat: `from services import sessions` (não escrever SQL de sessão na TUI). O mesmo vale para `services/clip_history.py` e `services/reminders.py`: a TUI só chama as funções
@@ -207,7 +223,7 @@ J.A.R.V.I.S/
 
 - `sys_monitor`, `pending_critical_action`, `voice_enabled` e `announce` vivem em `core/state.py`
 - Acesso: `import core.state as state` → `state.sys_monitor` / `state.pending_critical_action`
-- Ação crítica pendente: **só** por `core/pending.py` — `arm()` (não sobrescreve pendência válida, devolve `None`; responda `pending.BUSY_REPLY`), `take(id)` e `parse_reply()` (só frase de confirmação aprova). Nunca atribuir `state.pending_critical_action` direto fora dos testes; nunca confiar em `confirmed` vindo do LLM; nunca passar texto do LLM para `shell=True`
+- Ação crítica pendente: **só** por `core/pending.py` — `arm()` (não sobrescreve pendência válida, devolve `None`; responda `pending.BUSY_REPLY`), `take(id)` e `parse_reply()` (só frase de confirmação aprova). Toda pendência tem `owner` (padrão `pending.current_owner()`: `local` na TUI/voz; `canal:usuário` na ponte, via `pending.owner_scope` no brain) — só resposta do mesmo dono a resolve. `on_other(frase)` trata pedido de ajuste (ex.: "deixa mais formal" num rascunho de e-mail); negação pura vence. Nunca atribuir `state.pending_critical_action` direto fora dos testes; nunca confiar em `confirmed` vindo do LLM; nunca passar texto do LLM para `shell=True`
 - **Nunca** instanciar `SystemInfo()` novamente em outros módulos
 
 ### Skills — Contrato Obrigatório
@@ -258,7 +274,8 @@ O modo vai para `execute_command_stream(..., mode=)` e escolhe o prompt `mode_ch
 - `//texto` envia uma mensagem que começa com `/`
 - Explicar (`JarvisApp.explain_snippet`): o trecho vira um turno normal do Chat (fica na sessão → dá para continuar perguntando) e vai ao modelo com `force_chat=True` — `execute_command_stream` pula classificador, vault e ação pendente, porque o conteúdo de um trecho nunca pode virar skill nem um "ok" de confirmação. Prompts `explain_code.md` / `explain_error.md` (stack trace → causa, onde olhar, correção, como confirmar). Chegam por ali: o atalho global (agente → `presence.write_explain` + evento `EXPLAIN`; `_take_explain` no sinal e no fim do boot) e `/clip explicar [n]`
 - `/clip`: sem argumento age sobre o clipboard atual; `hist` lista o histórico persistente (numerado), `buscar <termo>`, `usar <n>` recopia, `<ação> <n>` age sobre um item, `limpar` apaga (com `ConfirmScreen`). O histórico só enche com o **Monitor de clipboard** ligado e nunca guarda o que tem cara de senha/token (`clip_history.looks_secret`)
-- `/ideia <texto>` anota em 🧠 Brainstorms; `/lembrete [<quando> <assunto> | rm <n>]` cria/lista/remove lembretes; `/rede [confiar <n> | bloquear <ip> | reset]` varre o perímetro (bloquear e reset pedem `ConfirmScreen`)
+- `/ideia <texto>` anota em 🧠 Brainstorms; `/lembrete [<quando> <assunto> | rm <n>]` cria/lista/remove lembretes; `/rede [confiar <n> | bloquear <ip> | mantidos | esquecer <n> | reset]` varre o perímetro (bloquear, esquecer e reset pedem `ConfirmScreen`)
+- `/email [ler <n> | responder <n> <texto> | novo <para> <texto> | organizar | vip <e-mail> | contato <apelido> <e-mail> | assinatura <texto>]`: envio e organização sempre mostram rascunho/plano e abrem `ConfirmScreen` (não = rascunho no Gmail). `/instalar <programa>` e `/baixar <programa>`: winget com confirmação. Ferramenta (`tool_reply`) que arma pendência local abre o `ConfirmScreen` sozinha
 - Rotinas em segundo plano (só com `start_services`): lembretes num `set_interval(REMINDER_INTERVAL)` próprio (agenda é HTTP: nunca no tick da telemetria) → `reminders.collect()` em worker de thread → `_deliver_reminder` (aviso comum respeita o silêncio e vai ao backlog; `urgent` sempre aparece, sem voz no silêncio); insights no fim de um turno de conversa sem skill (`_insight_fn`, worker `exclusive`); vigia de rede (`core.netwatch.NetworkWatch`, pref `net_monitor`). Testes injetam `app._insight_fn` e fazem patch de `reminders.collect`
 - Arrastar arquivo para o terminal = `/attach`: o Windows Terminal cola o caminho; `PromptInput._on_paste` usa `commands.dropped_paths()` (só quando **todo** o texto é caminho de imagem/áudio existente) e emite `FilesDropped`. Não chame `super()._on_paste` — o Textual já roda o handler do `Input` pelo MRO (colaria 2×)
 - Linha de status: telemetria · selo de foco (`◷ FOCO 24m 1/4` / `☾ DND` / `[SILENT]`, resolução de minutos, sem timer próprio) · voz. Sem modelo (fica no `/config` → MODELO) e sem "Sair" no rodapé. A saúde (`core.health`, a cada `HEALTH_INTERVAL`, só depois do boot) não aparece no rodapé: fica no `/status` e falha nova vira notificação
@@ -284,7 +301,7 @@ O modo vai para `execute_command_stream(..., mode=)` e escolhe o prompt `mode_ch
 
 - O `SystemInfo` chama `JarvisApp._on_system_alert`; nunca omitir `is_status_signal=True` nos sinais `CRITICAL_START`/`CRITICAL_END` → evita o TTS pronunciar o código
 - `process_system_alert` passa pelo `services/notify_filter.py`: alerta crítico (disco CRÍTICO, bateria crítica, GPU superaquecendo) sempre fala; com Não Perturbe, reunião na agenda ou app em tela cheia (prefs `dnd_auto_meeting`/`dnd_auto_fullscreen`) o resto vai para o backlog. O prefixo `[SISTEMA CRÍTICO]` vem em todo alerta — não use para classificar
-- Vigia de rede: a 1ª foto e os 10 min seguintes só aprendem (linha de base em `net_baseline`). Depois, processo novo com porta exposta ou falando com a internet é julgado pelo LLM (`judge_connection.md`, cache 1 h): SEGURO entra na base em silêncio; SUSPEITO arma `pending_critical_action` com `on_confirm` (encerra por PID, conferindo nome e hora de criação) e `on_decline` ("Manter" = passa a ser conhecido). Aparelho novo e troca do MAC do gateway só avisam. Sem resposta do modelo nada é decidido. `brain.confirm_pending_action(approved, explicit_decline)`: `on_decline` só roda em recusa explícita dentro do prazo — tempo esgotado não é recusa; na voz a negação vence ("não, pode manter" recusa)
+- Vigia de rede: a 1ª foto e os 10 min seguintes só aprendem (linha de base em `net_baseline`). Depois, processo novo com porta exposta ou falando com a internet é julgado pelo LLM (`judge_connection.md`, cache 1 h): SEGURO entra na base em silêncio; SUSPEITO arma `pending_critical_action` com `on_confirm` (encerra por PID, conferindo nome e hora de criação) e `on_decline` ("Manter" = grava o software em `net_trusted_apps` via `services/net_trust.py`). Software mantido é conferido **antes** do juiz (nome + executável; mesmo nome em outra pasta é julgado de novo) e nunca mais alerta — `/rede reset` apaga só a linha de base. Aparelho novo e troca do MAC do gateway só avisam. Sem resposta do modelo nada é decidido. `brain.confirm_pending_action(approved, explicit_decline)`: `on_decline` só roda em recusa explícita dentro do prazo — tempo esgotado não é recusa; na voz a negação vence ("não, pode manter" recusa)
 - Com o Não Perturbe ligado (`state.dnd_active`, dono: `services/focus.py`), `process_system_alert` só guarda no `state.dnd_backlog` — sem fala, notify nem `pending_critical_action`; o resumo sai quando o DND desliga. Ações do `FocusManager` devolvem texto (quem chama mostra/fala); só troca de fase e fim de prazo anunciam sozinhas
 
 ### Agente residente (`backend/agent.py`)
@@ -354,6 +371,9 @@ AUTO_UPDATE=True                 # atualiza no logon pelo Release do GitHub (só
 UPDATE_REPO=                     # dono/nome dos Releases; vazio = repositório oficial
 GOOGLE_CLIENT_ID=                # client OAuth "App para computador" do próprio usuário (+ GOOGLE_CLIENT_SECRET)
 TOMTOM_API_KEY=                  # opcional: trânsito ao vivo (sem ela, OSRM)
+EMAIL_TEXT_MAX=6000              # Gmail (mesmo GOOGLE_CLIENT_ID; card próprio): corpo enviado ao modelo
+TELEGRAM_BOT_TOKEN=              # ponte (messenger.py) + TELEGRAM_ALLOWED_IDS (vazio = ninguém)
+DISCORD_BOT_TOKEN=               # ponte (discord.py) + DISCORD_ALLOWED_IDS
 OCR_LANGUAGE=                    # leitura de tela (SCREEN_READ); vazio = pt-BR → en-US → idiomas do Windows
 SCREEN_TEXT_MAX=6000             # caracteres do OCR enviados ao modelo
 POMODORO_FOCUS_MIN=25            # + POMODORO_SHORT_BREAK_MIN, _LONG_BREAK_MIN, _CYCLES

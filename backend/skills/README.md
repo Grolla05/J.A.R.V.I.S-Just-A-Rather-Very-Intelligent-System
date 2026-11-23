@@ -51,6 +51,7 @@ O bloqueio no Chat vem de `CHAT_BLOCKED_CATEGORIES` em `services/intent.py`: ess
 | automation | `CLIPBOARD` | Explica, traduz ou resume o que está copiado |
 | automation | `KEYBOARD_CONTROL` | Digita, atalhos e teclas na janela em foco |
 | automation | `SCREEN_CONTROL` | Brilho, protocolo "retina" (gamma) e mover janelas entre monitores |
+| automation | `SOFTWARE_INSTALL` | Busca no winget e instala/baixa o instalador (sempre com confirmação) |
 | automation | `SPOTIFY_CONTROL` | Play/pause/próxima sem LLM; busca de faixa com LLM (Premium para o player) |
 | automation | `WORK_MACRO` | Cenas (trabalho, estudo…): abre apps, organiza janelas, silencia notificações |
 | system | `SYSTEM_REPORT` | Relatório da máquina (também usado na saudação) |
@@ -58,6 +59,9 @@ O bloqueio no Chat vem de `CHAT_BLOCKED_CATEGORIES` em `services/intent.py`: ess
 | system | `SYSTEM_SECURITY` | Bloquear, suspender, desligar, modo sentinela |
 | productivity | `CALENDAR` | Eventos do Google Agenda (hoje, amanhã, dia da semana, próxima reunião) |
 | productivity | `DAILY_BRIEFING` | Briefing do dia (`core/briefing.py`) |
+| productivity | `EMAIL_READ` | E-mails do Gmail por prioridade; "leia o e-mail 2" resume (conteúdo como dado) |
+| productivity | `EMAIL_SEND` | Responde/escreve e-mail, com anexo do computador e contato por nome; rascunho + "sim" |
+| productivity | `EMAIL_ORGANIZE` | Plano de organização da caixa (arquivar/marcadores) + "sim"; nunca apaga |
 | productivity | `FOCUS_MODE` | Pomodoro e Não Perturbe |
 | productivity | `REMINDER` | "Me lembra em 30 min de…", listar e cancelar lembretes |
 | productivity | `INSIGHT_SAVE` | "Anota essa ideia: …" → 🧠 Brainstorms no Obsidian |
@@ -72,7 +76,7 @@ O bloqueio no Chat vem de `CHAT_BLOCKED_CATEGORIES` em `services/intent.py`: ess
 1. Crie `backend/skills/<categoria>/minha_skill.py` com `INTENT`, `PROMPT_TEXT`, `KEYWORDS` e `execute(entity, command)`.
 2. Escreva o `PROMPT_TEXT` em `backend/prompts/skills/minha_skill.md` (nunca string no `.py`).
 3. Se precisar do LLM, use `core.llm.query_ollama(..., format="json", temperature=0)` e um prompt `.md`. Resolva frases óbvias sem LLM primeiro (veja `parse_fast` em `focus_mode.py` e `github_control.py`).
-4. Ação destrutiva ou externa (apagar, publicar, encerrar)? Não execute direto: arme com `core.pending.arm(tipo, pergunta, on_confirm, target=...)` e devolva a pergunta (modelo: `request_issue` em `github_control.py`). Nunca atribua `state.pending_critical_action` direto: `arm` devolve `None` quando já há outra pergunta aberta (responda `pending.BUSY_REPLY`), e só ele dá o `id` que impede o "sim" de uma pergunta executar outra. Nunca confie num campo `confirmed` vindo do LLM, e nunca passe texto do LLM para `shell=True`. A TUI abre a `ConfirmScreen`; a voz aceita "sim".
+4. Ação destrutiva ou externa (apagar, publicar, encerrar)? Não execute direto: arme com `core.pending.arm(tipo, pergunta, on_confirm, target=...)` e devolva a pergunta (modelo: `request_issue` em `github_control.py`). Nunca atribua `state.pending_critical_action` direto: `arm` devolve `None` quando já há outra pergunta aberta (responda `pending.BUSY_REPLY`), e só ele dá o `id` que impede o "sim" de uma pergunta executar outra. Nunca confie num campo `confirmed` vindo do LLM, e nunca passe texto do LLM para `shell=True`. A TUI abre a `ConfirmScreen`; a voz aceita "sim". O dono da pendência vem sozinho (`pending.current_owner()`): pela ponte Telegram/Discord só o "sim" daquela pessoa aprova. Para aceitar ajuste em vez de cancelar (ex.: "deixa mais formal"), passe `on_other=fn(frase)` — modelo: `confirm_send` em `services/email_compose.py`.
 5. Faça imports pesados dentro de `execute`. Valide `entity` antes de passar para subprocesso.
 6. Use `log` (nunca `print`) e devolva sempre uma string — erro vira mensagem amigável.
 7. Escreva testes em `backend/tests/` (sem hardware real: mocke as chamadas de sistema).

@@ -3,8 +3,11 @@
 - Processo novo (porta exposta ou falando com a internet): o modelo julga
   (`prompts/judge_connection.md`, cache de 1 h). "SEGURO" entra na linha de base em
   silêncio; "SUSPEITO" vira alerta com pedido de confirmação para **encerrar o
-  processo** (ConfirmScreen; "Manter" = passa a ser conhecido). Sem resposta do
-  modelo nada é decidido — o achado volta na próxima rodada.
+  processo** (ConfirmScreen; "Manter" = grava o software em `net_trusted_apps`,
+  via `services/net_trust.py`). Sem resposta do modelo nada é decidido — o achado
+  volta na próxima rodada.
+- Software mantido é conferido **antes** do juiz: entra na linha de base em silêncio,
+  mesmo depois de `/rede reset` (o reset apaga só a base, nunca a tabela).
 - Aparelho novo na rede e troca do MAC do roteador: sempre avisam (sem ação automática).
 - Tudo passa pelo filtro de interrupções; troca de gateway é prioridade crítica.
 
@@ -23,6 +26,7 @@ from core import netwatch, pending, processes
 from core.database import db
 from core.logger import log
 from core.prompts import load_prompt
+from services import net_trust
 
 BASELINE_KEY = "net_baseline"
 SAFE, SUSPECT = "SEGURO", "SUSPEITO"
@@ -60,6 +64,13 @@ def trust(finding):
     with _lock:
         baseline = load_baseline() or {}
         save_baseline(netwatch.trust(baseline, finding))
+
+
+def keep_software(finding):
+    """Decisão do usuário: o software do achado passa a ser mantido (tabela + linha de base)."""
+    trust(finding)
+    if finding["kind"] in _PROCESS_KINDS:
+        net_trust.keep(finding["proc"], finding.get("exe", ""), finding["kind"])
 
 
 # ---------------------------------------------------------------- julgamento
@@ -151,6 +162,10 @@ def handle(finding, judge_fn=judge, announce=_announce, clock=time.time):
     """Chamado pelo NetworkWatch (thread dele). True = tratado; False = tente depois."""
     from services import notify_filter
     is_process = finding["kind"] in _PROCESS_KINDS
+    if is_process and net_trust.is_trusted(finding["proc"], finding.get("exe", "")):
+        trust(finding)
+        log.info(f"[REDE] {finding['proc']} já foi mantido pelo usuário; incorporado à linha de base.")
+        return True
     if is_process:
         verdict = judge_fn(finding)
         if verdict is None:
@@ -187,8 +202,8 @@ def handle(finding, judge_fn=judge, announce=_announce, clock=time.time):
 
 
 def _keep(finding):
-    trust(finding)
-    return f"Mantido, Senhor. {finding['proc']} passa a ser conhecido na rede."
+    keep_software(finding)
+    return f"Mantido, Senhor. {finding['proc']} passa a ser conhecido na rede e fica na lista de mantidos."
 
 
 # --------------------------------------------------------------------- telas
@@ -206,7 +221,7 @@ def trust_text(index):
     if not 1 <= index <= len(items):
         return f"Não há achado {index}, Senhor. `/rede` lista os números."
     finding = items[index - 1]["finding"]
-    trust(finding)
+    keep_software(finding)
     del _recent[index - 1]
     return f"Anotado, Senhor: passa a ser conhecido — {finding['text']}"
 
@@ -218,7 +233,8 @@ def reset_text():
     _recent.clear()
     _judge_cache.clear()
     return ("Linha de base da rede apagada, Senhor. Reaprendo nos próximos "
-            f"{netwatch.LEARN_MINUTES} minutos — nesse tempo nada vira alerta.")
+            f"{netwatch.LEARN_MINUTES} minutos — nesse tempo nada vira alerta. "
+            "Os softwares mantidos foram preservados (`/rede mantidos`).")
 
 
 def _ip_key(ip):
@@ -259,6 +275,7 @@ def scan_text(snapshot_fn=netwatch.snapshot, short=False):
     top = sorted(talkers.values(), key=lambda i: -i["count"])[:10]
     if top:
         lines.append("  - " + ", ".join(f"{i['proc']} ({i['count']})" for i in top))
+    lines.append(f"- **Softwares mantidos:** {net_trust.count()} (`/rede mantidos`)")
     lines.append("")
     if not baseline:
         lines.append("_Ainda sem linha de base: ligue o **Vigia de rede** no `/config` → ROTINAS._")

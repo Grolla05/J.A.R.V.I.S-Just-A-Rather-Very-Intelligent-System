@@ -54,14 +54,20 @@ def confirm_pending_action(approved, explicit_decline=True, pending_id=None):
     return None
 
 
-def _check_pending_action(command):
-    """Se há ação crítica pendente, o próximo comando é a resposta a ela.
+def _check_pending_action(command, owner=pending.LOCAL):
+    """Se há ação crítica pendente **deste dono**, o próximo comando é a resposta a ela.
     Só uma frase de confirmação aprova (pending.parse_reply); a negação vence;
-    qualquer outra frase descarta a pendência e segue como comando normal."""
+    qualquer outra frase vai para `on_other` (se a pendência tiver) ou descarta a
+    pendência e segue como comando normal. Pendência de outro dono fica intacta."""
     current = pending.active()
-    if not current:
+    if not current or (current.get("owner") or pending.LOCAL) != (owner or pending.LOCAL):
         return None
     reply = pending.parse_reply(command, current.get("target"))
+    on_other = current.get("on_other")
+    if callable(on_other) and reply != pending.YES and not (reply == pending.NO and pending.is_pure_denial(command)):
+        # Pedido de ajuste ("deixa mais formal"): tira esta pendência e deixa quem a armou refazer.
+        _action, status = pending.take(current.get("id"))
+        return on_other(command) if status == pending.OK else None
     return confirm_pending_action(reply == pending.YES, explicit_decline=reply == pending.NO,
                                   pending_id=current.get("id"))
 
@@ -107,7 +113,7 @@ def _skill_allowed(intent, mode):
 
 
 def execute_command_stream(command, session_id='default', images=None, mode=MODE_CHAT, on_route=None,
-                           force_chat=False):
+                           force_chat=False, owner=pending.LOCAL):
     """Pipeline de texto (TUI). mode=chat só roda skills fora de automation/system;
     mode=copilot roda todas. on_route(intent) é chamado quando a mensagem vira
     uma skill (badge na TUI). force_chat=True (trecho de código/erro a explicar)
@@ -118,7 +124,7 @@ def execute_command_stream(command, session_id='default', images=None, mode=MODE
         yield from ask_local_ai_stream(command, intent_type="CHAT", session_id=session_id, mode=mode)
         return
 
-    res = _check_pending_action(command)
+    res = _check_pending_action(command, owner)
     if res:
         yield res
         return
@@ -136,7 +142,8 @@ def execute_command_stream(command, session_id='default', images=None, mode=MODE
         if on_route:
             on_route(intent)
         skill_module = manager.skills[intent]
-        result = skill_module.execute(entity, command)
+        with pending.owner_scope(owner):   # confirmação armada pela skill pertence a quem pediu
+            result = skill_module.execute(entity, command)
         if result is None or isinstance(result, str):
             yield result
         else:  # skill que responde em stream (ex.: SCREEN_READ) devolve um iterável de pedaços

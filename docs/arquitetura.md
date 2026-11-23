@@ -274,6 +274,37 @@ Sem extensão e sem `--remote-debugging-port` (com ele qualquer processo local d
 
 As duas skills roteiam como o Spotify: regex primeiro (sem Ollama), LLM só para a frase que sobrar (`*_decision.md`, ação validada contra uma tabela fixa — texto do modelo nunca vira atalho). `BROWSER_TABS`: fechar outras/todas as abas arma `pending` com a lista de títulos. `YOUTUBE_CONTROL`: "toca X no YouTube" → `core/youtube.find_video` (página de resultados do YouTube (1º `videoId` do HTML) → ddgs de reserva → senão abre os resultados); o player usa as teclas oficiais (k, j/l, f, t, i, c, m, Shift+N/P, >/<, 0–9) na aba do YouTube, achada pelo título — trocando de aba se preciso; em ação rápida (pausar, pular, legenda…) o foco volta para a janela anterior. Velocidade exata: desce ao mínimo com `<` e sobe com `>` (o YouTube não informa a atual).
 
+### 5.7 E-mail (Gmail) — `EMAIL_READ`, `EMAIL_SEND`, `EMAIL_ORGANIZE`
+
+- `core/google_auth.py` (`GoogleAccount`) dá a cada integração Google o seu token e card; `core/gmail.py`
+  usa o escopo `gmail.modify` (lê, rascunha, envia, etiqueta, arquiva — sem lixeira/exclusão).
+- **Ler:** `services/mailbox.py` busca a caixa, `services/email_triage.py` ordena (ALTA/MÉDIA/BAIXA) e a
+  lista fica guardada — "e-mail 2" é o 2º que o usuário viu. O corpo vai ao modelo como **dado**
+  (`email_summarize.md`): nada dentro de um e-mail vira skill, confirmação ou destinatário.
+- **Enviar:** a skill extrai `{reply_to_index, recipient, file, instruction}`; contato por nome
+  (`email_contacts`: apelido salvo → histórico do Gmail → pergunta se houver vários) e anexo
+  (`local_files`: só pastas pessoais, bloqueia segredos e >25 MB) são resolvidos fora do LLM. O LLM
+  escreve só assunto e corpo. `email_compose.confirm_send` arma a pendência (180 s) com tudo à vista:
+  **sim** envia · **não** salva rascunho · outra frase refaz o rascunho (`on_other`).
+- **Organizar:** `email_organize` monta o plano (promoções/social → arquivar; faturas →
+  `JARVIS/Financeiro`; urgentes → `JARVIS/Urgente` + estrela) e só aplica no "sim".
+
+### 5.8 Download inteligente (`SOFTWARE_INSTALL`, `/instalar`, `/baixar`)
+
+`core/winget.py` busca no catálogo oficial (parser da tabela em pt/en), escolhe o pacote
+(`best_match`; sem certeza lista opções) e `services/software.py` pede confirmação com nome, id e
+versão. Instala (`--silent`) ou baixa o instalador em Downloads numa thread daemon e anuncia o fim.
+Sem `shell=True`; id validado por regex. Só Copilot/voz (automation) ou comando explícito na TUI.
+
+### 5.9 Ponte Telegram/Discord (`messenger.py`)
+
+Processo próprio, iniciado pelo agente (no logon) ou pelo card em INTEGRAÇÕES. A plataforma é só o fio:
+`core/telegram_bot.py` (long polling) e `core/discord_bot.py` (gateway) abrem conexão de saída e
+entregam o texto a `services/remote_chat.py`, que confere a allowlist, usa uma sessão por usuário e
+chama `brain.execute_command_stream(mode="chat", owner="canal:usuário")`. O `owner` vai para toda
+pendência armada pela skill (`pending.owner_scope`): só o "sim" daquela pessoa aprova. A cada 30 s a
+ponte confere os canais ligados (`messenger_ctl.active_channels`) e liga/desliga cada um.
+
 ## 6. Comandos e atalhos da TUI
 
 | Comando | Faz |
