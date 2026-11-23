@@ -369,6 +369,17 @@ class TestEmailCommand(ToolsAppCase):
         self.assertIsNone(state.pending_critical_action)
 
 
+class TestEmailTrashCommand(ToolsAppCase):
+    async def test_apagar_routes_to_trash_request(self):
+        from services import email_trash
+        app = self._app()
+        with patch.object(email_trash, "request", return_value="Mover para a Lixeira?") as req:
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/email apagar 2 3")
+                self.assertEqual(self._last_reply(app).text, "Mover para a Lixeira?")
+        req.assert_called_once_with("2 3")
+
+
 class TestInstallCommand(ToolsAppCase):
     async def test_install_and_download_route_to_software(self):
         from services import software

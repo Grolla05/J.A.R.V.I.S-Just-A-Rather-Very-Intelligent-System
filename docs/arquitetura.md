@@ -286,8 +286,16 @@ As duas skills roteiam como o Spotify: regex primeiro (sem Ollama), LLM só para
   (`local_files`: só pastas pessoais, bloqueia segredos e >25 MB) são resolvidos fora do LLM. O LLM
   escreve só assunto e corpo. `email_compose.confirm_send` arma a pendência (180 s) com tudo à vista:
   **sim** envia · **não** salva rascunho · outra frase refaz o rascunho (`on_other`).
+- **Apagar:** `email_trash` pega os e-mails pela fala (números da lista ou categoria: "as promoções"), mostra a lista e,
+  no "sim", move para a **Lixeira** (`gmail.trash`, recuperável por 30 dias). Exclusão permanente não existe.
 - **Organizar:** `email_organize` monta o plano (promoções/social → arquivar; faturas →
   `JARVIS/Financeiro`; urgentes → `JARVIS/Urgente` + estrela) e só aplica no "sim".
+
+### 5.7.1 Agenda por período (`CALENDAR`)
+
+`google_calendar.resolve_period` entende dia, semana, fim de semana, mês e ano (os atuais começam hoje; "próxima
+semana", "mês que vem" e "próximo ano" pegam o período inteiro). `events_range` pagina a API (até 250 eventos) e
+`format_range` agrupa por dia. O contexto do Chat (`live_context`) usa o mesmo período, com o dia em cada linha.
 
 ### 5.8 Download inteligente (`SOFTWARE_INSTALL`, `/instalar`, `/baixar`)
 

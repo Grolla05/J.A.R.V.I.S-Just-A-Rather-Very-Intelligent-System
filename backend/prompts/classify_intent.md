@@ -42,7 +42,11 @@ $skills_prompts
 - "leia o e-mail 2" -> {"intent": "EMAIL_READ", "entity": "2", "confidence": 1.0}
 - "responda o e-mail 2 dizendo que confirmo" -> {"intent": "EMAIL_SEND", "entity": "2", "confidence": 1.0}
 - "manda a proposta do arquivo proposta.txt para o Guilherme" -> {"intent": "EMAIL_SEND", "entity": "Guilherme", "confidence": 1.0}
+- "qual compromisso eu tenho essa semana?" -> {"intent": "CALENDAR", "entity": "semana", "confidence": 1.0}
+- "o que tenho marcado no próximo mês?" -> {"intent": "CALENDAR", "entity": "próximo mês", "confidence": 1.0}
 - "organize meu e-mail" -> {"intent": "EMAIL_ORGANIZE", "entity": null, "confidence": 1.0}
+- "apaga o e-mail 3" -> {"intent": "EMAIL_TRASH", "entity": "3", "confidence": 1.0}
+- "joga as promoções na lixeira" -> {"intent": "EMAIL_TRASH", "entity": "promoções", "confidence": 1.0}
 - "instala o 7-zip" -> {"intent": "SOFTWARE_INSTALL", "entity": "7-zip", "confidence": 1.0}
 - "baixa o instalador do vlc" -> {"intent": "SOFTWARE_INSTALL", "entity": "vlc", "confidence": 1.0}
 - "toca lo-fi no youtube" -> {"intent": "YOUTUBE_CONTROL", "entity": "lo-fi", "confidence": 1.0}

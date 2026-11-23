@@ -1,8 +1,9 @@
 """Gmail — ler, responder, enviar e organizar (REST, escopo `gmail.modify`).
 
 Conta própria (`google_gmail` no Cofre, card próprio em /config → INTEGRAÇÕES): a
-Agenda segue com o token dela. `gmail.modify` lê, cria rascunho, envia e mexe em
-marcadores/arquivo — **não** apaga de vez. Este módulo nem expõe trash/delete.
+Agenda segue com o token dela. `gmail.modify` lê, cria rascunho, envia, mexe em
+marcadores/arquivo e move para a Lixeira (`trash`, reversível por 30 dias) — **não**
+apaga de vez. Exclusão permanente nem existe aqui (exigiria o escopo total).
 
 Quem chama decide quando enviar: `send()` só é chamado depois do "sim" do usuário
 (`services/email_compose.py`). Erros sobem como `GmailError` com texto amigável.
@@ -202,6 +203,18 @@ def batch_modify(ids, add=(), remove=()):
         return {}
     return _api("POST", "/messages/batchModify",
                 json={"ids": ids, "addLabelIds": list(add), "removeLabelIds": list(remove)})
+
+
+def trash(ids):
+    """Move para a Lixeira do Gmail (o Gmail esvazia sozinho em 30 dias; dá para desfazer).
+    Só é chamado depois do "sim" do usuário (`services/email_trash.py`). Devolve quantos foram."""
+    moved = 0
+    for msg_id in ids or ():
+        _api("POST", f"/messages/{msg_id}/trash")
+        moved += 1
+    if moved:
+        log.info(f"[EMAIL] {moved} mensagem(ns) movida(s) para a Lixeira.")
+    return moved
 
 
 # ----------------------------------------------------------------- contatos

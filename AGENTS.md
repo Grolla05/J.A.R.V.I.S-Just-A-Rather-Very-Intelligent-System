@@ -72,9 +72,9 @@ J.A.R.V.I.S/
 │   │   ├── obsidian.py      ← RAG sobre vault Obsidian via API REST (plugin Local REST API)
 │   │   ├── oauth.py         ← OAuth Desktop genérico: PKCE + callback no loopback (Google Agenda, Spotify)
 │   │   ├── secrets_store.py ← Cofre de Credenciais do Windows (keyring) p/ tokens OAuth (Google e Spotify); fallback JSON
-│   │   ├── google_calendar.py ← Google Agenda (REST, só leitura): briefing, skill CALENDAR, is_busy(), upcoming() p/ os lembretes
+│   │   ├── google_calendar.py ← Google Agenda (REST, só leitura): briefing, skill CALENDAR (resolve_period: dia, semana, fim de semana, mês, ano e os próximos; events_range com paginação; format_range por dia), is_busy(), upcoming() p/ os lembretes
 │   │   ├── google_auth.py   ← GoogleAccount genérico (OAuth PKCE + token no Cofre + request autenticado): um segredo/card por integração
-│   │   ├── gmail.py         ← Gmail (escopo gmail.modify): inbox, read_body, build_mime (resposta/anexo), send, save_draft, ensure_label, batch_modify, find_contacts — sem trash/delete
+│   │   ├── gmail.py         ← Gmail (escopo gmail.modify): inbox, read_body, build_mime (resposta/anexo), send, save_draft, ensure_label, batch_modify, trash (Lixeira, 30 dias), find_contacts — sem exclusão permanente
 │   │   ├── winget.py        ← winget: search (parser pt/en), best_match, install/download sem shell, id validado
 │   │   ├── telegram_bot.py  ← Bot API por long polling (requests): só chat privado, token fora do log, backoff só em erro
 │   │   ├── discord_bot.py   ← discord.py (gateway): responde DM ou menção
@@ -118,6 +118,7 @@ J.A.R.V.I.S/
 │   │   ├── email_compose.py ← Rascunho pelo LLM (só assunto/corpo), confirmação obrigatória; não = rascunho no Gmail; outra frase = ajuste (on_other)
 │   │   ├── email_contacts.py← "Guilherme" → endereço (tabela email_contacts + histórico do Gmail; vários = pergunta)
 │   │   ├── email_organize.py← Plano (arquivar promoções, marcadores JARVIS/Financeiro e JARVIS/Urgente) → "sim" → batchModify; nunca apaga
+│   │   ├── email_trash.py   ← "Apaga o e-mail 3" / "as promoções" → lista → "sim" → Lixeira do Gmail (o que apagar vem só da fala: números ou categoria)
 │   │   ├── local_files.py   ← Acha arquivo do usuário p/ anexar (Desktop/Documentos/Downloads/OneDrive); bloqueia sensíveis, fora do perfil e >25 MB
 │   │   ├── software.py      ← Download inteligente: winget → confirmação → instala/baixa numa thread e anuncia
 │   │   ├── remote_chat.py   ← Núcleo da ponte: allowlist, sessão por usuário, brain em modo chat com owner canal:usuário, split por limite
@@ -132,7 +133,7 @@ J.A.R.V.I.S/
 │   │   ├── automation/      ← app_control, audio_control, browser_tabs, clipboard_assistant, keyboard_control,
 │   │   │                       screen_control, software_install, spotify_control, work_macros, youtube_control  (só Copilot/voz)
 │   │   ├── system/          ← network_guard, status_report, system_clear, system_security (só Copilot/voz)
-│   │   ├── productivity/    ← calendar_agenda, daily_briefing, email_organize, email_read, email_send, focus_mode,
+│   │   ├── productivity/    ← calendar_agenda, daily_briefing, email_organize, email_read, email_send, email_trash, focus_mode,
 │   │   │                       github_control, insight_note, presentation_mode, reminder, screen_read, traffic_commute (Chat e Copilot)
 │   │   └── web/             ← web_search                                          (Chat e Copilot)
 │   ├── prompts/             ← Arquivos .md de prompt (system_prompt, classify_intent, mode_chat, mode_copilot, briefing...; skills/ p/ PROMPT_TEXT)
@@ -276,7 +277,7 @@ O modo vai para `execute_command_stream(..., mode=)` e escolhe o prompt `mode_ch
 - Explicar (`JarvisApp.explain_snippet`): o trecho vira um turno normal do Chat (fica na sessão → dá para continuar perguntando) e vai ao modelo com `force_chat=True` — `execute_command_stream` pula classificador, vault e ação pendente, porque o conteúdo de um trecho nunca pode virar skill nem um "ok" de confirmação. Prompts `explain_code.md` / `explain_error.md` (stack trace → causa, onde olhar, correção, como confirmar). Chegam por ali: o atalho global (agente → `presence.write_explain` + evento `EXPLAIN`; `_take_explain` no sinal e no fim do boot) e `/clip explicar [n]`
 - `/clip`: sem argumento age sobre o clipboard atual; `hist` lista o histórico persistente (numerado), `buscar <termo>`, `usar <n>` recopia, `<ação> <n>` age sobre um item, `limpar` apaga (com `ConfirmScreen`). O histórico só enche com o **Monitor de clipboard** ligado e nunca guarda o que tem cara de senha/token (`clip_history.looks_secret`)
 - `/ideia <texto>` anota em 🧠 Brainstorms; `/lembrete [<quando> <assunto> | rm <n>]` cria/lista/remove lembretes; `/rede [confiar <n> | bloquear <ip> | mantidos | esquecer <n> | reset]` varre o perímetro (bloquear, esquecer e reset pedem `ConfirmScreen`)
-- `/email [ler <n> | responder <n> <texto> | novo <para> <texto> | organizar | vip <e-mail> | contato <apelido> <e-mail> | assinatura <texto>]`: envio e organização sempre mostram rascunho/plano e abrem `ConfirmScreen` (não = rascunho no Gmail). `/instalar <programa>` e `/baixar <programa>`: winget com confirmação. Ferramenta (`tool_reply`) que arma pendência local abre o `ConfirmScreen` sozinha
+- `/email [ler <n> | responder <n> <texto> | novo <para> <texto> | apagar <n…|promoções> | organizar | vip <e-mail> | contato <apelido> <e-mail> | assinatura <texto>]`: envio, Lixeira e organização sempre mostram rascunho/lista/plano e abrem `ConfirmScreen` (não = rascunho no Gmail; apagar = Lixeira, recuperável por 30 dias). `/instalar <programa>` e `/baixar <programa>`: winget com confirmação. Ferramenta (`tool_reply`) que arma pendência local abre o `ConfirmScreen` sozinha
 - Rotinas em segundo plano (só com `start_services`): lembretes num `set_interval(REMINDER_INTERVAL)` próprio (agenda é HTTP: nunca no tick da telemetria) → `reminders.collect()` em worker de thread → `_deliver_reminder` (aviso comum respeita o silêncio e vai ao backlog; `urgent` sempre aparece, sem voz no silêncio); insights no fim de um turno de conversa sem skill (`_insight_fn`, worker `exclusive`); vigia de rede (`core.netwatch.NetworkWatch`, pref `net_monitor`). Testes injetam `app._insight_fn` e fazem patch de `reminders.collect`
 - Arrastar arquivo para o terminal = `/attach`: o Windows Terminal cola o caminho; `PromptInput._on_paste` usa `commands.dropped_paths()` (só quando **todo** o texto é caminho de imagem/áudio existente) e emite `FilesDropped`. Não chame `super()._on_paste` — o Textual já roda o handler do `Input` pelo MRO (colaria 2×)
 - Linha de status: telemetria · selo de foco (`◷ FOCO 24m 1/4` / `☾ DND` / `[SILENT]`, resolução de minutos, sem timer próprio) · voz. Sem modelo (fica no `/config` → MODELO) e sem "Sair" no rodapé. A saúde (`core.health`, a cada `HEALTH_INTERVAL`, só depois do boot) não aparece no rodapé: fica no `/status` e falha nova vira notificação
