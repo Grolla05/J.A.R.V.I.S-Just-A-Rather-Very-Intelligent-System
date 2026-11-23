@@ -35,7 +35,17 @@ instalar ou contribuir:
 
 - Controle de teclado e mouse (`Skill — Keyboard Control`)
 - Captura e controle de tela (`Skill — Screen Control`)
+- Leitura do texto da tela por OCR (`Skill — Screen Read`): a captura fica só
+  em memória, linhas com token de cara de chave viram `[oculto]` e o texto vai
+  apenas ao modelo local (Ollama); a resposta fica no histórico da sessão
 - Abertura e encerramento de processos/aplicativos (`Skill — App Control`)
+- Controle do navegador (`Skill — Browser Tabs` e `Skill — YouTube Control`):
+  foca a janela do navegador e manda atalhos (só depois de confirmar o foco),
+  lê títulos das abas e a URL da aba ativa pela UI Automation do Windows;
+  fechar várias abas pede confirmação. Sem `--remote-debugging-port`: nenhum
+  outro processo ganha controle do navegador. A `Skill — Screen Read` baixa de
+  novo a página da aba ativa só quando a URL é pública e sem parâmetro com cara
+  de credencial (`token`, `code`, `key`, `session`…)
 - Shutdown, suspend e "sentry mode" da máquina (`Skill — System Security`)
 - Sistema de skills plugável (`skill_loader.py`) que **importa e executa
   qualquer arquivo `.py` dentro de `backend/skills/` via `importlib`, sem

@@ -12,11 +12,12 @@ texto (TUI ou voz)
        │     Chat: exclude_categories=("automation", "system")
        ├─ MEMORY_WRITE            → memory.extract_fact_to_memory → Obsidian
        ├─ skill ligada/permitida  → on_route(intent) → skill.execute(entity, texto)
+       │     str → 1 pedaço · iterável (ex.: SCREEN_READ) → repassado em stream
        └─ CHAT / HARDWARE / MEMORY_READ
              → chat.ask_local_ai_stream(histórico + vault + live_context + telemetria)
 ```
 
-`execute_command` (sem stream) é a versão do modo voz standalone (`python -m services.brain`), sempre com todas as skills.
+`execute_command` (sem stream) é a versão do modo voz standalone (`python -m services.brain`), sempre com todas as skills; resposta de skill em stream é juntada num texto só.
 
 ## Módulos
 
@@ -33,9 +34,9 @@ texto (TUI ou voz)
 | `net_guard.py` | Guarda de rede: `judge()` (LLM, `judge_connection.md`), `handle()` (alerta + confirmação para encerrar o processo), `kill_process`, `block_ip` (só elevado), textos do `/rede` e do bloco PERÍMETRO do `/status` |
 | `sessions.py` | Sessões e histórico (listar, renomear, fixar, apagar, editar a partir de uma mensagem). `to_local()` converte o UTC do SQLite |
 | `skill_settings.py` | Lista skills e liga/desliga skill ou categoria (`disabled_skills`, `disabled_categories` na tabela `config`) |
-| `user_prefs.py` | Preferências do `/config`: voz, velocidade, volume, sensibilidade do mic, janela de atenção, briefing automático, manchetes, monitor de clipboard, registro de insights, aviso de saída, lembretes da agenda (antecedência e aviso final), vigia de rede, silêncio em reunião/tela cheia, apresentação automática |
+| `user_prefs.py` | Preferências do `/config`: voz, velocidade, volume, sensibilidade do mic, janela de atenção, briefing automático, manchetes, manchetes escolhidas pela IA (`news_ai`), monitor de clipboard, registro de insights, aviso de saída, lembretes da agenda (antecedência e aviso final), vigia de rede, silêncio em reunião/tela cheia, apresentação automática |
 | `integrations.py` | Cards de `/config` → INTEGRAÇÕES. Estados `on`/`wait`/`off`/`setup`; `connect`/`disconnect` devolvem texto e nunca levantam |
-| `listen.py` | Ouvido lazy (`get_ear()`): mic só abre com a voz ligada; wake word (`WAKE_WORDS`) por palavra inteira; Google STT; janela de atenção; `ear_pause`/`ear_resume`; nível do mic para a `VoiceBar` |
+| `listen.py` | Ouvido lazy (`get_ear()`): mic só abre com a voz ligada; wake word (`WAKE_WORDS`) por palavra inteira; Google STT; janela de atenção; `ear_pause`/`ear_resume`; nível do mic para a `VoiceStage` (espectro e VU) |
 | `speak.py` | TTS: edge-tts (voz da pref, padrão `pt-BR-AntonioNeural`) com fallback pyttsx3; `speech_lock`; limpa Markdown e símbolos e expande gírias (`SLANG_MAP`); no-op com a voz desligada ou em apresentação |
 | `focus.py` | `FocusManager`: Pomodoro (25/5, longa 15 a cada 4) e Não Perturbe (toasts do Windows off + backlog de alertas com resumo no fim) |
 | `presentation.py` | Modo Apresentação manual (`/silent`, skill) ou automático (PowerPoint, Canva, Google Slides, PDF em tela cheia) |

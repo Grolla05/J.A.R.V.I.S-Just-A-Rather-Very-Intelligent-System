@@ -5,12 +5,16 @@ pixel-art girando SÓ enquanto a busca roda, prévia em Markdown da nota e o
 botão "usar no chat", que devolve a nota para ir junto da próxima mensagem.
 Toda I/O com o Obsidian roda em worker de thread.
 """
-from textual import work
+import time
+
+from rich.text import Text
+from textual import events, work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, Input, Label, OptionList, Tree
-from textual.widgets.option_list import Option
+from textual.message import Message
+from textual.widget import Widget
+from textual.widgets import Button, Input, Label, Tree
 
 from core import log
 from frontend import sprites
@@ -18,11 +22,69 @@ from frontend.screens.base import JarvisScreen
 from frontend.widgets import JarvisMarkdown, PixelSprite
 
 PREVIEW_MAX = 6000  # caracteres da nota na prévia
+SCORE_NAME_MAX = 18  # caracteres do nome da nota na lista de scores (painel de 24 colunas úteis)
 
 
 def _client():
     from core.obsidian import obsidian
     return obsidian
+
+
+def sweep_label(step):
+    """'varredura 6/8' — quadro do radar (canvas). 0 = nunca buscou; 8 = completa."""
+    return f"varredura {step}/{sprites.RADAR_FRAMES}"
+
+
+def score_rows(results):
+    """[(score '0.92', nome)] da busca, na ordem do score (canvas: '0.92 rotina_trabalho')."""
+    rows = []
+    for r in results:
+        name = r["filename"].rsplit("/", 1)[-1].removesuffix(".md")
+        rows.append((f"{float(r.get('score') or 0):.2f}", name[:SCORE_NAME_MAX]))
+    return rows
+
+
+class ScoreList(Widget):
+    """Lista de scores do radar (canvas): o melhor em ciano, o resto apagado.
+    Clicar numa linha abre a nota na prévia."""
+
+    COMPONENT_CLASSES = {"score--top", "score--rest"}
+    DEFAULT_CSS = "ScoreList { height: auto; }"
+
+    class Picked(Message):
+        def __init__(self, filename):
+            super().__init__()
+            self.filename = filename
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._results = []
+
+    @property
+    def rows(self):
+        return score_rows(self._results)
+
+    def set_results(self, results):
+        self._results = list(results)
+        self.refresh(layout=True)
+
+    def get_content_height(self, container, viewport, width):
+        return len(self._results)
+
+    def render(self):
+        top = self.get_component_rich_style("score--top", partial=True)
+        rest = self.get_component_rich_style("score--rest", partial=True)
+        text = Text(no_wrap=True, overflow="ellipsis", end="")
+        for i, (score, name) in enumerate(self.rows):
+            if i:
+                text.append("\n")
+            text.append(score, top if i == 0 else rest)
+            text.append(f" {name}")
+        return text
+
+    def on_click(self, event: events.Click):
+        if 0 <= event.y < len(self._results):
+            self.post_message(self.Picked(self._results[event.y]["filename"]))
 
 
 class VaultScreen(JarvisScreen):
@@ -57,11 +119,12 @@ class VaultScreen(JarvisScreen):
             with Vertical(id="vault-radar"):
                 yield Label("radar RAG", classes="hint")
                 yield PixelSprite([sprites.radar(n) for n in range(sprites.RADAR_FRAMES)], id="radar")
-                yield Label("parado", id="radar-state", classes="hint")
-                yield OptionList(id="vault-results")
+                yield Label(sweep_label(0), id="radar-state")
+                yield ScoreList(id="vault-results")
 
     def on_mount(self):
         super().on_mount()
+        self.watch(self.query_one("#radar", PixelSprite), "frame", self._on_radar_frame, init=False)
         self._load_dir(self.query_one("#vault-tree", Tree).root, "")
         if self._initial_query:
             self._search(self._initial_query)
@@ -110,8 +173,14 @@ class VaultScreen(JarvisScreen):
             self._search(event.value.strip())
 
     def _set_radar(self, searching):
-        self.query_one("#radar", PixelSprite).animated = searching
-        self.query_one("#radar-state", Label).update("varrendo…" if searching else "parado")
+        radar = self.query_one("#radar", PixelSprite)
+        radar.animated = searching
+        if not searching:  # varredura completa
+            self.query_one("#radar-state", Label).update(sweep_label(sprites.RADAR_FRAMES))
+
+    def _on_radar_frame(self, frame):
+        if self.query_one("#radar", PixelSprite).animated:
+            self.query_one("#radar-state", Label).update(sweep_label(frame + 1))
 
     def _search(self, query):
         self._set_radar(True)
@@ -119,27 +188,27 @@ class VaultScreen(JarvisScreen):
 
     @work(thread=True, exclusive=True, group="vault-search")
     def _run_search(self, query):
+        started = time.perf_counter()
         try:
             results = _client().search_results(query)
         except Exception as e:
             log.warning(f"Vault: busca falhou: {e}")
             results = []
-        self.app.call_from_thread(self._show_results, results)
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        self.app.call_from_thread(self._show_results, results, elapsed_ms)
 
-    def _show_results(self, results):
+    def _show_results(self, results, elapsed_ms=None):
         self._set_radar(False)
-        options = self.query_one("#vault-results", OptionList)
-        options.clear_options()
-        for r in results:
-            name = r["filename"].rsplit("/", 1)[-1].removesuffix(".md")
-            options.add_option(Option(f"{r['score']:.2f} {name[:22]}", id=r["filename"]))
-        self.query_one("#vault-count", Label).update(f"{len(results)} resultados")
+        self.query_one("#vault-results", ScoreList).set_results(results)
+        count = f"{len(results)} resultados"
+        if elapsed_ms is not None:
+            count += f" · {elapsed_ms} ms"
+        self.query_one("#vault-count", Label).update(count)
         if results:
             self._open(results[0]["filename"])
 
-    def on_option_list_option_selected(self, event: OptionList.OptionSelected):
-        if event.option.id:
-            self._open(event.option.id)
+    def on_score_list_picked(self, event: ScoreList.Picked):
+        self._open(event.filename)
 
     # ---------------------------------------------------------------- prévia
     def _open(self, path):

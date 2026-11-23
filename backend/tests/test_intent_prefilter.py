@@ -133,6 +133,15 @@ class TestRealSkillsKeywords(unittest.TestCase):
             "aumenta o volume": "AUDIO_CONTROL",
             "desliga o computador": "SYSTEM_SECURITY",
             "tem alguém na minha rede?": "NETWORK_SCAN",
+            "fecha a aba do youtube": "BROWSER_TABS",
+            "abre uma aba nova no github": "BROWSER_TABS",
+            "toca lo-fi no youtube": "YOUTUBE_CONTROL",
+            "pausa o vídeo": "YOUTUBE_CONTROL",
+            "liga a legenda": "YOUTUBE_CONTROL",
+            "avança 30 segundos": "YOUTUBE_CONTROL",
+            "volta 10 segundos": "YOUTUBE_CONTROL",
+            "toca Coldplay": "SPOTIFY_CONTROL",
+            "resume essa página": "SCREEN_READ",
         }
         all_skills = list(intent.manager.skills)
         for text, expected in cases.items():

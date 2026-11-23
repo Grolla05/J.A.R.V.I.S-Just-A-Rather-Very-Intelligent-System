@@ -15,13 +15,22 @@
 # --- CORE / INTELIGÊNCIA ARTIFICIAL ---
 ollama>=0.6,<0.7            # Cliente Python para comunicação com servidor Ollama (LLM)
 faster-whisper>=1.2,<2      # Transcrição local de áudio (Whisper via CTranslate2 — rápido em CPU/GPU)
-Pillow>=12,<13              # Validação/normalização de imagem antes de enviar ao modelo de visão
+Pillow>=12,<13              # Validação/normalização de imagem antes de enviar ao modelo de visão; captura de tela
+
+# --- LEITURA DE TELA (OCR nativo do Windows, 0 VRAM — skill SCREEN_READ) ---
+# Os pacotes Windows.* usam época 4! na versão: a faixa precisa repetir a época.
+winrt-runtime>=4.2,<5
+winrt-Windows.Media.Ocr>=4!10.0,<4!11
+winrt-Windows.Graphics.Imaging>=4!10.0,<4!11
+winrt-Windows.Storage.Streams>=4!10.0,<4!11
+winrt-Windows.Globalization>=4!10.0.28000.2957,<4!11
+winrt-Windows.Foundation>=4!10.0,<4!11
 
 # --- CONFIGURAÇÃO E AMBIENTE ---
-python-dotenv>=1.2,<2       # Gerenciamento de variáveis de ambiente (.env)
+python-dotenv>=1.2.4,<2       # Gerenciamento de variáveis de ambiente (.env)
 
 # --- RECONHECIMENTO DE VOZ (Speech to Text) ---
-SpeechRecognition>=3.16,<4  # Biblioteca para reconhecimento de voz via Google Speech API
+SpeechRecognition>=3.17.0,<4  # Biblioteca para reconhecimento de voz via Google Speech API
 PyAudio>=0.2.14,<0.3        # Interface para captura de áudio do microfone
 
 # --- TEXT-TO-SPEECH (Síntese de Voz) ---
@@ -31,7 +40,7 @@ pygame-ce>=2.5,<3           # Reprodução de arquivos de áudio MP3 (usando a C
 
 # --- CONTROLE DE SISTEMA & AUTOMAÇÃO ---
 pyautogui>=0.9.54,<0.10     # Controle programático de Teclado e Mouse (Atalhos, Clicks)
-comtypes>=1.4,<2            # Biblioteca COM para interação com APIs do Windows
+comtypes>=1.5.0,<2            # Biblioteca COM para interação com APIs do Windows
 pycaw>=20251023             # Python Core Audio Windows - Controle de volume, dispositivos de áudio
 
 # --- INTERFACE (TERMINAL) ---

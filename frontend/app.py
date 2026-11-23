@@ -57,11 +57,10 @@ from frontend.screens import (
 from frontend.sprites import block_bar
 from frontend.widgets import (
     ConfirmScreen,
-    CopilotHero,
     MessageView,
     PromptInput,
     StatusLine,
-    VoiceBar,
+    VoiceStage,
 )
 from services import sessions
 
@@ -73,6 +72,7 @@ TELEMETRY_HISTORY = 40  # amostras guardadas p/ os sparklines (40 × 3 s = 2 min
 NOTE_CONTEXT_MAX = 4000  # caracteres da nota do /vault que vão ao modelo
 REMINDER_INTERVAL = 30  # s entre checagens de lembretes (agenda + pedidos); a agenda tem cache próprio
 EXPLAIN_SNIPPET_MAX = 6000  # caracteres do trecho a explicar (cabe no contexto do modelo local)
+MIC_KHZ = 16  # taxa padrão do sr.Microphone (services/listen.py) — mostrada no topo do Copilot
 
 
 def _presentation_silent():
@@ -186,8 +186,6 @@ class JarvisApp(App, inherit_bindings=False):
         self._voice_stop = threading.Event()  # encerra o loop de voz junto com o app
         self._telemetry = ""
         self._session_info = "nova sessão"  # "sessão N de M" (cache, evita SQL a cada refresh)
-        self._skills_info = ""
-        self._skills_active = 0
         # Histórico curto da telemetria (sparklines do /status) e último turno
         # com skill (timeline do /log). Só a thread da UI escreve aqui.
         self.telemetry_history = {name: deque(maxlen=TELEMETRY_HISTORY)
@@ -203,11 +201,10 @@ class JarvisApp(App, inherit_bindings=False):
             yield Static(id="mode-badge")
             yield Static(id="session-title")
             yield Static(id="topbar-info")
-        yield CopilotHero(model=settings.OLLAMA_MODEL, id="copilot-hero")
         yield VerticalScroll(id="log")
         yield Static(id="attachbar")
         yield PromptInput(id="prompt", placeholder="Fale com o JARVIS…  (Ctrl+K menu)")
-        yield VoiceBar(id="voicebar")
+        yield VoiceStage(id="voice-stage")
         # Telemetria e atalhos dividem UMA linha (canvas "JARVIS TUI")
         with Horizontal(id="statusbar", classes="statusbar"):
             yield StatusLine(id="status-left", classes="status-left")
@@ -216,8 +213,7 @@ class JarvisApp(App, inherit_bindings=False):
     def on_mount(self):
         self._main_thread = threading.get_ident()
         self.main_screen.query_one("#attachbar").display = False
-        self.main_screen.query_one("#voicebar").display = False
-        self.main_screen.query_one("#copilot-hero").display = False
+        self.main_screen.query_one("#voice-stage").display = False
         self._refresh_counts()
         self._refresh_topbar()
         self._refresh_status()
@@ -436,33 +432,23 @@ class JarvisApp(App, inherit_bindings=False):
         return self.call_from_thread(fn, *args)
 
     def _refresh_counts(self):
-        """Recalcula 'sessão N de M' e 'skills ativas: K' (consulta o SQLite)."""
+        """Recalcula 'sessão N de M' (consulta o SQLite)."""
         recent = sessions.get_recent_sessions(50)
         ids = [s["id"] for s in recent]
         if self.session_id in ids:
             self._session_info = f"sessão {ids.index(self.session_id) + 1} de {len(ids)}"
         else:
             self._session_info = "nova sessão"
-        try:
-            from services.skill_settings import list_skills
-            active = sum(1 for cat in list_skills() for s in cat["skills"] if s["enabled"])
-            self._skills_active = active
-            self._skills_info = f"skills ativas: {active}"
-        except Exception as e:
-            log.debug(f"Contagem de skills indisponível: {e}")
-            self._skills_active = 0
-            self._skills_info = ""
-        self.main_screen.query_one("#copilot-hero", CopilotHero).set_info(settings.OLLAMA_MODEL, self._skills_active)
 
     def _refresh_topbar(self):
         self.main_screen.query_one("#mode-badge", Static).update("COPILOT" if self.mode == "copilot" else "CHAT")
         title = (self.session_title or sessions.DEFAULT_TITLE).replace("\n", " ")[:70]
         self.main_screen.query_one("#session-title", Static).update(title)
         if self.critical:
-            reasons = getattr(state.sys_monitor, "critical_reasons", None) or []
-            info = " · ".join(["⚠ PROTOCOLO CRÍTICO", *reasons[:2]])
+            # Só o selo, como no canvas; os motivos vão para o log (notificação + /log)
+            info = "⚠ PROTOCOLO CRÍTICO"
         elif self.mode == "copilot":
-            info = " · ".join(p for p in ("somente voz", self._skills_info) if p)
+            info = f"mic {settings.MIC_INDEX} · {MIC_KHZ} kHz"
         else:
             info = self._session_info
         self.main_screen.query_one("#topbar-info", Static).update(info)
@@ -493,8 +479,10 @@ class JarvisApp(App, inherit_bindings=False):
         self.main_screen.set_class(copilot, "-copilot")
         prompt = self.main_screen.query_one("#prompt", PromptInput)
         prompt.display = not copilot
-        self.main_screen.query_one("#voicebar").display = copilot
-        self.main_screen.query_one("#copilot-hero").display = copilot
+        # Copilot = tela de voz inteira (canvas): a conversa some, mas segue
+        # gravada na sessão e volta ao trocar para o Chat.
+        self.main_screen.query_one("#voice-stage").display = copilot
+        self.log_view.display = not copilot
         if not copilot:
             prompt.focus()
         self._set_voice(copilot)  # Copilot é só por voz; o Chat é só texto
@@ -1381,12 +1369,15 @@ class JarvisApp(App, inherit_bindings=False):
         if pending and pending.get("on_confirm"):
             # Skill do Copilot pediu confirmação (ex.: criar issue no GitHub)
             self._ask_pending_confirmation(pending.get("question", "Confirma a ação?"))
-        if session_id == self.session_id:
-            if self.session_title == sessions.DEFAULT_TITLE:
-                self.session_title = sessions.get_session_title(session_id)
-            self._refresh_counts()
-            self._refresh_topbar()
-        self.log_view.scroll_end(animate=False)
+        try:
+            if session_id == self.session_id:
+                if self.session_title == sessions.DEFAULT_TITLE:
+                    self.session_title = sessions.get_session_title(session_id)
+                self._refresh_counts()
+                self._refresh_topbar()
+            self.log_view.scroll_end(animate=False)
+        except NoMatches:
+            return  # app fechando: o stream terminou depois da tela da conversa ser desmontada
 
     # ------------------------------------------------------- alerts / announce
     def _announce_from_any_thread(self, text):
@@ -1400,7 +1391,7 @@ class JarvisApp(App, inherit_bindings=False):
         """Abre o ConfirmScreen (30 s) se há ação crítica pendente e nenhum aberto."""
         pending = state.pending_critical_action
         if pending and not isinstance(self.screen, ConfirmScreen):
-            self.main_screen.query_one("#voicebar", VoiceBar).set_awaiting(True)
+            self.main_screen.query_one("#voice-stage", VoiceStage).set_awaiting(True)
             # O id vai junto: se a pendência for trocada enquanto a pergunta está na
             # tela, o "s" não executa a ação nova (core/pending.py).
             pending_id = pending.get("id")
@@ -1408,7 +1399,7 @@ class JarvisApp(App, inherit_bindings=False):
                              lambda approved, pid=pending_id: self._resolve_critical(approved, pid))
 
     def _resolve_critical(self, approved, pending_id=None):
-        self.main_screen.query_one("#voicebar", VoiceBar).set_awaiting(False)
+        self.main_screen.query_one("#voice-stage", VoiceStage).set_awaiting(False)
         self._confirm_worker(bool(approved), pending_id)
 
     @work(thread=True, group="confirm")
@@ -1514,10 +1505,13 @@ class JarvisApp(App, inherit_bindings=False):
     def _set_voice_level(self, level):
         if not self.is_running:
             return
-        self.main_screen.query_one("#voicebar", VoiceBar).set_level(level)
+        self.main_screen.query_one("#voice-stage", VoiceStage).set_level(level)
 
     def _set_orb(self, orb_state):
-        self.main_screen.query_one("#copilot-hero", CopilotHero).set_state(orb_state)
+        self.main_screen.query_one("#voice-stage", VoiceStage).set_state(orb_state)
+
+    def _set_transcript(self, text):
+        self.main_screen.query_one("#voice-stage", VoiceStage).set_transcript(text)
 
     def _voice_loop(self):
         """Copilot por voz: ouve → mesmo pipeline de stream do Copilot → fala.
@@ -1536,6 +1530,7 @@ class JarvisApp(App, inherit_bindings=False):
                     continue
                 self._call_ui(self._set_voice_level, None)  # saiu de "ouvindo": barras zeram
                 self._call_ui(self._set_orb, "pensando")
+                self._call_ui(self._set_transcript, command)  # a fala vai para o centro da tela de voz
                 session_id = self.session_id
                 reply = self._call_ui(self._begin_turn, command, f"voz · {_now_hhmm()}")
                 full = self._run_turn(command, None, "copilot", session_id, reply,

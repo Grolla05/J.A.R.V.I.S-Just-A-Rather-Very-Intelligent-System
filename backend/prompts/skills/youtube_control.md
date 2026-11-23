@@ -1,0 +1,4 @@
+- YOUTUBE_CONTROL: Controlar o YouTube no navegador — tocar ou pesquisar um vídeo, pausar/retomar, avançar ou voltar segundos, pular para uma parte, tela cheia, modo cinema, miniplayer, legendas, mudo, volume do vídeo, velocidade, próximo/anterior vídeo e dizer qual vídeo está passando.
+  Use quando: a frase citar "YouTube" ou "vídeo" — "toca lo-fi no YouTube", "pesquisa receita de pão no YouTube", "pausa o vídeo", "avança 30 segundos", "liga a legenda", "tela cheia", "velocidade 1.5", "próximo vídeo", "que vídeo é esse?".
+  NÃO use para tocar música sem citar YouTube/vídeo ("toca Coldplay", "pausa a música") — isso é SPOTIFY_CONTROL. NÃO use para o volume do sistema sem citar o vídeo — isso é AUDIO_CONTROL. NÃO use para abas em geral — isso é BROWSER_TABS. NÃO use para resumir o conteúdo da página — isso é SCREEN_READ.
+  Entity: o que tocar/pesquisar, ou o valor (segundos, velocidade); null se não houver.

@@ -15,7 +15,7 @@ O J.A.R.V.I.S é um assistente pessoal **local** para Windows, 100% Python:
                 ┌──────────────────────── processo da TUI (python main.py) ───────────────────────┐
  teclado ─────▶ │ frontend/app.py (JarvisApp)                                                       │
  microfone ───▶ │   ├─ modo CHAT  : PromptInput ─┐                                                  │
-                │   └─ modo COPILOT: VoiceBar ◀── services/listen.py (wake word + Google STT)       │
+                │   └─ modo COPILOT: VoiceStage ◀── services/listen.py (wake word + Google STT)       │
                 │                                ▼                                                  │
                 │                 services/brain.py  execute_command_stream(texto, sessão, modo)    │
                 │                   ├─ ação crítica pendente? → confirm_pending_action              │
@@ -88,7 +88,7 @@ Nenhuma etapa trava a TUI. Depois do boot:
 
 ### 3.2 Modo Copilot (voz)
 
-1. Entrar no Copilot (`Shift+Tab`/`Ctrl+T`/`Win+J`) liga a voz (`state.voice_enabled = True`); o input dá lugar à `VoiceBar` e à orb pixel-art.
+1. Entrar no Copilot (`Shift+Tab`/`Ctrl+T`/`Win+J`) liga a voz (`state.voice_enabled = True`); input e conversa dão lugar à `VoiceStage`: espectro dos dois lados da orb pixel-art, estado, a fala no centro e o VU em dB.
 2. `services/listen` abre o microfone sob demanda (`get_ear()`), espera a *wake word* (`WAKE_WORDS`) e transcreve com o Google STT. Depois do nome, há uma **janela de atenção** (pref `attention_window`, padrão 60 s) em que não é preciso repetir "Jarvis".
 3. `_voice_loop` mostra a fala na sessão atual e chama o **mesmo** `_run_turn` do Chat com `mode="copilot"`: aqui todas as skills executam.
 4. A orb muda de estado: ouvindo → pensando → respondendo (8 fps, só nesses dois últimos).
@@ -105,7 +105,7 @@ Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub
 | Módulo | Papel |
 |---|---|
 | `app.py` | `JarvisApp`: modos, atalhos, worker de stream, voz, alertas, telemetria, briefing automático, atualização |
-| `widgets.py` | `MessageView` (Markdown), `PromptInput` (arrastar arquivo = `/attach`), `StatusLine`, `JarvisOrb`, `CopilotHero`, `VoiceBar`, `ConfirmScreen` (30 s), `PixelSprite` |
+| `widgets.py` | `MessageView` (Markdown), `PromptInput` (arrastar arquivo = `/attach`), `StatusLine`, `JarvisOrb`, `Spectrum`, `VoiceStage`, `ConfirmScreen` (30 s), `PixelSprite` |
 | `commands.py` | Parser puro dos `/comandos`, aliases e entradas/busca fuzzy da paleta `Ctrl+K` |
 | `orb.py` | Quadros 16×16 da orb e conversão para meio-bloco (lógica pura) |
 | `sprites.py` | Sprites 16-bit e efeitos de texto: `block_bar` (▰▱), `sparkline`, `bar_chart`, CRT, scanline |
@@ -116,7 +116,8 @@ Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub
 | `screens/skills.py` | `/skills`: cartuchos por categoria; Enter liga/desliga, `c` liga/desliga a categoria |
 | `screens/log.py` | `/log`: buffer do logger com filtros, busca e a timeline do último turno com skill |
 | `screens/vault.py` | `/vault`: árvore do Obsidian, busca, prévia e "usar no chat" |
-| `screens/settings.py` | `/config`: VOZ, MICROFONE, ROTINAS, INTEGRAÇÕES, SISTEMA, MODELO, SOBRE |
+| `screens/settings.py` | `/config`: VOZ, MICROFONE, ROTINAS, INTEGRAÇÕES, SISTEMA, MODELO, SOBRE — cada grupo em cards de seção |
+| `screens/settings_rows.py` | Seções, rótulos curtos e ajuda do `/config` (lógica pura) + `PrefRow` (▌ nome ◀ valor ▶, selo ● ON/○ OFF, ajuda ↳) e `QuipLine` (fala digitando) |
 | `screens/integrations_panel.py` | Cards de INTEGRAÇÕES (Google Agenda, Spotify, GitHub…) |
 | `screens/save_slots.py` | `Ctrl+O`: sessões como save slots (carregar, fixar, apagar, buscar) |
 | `screens/palette.py` | `Ctrl+K`: paleta de comandos, modos, foco e skills |
@@ -178,6 +179,8 @@ Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub
 | `uploads.py` | Valida e grava anexos (imagem/áudio) |
 | `notifications.py` | Liga/desliga os toasts do Windows (HKCU) |
 | `window_utils.py` | Win32: monitores, janela em foco, tela cheia, detecção de apresentação |
+| `screen_capture.py` | Captura da janela-alvo (pula o terminal do JARVIS na ordem Z) ou de um monitor, só em memória |
+| `ocr.py` | OCR nativo do Windows (`Windows.Media.Ocr`, 0 VRAM) + máscara de tokens com cara de segredo |
 | `hotkey.py` | Atalho global (`RegisterHotKey`) do agente |
 | `presence.py` | Ponte TUI ⇄ agente: `tui.json` + eventos nomeados |
 | `autostart.py` | Valor `JARVIS` em `HKCU\…\Run` (`--logon`) e início do agente |
@@ -201,7 +204,9 @@ Cada skill expõe `INTENT`, `PROMPT_TEXT`, `KEYWORDS` (opcional, pré-filtro), `
 | system | `NETWORK_SCAN` | Varredura da rede: aparelhos, portas expostas, programas na internet | não |
 | automation | `KEYBOARD_CONTROL` | Teclado fantasma (pyautogui) | não |
 | automation | `SCREEN_CONTROL` | Brilho, gamma ("retina") e janelas | não |
+| automation | `BROWSER_TABS` | Abas do navegador Chromium: abrir, fechar (várias com confirmação), ir, listar, reabrir, recarregar | não |
 | automation | `SPOTIFY_CONTROL` | Tocar, pausar, buscar no Spotify | não |
+| automation | `YOUTUBE_CONTROL` | Tocar/pesquisar vídeo e controlar o player do YouTube (teclas oficiais) | não |
 | automation | `WORK_MACRO` | Cenas de trabalho/estudo (apps, janelas, notificações) | não |
 | system | `SYSTEM_REPORT` | Relatório de status da máquina | não |
 | system | `SYSTEM_CLEANUP` | Lixeira, temporários, desinstalar app | não |
@@ -211,6 +216,7 @@ Cada skill expõe `INTENT`, `PROMPT_TEXT`, `KEYWORDS` (opcional, pré-filtro), `
 | productivity | `FOCUS_MODE` | Pomodoro e Não Perturbe | sim |
 | productivity | `GITHUB` | PRs, issues, commit, CI, criar issue (com confirmação) | sim |
 | productivity | `PRESENTATION_MODE` | Liga/desliga o Modo Apresentação | sim |
+| productivity | `SCREEN_READ` | Lê a página da aba (pela URL) ou o texto da janela/monitor (OCR do Windows) e explica erro, código, questão ou documento | sim |
 | productivity | `TRAFFIC` | Tempo entre locais cadastrados | sim |
 | web | `WEB_SEARCH` | Pesquisa e resume com fontes | sim |
 
@@ -224,8 +230,9 @@ Cada skill expõe `INTENT`, `PROMPT_TEXT`, `KEYWORDS` (opcional, pré-filtro), `
 
 1. Fontes com RSS oficial (G1, BBC, NYT, WSJ, CNN Brasil) leem o feed; fontes sem RSS usam a busca e descartam títulos de página inicial; "DOI" busca no Crossref.
 2. Entram as 15 mais novas das últimas 48 h (item de feed sem data fica de fora).
-3. Cada título ganha pontos por palavra-chave: morte (3), guerra/ataque/desastre (3), mercado (2), queda/disparada/recorde (2), política (1).
-4. Vence a maior nota; empate fica com a mais nova.
+3. Cada título ganha pontos por assunto: morte (3), guerra/ataque/desastre (3), mercado (2), queda/disparada/recorde (2), política (1). Os termos aceitam radical (`morr*` casa "morreram", `despenc*` casa "despencou"); palavras ambíguas ficam exatas ("bolsa" não casa "Bolsonaro"). Frases de `_FALSE_CONTEXT` ("bolsa de estudos", "morrer de rir") saem antes da contagem.
+4. Os 3 melhores de cada fonte (empate → o mais novo) vão, com a pref `news_ai` ligada (`/config` → ROTINAS, padrão ligada), numa **única** chamada ao Ollama (`prompts/news_rank.md`, JSON `{fonte: índice}`), que escolhe o mais importante. Sem resposta válida, vence a maior nota.
+5. A CNN internacional não tem RSS vivo (parado desde 2023): "CNN" vai pela busca, e o padrão das fontes usa "CNN Brasil".
 
 ### 5.2 Foco, Não Perturbe e Apresentação
 
@@ -245,6 +252,27 @@ Os sinais `CRITICAL_START`/`CRITICAL_END` pintam a TUI de vermelho (classe `-cri
 ### 5.4 Trânsito e aviso de saída
 
 `/rota <local> <endereço>` geocodifica no Nominatim e guarda o local. A skill `TRAFFIC` entende origem e destino na frase. Sem `TOMTOM_API_KEY`, usa o OSRM público (tempo médio); com a chave, trânsito ao vivo. A pref `commute_alert` avisa a hora de sair.
+
+### 5.5 Leitura de tela (`SCREEN_READ`)
+
+"Explica o erro na minha tela", "resolve a questão aberta", "resume o monitor 2". Sem modelo de visão: o modelo de texto (`OLLAMA_MODEL`) faz o trabalho, e a VRAM fica livre.
+
+0. **Navegador Chromium em foco** (só no escopo janela): `core/browser.active_url()` lê a URL da aba pela UI Automation; se `is_fetch_safe()` (http(s) público, sem usuário/senha e sem parâmetro com cara de credencial — link de reset/OAuth nunca é baixado de novo), `core/web.fetch_text()` baixa a página inteira (inclusive o que está fora da tela) e o prompt é `page_read.md`. Página com menos de 400 caracteres (login, SPA, bloqueio) ou qualquer falha → segue o OCR abaixo.
+1. `core/screen_capture.capture()`: a janela em foco; se for o próprio terminal do JARVIS (caso do Chat), desce na ordem Z até a 1ª janela real (visível, não minimizada, não oculta pelo DWM, com título, fora do shell). "tela inteira"/"monitor N" capturam o monitor. A imagem nunca vai para o disco.
+2. `core/ocr.recognize()`: OCR do Windows (`OCR_LANGUAGE` → pt-BR → en-US → perfil). Com idioma principal não inglês, lê também em en-US e `merge_readings()` junta palavra a palavra: acentos do principal, dígitos do inglês quando os dois têm dígito e divergem (o motor pt-BR lê "80" como "8a" em fonte de código). `mask_secrets()` troca por `[oculto]` linhas com token de cara de chave.
+3. `core/clipboard.classify()` escolhe o prompt: erro → `explain_error.md`, código → `explain_code.md`, resto → `screen_read.md` (com o pedido do usuário e o título da janela). Texto cortado em `SCREEN_TEXT_MAX`.
+4. A skill devolve o gerador de `query_ollama_stream`: o `brain` repassa em stream na TUI e junta no modo voz.
+
+Sem texto legível, responde que imagem ainda não é interpretada e sugere `/attach`.
+
+### 5.6 Navegador: abas e YouTube (`BROWSER_TABS`, `YOUTUBE_CONTROL`)
+
+Sem extensão e sem `--remote-debugging-port` (com ele qualquer processo local dirigiria o navegador logado). Só Chromium (Opera GX, Chrome, Edge, Brave, Vivaldi). `core/browser.py` junta duas ferramentas:
+
+- **UI Automation** (comtypes, import tardio): URL da aba ativa, lista de abas (o nome vem limpo dos estados do Chromium, como "- Memory usage - 86 MB"), selecionar aba (`SelectionItemPattern`) e fechar pelo botão "x" (`InvokePattern`) — sem roubar o foco. Falha → `Ctrl+1..9` / `Ctrl+W` de reserva.
+- **Atalhos** (pyautogui): só depois de `focus()` confirmar que a janela está em primeiro plano; sem foco, nenhuma tecla sai (cairia em outra janela). Contra o foreground-lock do Windows, um toque sintético de Alt antes da 2ª tentativa.
+
+As duas skills roteiam como o Spotify: regex primeiro (sem Ollama), LLM só para a frase que sobrar (`*_decision.md`, ação validada contra uma tabela fixa — texto do modelo nunca vira atalho). `BROWSER_TABS`: fechar outras/todas as abas arma `pending` com a lista de títulos. `YOUTUBE_CONTROL`: "toca X no YouTube" → `core/youtube.find_video` (página de resultados do YouTube (1º `videoId` do HTML) → ddgs de reserva → senão abre os resultados); o player usa as teclas oficiais (k, j/l, f, t, i, c, m, Shift+N/P, >/<, 0–9) na aba do YouTube, achada pelo título — trocando de aba se preciso; em ação rápida (pausar, pular, legenda…) o foco volta para a janela anterior. Velocidade exata: desce ao mínimo com `<` e sobe com `>` (o YouTube não informa a atual).
 
 ## 6. Comandos e atalhos da TUI
 

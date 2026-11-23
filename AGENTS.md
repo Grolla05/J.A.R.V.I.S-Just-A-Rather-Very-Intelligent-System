@@ -36,7 +36,7 @@ também na hora de fazer/abrir o PR e commit, ccoloque sempre a tag de Co-Author
 J.A.R.V.I.S/
 ├── frontend/                ← TUI (Textual), pacote Python `frontend` — visual do canvas "JARVIS TUI"
 │   ├── app.py               ← JarvisApp: modos chat/copilot, bindings, stream, voz, alertas
-│   ├── widgets.py           ← MessageView, PromptInput, JarvisOrb, CopilotHero, VoiceBar, ConfirmScreen (30 s)
+│   ├── widgets.py           ← MessageView, PromptInput, JarvisOrb, Spectrum, VoiceStage (tela de voz do Copilot), ConfirmScreen (30 s)
 │   ├── orb.py               ← Orb pixel-art 16×16 do Copilot (quadros + meio-bloco, lógica pura)
 │   ├── sprites.py           ← Sprites 16-bit + efeitos (block_bar ▰▱, sparkline, bar_chart, CRT, scanline) — lógica pura; pintados pelo PixelSprite
 │   ├── screens/             ← Telas cheias (JarvisScreen: topo + corpo + linha de status; Esc volta): /status, /skills, /log, /vault, /config (com cards de INTEGRAÇÕES em `integrations_panel.py`), save slots (SessionPicker, Ctrl+O), paleta Ctrl+K (CommandPalette); e BootScreen, UpdateScreen (atualização disponível), ShutdownScreen (CRT), HousePartyScreen
@@ -72,7 +72,7 @@ J.A.R.V.I.S/
 │   │   ├── secrets_store.py ← Cofre de Credenciais do Windows (keyring) p/ tokens OAuth (Google e Spotify); fallback JSON
 │   │   ├── google_calendar.py ← Google Agenda (REST, só leitura): briefing, skill CALENDAR, is_busy(), upcoming() p/ os lembretes
 │   │   ├── traffic.py       ← Trânsito entre locais fixos (/rota <local> <endereço>): Nominatim + OSRM (grátis) ou TomTom (ao vivo)
-│   │   ├── news.py          ← Manchetes do briefing (/config → SISTEMA): 1 por fonte, a mais relevante (RSS oficial ou busca; Crossref p/ DOI)
+│   │   ├── news.py          ← Manchetes do briefing (/config → SISTEMA): 1 por fonte, a mais relevante (RSS oficial ou busca; Crossref p/ DOI; radicais `morr*` + `_FALSE_CONTEXT`; desempate pelo Ollama numa chamada só com a pref `news_ai`)
 │   │   ├── briefing.py      ← Briefing diário em seções fixas (Clima, Computador, GitHub, Agenda, Trânsito, Manchetes); LLM só no fecho
 │   │   ├── weather.py       ← Clima (Open-Meteo + local por IP) e saudação por horário
 │   │   ├── github_client.py ← PyGithub: PRs, issues, commit, CI, create_issue (confirmação fica com quem chama)
@@ -81,6 +81,10 @@ J.A.R.V.I.S/
 │   │   ├── clipboard.py     ← Monitor de clipboard, classificação (url/erro/código/inglês) e ações (/clip, skill CLIPBOARD)
 │   │   ├── netwatch.py      ← Vigia de rede: foto (portas expostas, processos na internet, ARP), linha de base e diff
 │   │   ├── window_utils.py  ← Win32: monitores, janela em foco, tela cheia, detecção de apresentação
+│   │   ├── browser.py       ← Navegador Chromium sem CDP: janela (ordem Z), atalhos só com foco confirmado, UI Automation (URL da aba, lista/seleciona/fecha abas), is_fetch_safe
+│   │   ├── youtube.py       ← find_video (página de resultados do YouTube → 1º videoId; ddgs de reserva) e limpeza de título de aba
+│   │   ├── screen_capture.py← Captura da janela-alvo (pula o terminal do JARVIS) ou do monitor, só em memória (skill SCREEN_READ)
+│   │   ├── ocr.py           ← OCR nativo do Windows (winrt, 0 VRAM, import tardio) + mask_secrets
 │   │   ├── ollama_server.py ← Sobe `ollama serve` no boot se o Ollama local estiver fora
 │   │   ├── boot.py          ← Etapas da tela de boot (run_boot)
 │   │   ├── wt_profile.py    ← Fragmento do perfil JARVIS do Windows Terminal (logo na aba)
@@ -108,11 +112,11 @@ J.A.R.V.I.S/
 │   │   ├── listen.py        ← Ear lazy (STT + Wake Word "Jarvis") — mic só abre com a voz ligada
 │   │   └── speak.py         ← TTS (edge-tts → fallback pyttsx3), no-op com a voz desligada
 │   ├── skills/
-│   │   ├── automation/      ← app_control, audio_control, clipboard_assistant, keyboard_control,
-│   │   │                       screen_control, spotify_control, work_macros  (só Copilot/voz)
+│   │   ├── automation/      ← app_control, audio_control, browser_tabs, clipboard_assistant, keyboard_control,
+│   │   │                       screen_control, spotify_control, work_macros, youtube_control  (só Copilot/voz)
 │   │   ├── system/          ← network_guard, status_report, system_clear, system_security (só Copilot/voz)
 │   │   ├── productivity/    ← calendar_agenda, daily_briefing, focus_mode, github_control, insight_note,
-│   │   │                       presentation_mode, reminder, traffic_commute     (Chat e Copilot)
+│   │   │                       presentation_mode, reminder, screen_read, traffic_commute (Chat e Copilot)
 │   │   └── web/             ← web_search                                          (Chat e Copilot)
 │   ├── prompts/             ← Arquivos .md de prompt (system_prompt, classify_intent, mode_chat, mode_copilot, briefing...; skills/ p/ PROMPT_TEXT)
 │   ├── tests/               ← pytest (backend + TUI)
@@ -222,7 +226,8 @@ def execute(entity: str, command: str) -> str:
 ```
 
 > ⚠️ `execute()` recebe **2 argumentos**: `entity` e `command`. Skills antigas com 1 argumento quebrarão o routing.
-> No modo **Copilot** (e no modo voz) todas as skills executam. No modo **Chat** só as de categoria fora de `CHAT_BLOCKED_CATEGORIES` (`automation` e `system`, em `services/intent.py`): o classificador roda com `exclude_categories=` e o `brain` confere `skill_allowed_in_chat()`. Productivity e web (agenda, trânsito, GitHub, busca, briefing, foco, apresentação) rodam nos dois modos.
+> `execute()` devolve `str` ou, para resposta longa do LLM, um iterável de pedaços (stream): o `brain` repassa na TUI e junta na voz (ex.: `SCREEN_READ`).
+> No modo **Copilot** (e no modo voz) todas as skills executam. No modo **Chat** só as de categoria fora de `CHAT_BLOCKED_CATEGORIES` (`automation` e `system`, em `services/intent.py`): o classificador roda com `exclude_categories=` e o `brain` confere `skill_allowed_in_chat()`. Productivity e web (agenda, trânsito, GitHub, busca, briefing, foco, apresentação, leitura de tela) rodam nos dois modos.
 > Dado externo que o Chat precisa responder (ex.: agenda) entra como contexto via `services/live_context.py` (detecção por palavra-chave + bloco de sistema em `prompts/*_context.md` com "não invente") — nunca deixe o LLM responder sobre dado pessoal sem a fonte no prompt.
 
 ### Configurações
@@ -239,7 +244,7 @@ def execute(entity: str, command: str) -> str:
 | Modo | Atalho | O que faz |
 |------|--------|-----------|
 | `chat` | `Shift+Tab` | Conversa **por texto** com o LLM em Markdown. Skills **nunca** executam. Voz desligada |
-| `copilot` | `Shift+Tab` / `Ctrl+T` | Agente **só por voz**: o input dá lugar à `VoiceBar` + orb; mesmo pipeline com skills liberadas + confirmação de ação crítica (`ConfirmScreen`) |
+| `copilot` | `Shift+Tab` / `Ctrl+T` | Agente **só por voz**: input e conversa dão lugar à `VoiceStage` (espectro + orb + fala + VU em dB, como no canvas); mesmo pipeline com skills liberadas + confirmação de ação crítica (`ConfirmScreen`) |
 
 O modo vai para `execute_command_stream(..., mode=)` e escolhe o prompt `mode_chat.md` / `mode_copilot.md`. Entrar no Copilot liga a voz; voltar ao Chat desliga. O loop de voz (`_voice_loop`) usa o **mesmo** `_run_turn` do Chat (stream + selo da skill) e fala a resposta no fim; grava na sessão atual. Comandos `/` só existem no Chat.
 
@@ -248,7 +253,7 @@ O modo vai para `execute_command_stream(..., mode=)` e escolhe o prompt `mode_ch
 - `Shift+Tab` modo · `Ctrl+N` nova sessão · `Ctrl+O` sessões · `Ctrl+R` regenerar · `Ctrl+T` vai para o Copilot (voz) — some do rodapé dentro dele · `Esc` cancela a edição → interrompe o stream → sem nada em andamento, sai (CRT; Esc de novo sai já) — fora do rodapé · `↑` com input vazio edita a última mensagem · `Ctrl+K` paleta (`/menu`; binding com `priority=True` porque o `Input` usa Ctrl+K) · `Win+J` (global, via `agent.py`) abre/foca a TUI no Copilot · `Ctrl+Alt+T` (global, `TRANSLATE_HOTKEY`) traduz o texto selecionado em qualquer app (toast da bandeja + clipboard) · `Ctrl+Alt+E` (global, `EXPLAIN_HOTKEY`) explica o código/erro selecionado em qualquer app dentro do Chat (abre a TUI se estiver fechada; o clipboard anterior é devolvido)
 - Telemetria e atalhos dividem **uma** linha: o `Footer` vive dentro do `#statusbar` (classe `.statusbar`); o `ConfirmScreen` tem a sua própria linha igual (o Footer só enxerga a Screen dele)
 - `JarvisApp` usa `inherit_bindings=False` para "Sair" ficar no fim do rodapé — não volte a herdar sem reordenar
-- Telas cheias: `/status` (dashboard), `/skills` (cartuchos), `/log` (buffer do logger + timeline do último turno com skill), `/vault` (Obsidian; "usar no chat" manda a nota como contexto via `prompts/vault_note_context.md`), `/config` (preferências em `services/user_prefs.py`; a fala do JARVIS é a linha `#cfg-quip` no pé do painel — sem caixa de diálogo; SISTEMA tem o campo "Fontes de notícias" com botão Salvar → `core/news.py`; INTEGRAÇÕES = cards de `services/integrations.py`: Enter conecta em worker de thread, card fica AGUARDANDO, Del desconecta com `ConfirmScreen`). Nova integração = uma entrada em `integrations._build()` com `status()`/`connect()`/`disconnect()` que devolvem texto e nunca levantam. Boot: `JarvisApp(boot_fn=core.boot.run_boot)`; `Esc` na conversa toca o CRT (`Esc` de novo sai já). Labels com `[  OK  ]` precisam de `markup=False`. `JarvisScreen._merge_bindings` põe `esc Voltar` no fim do rodapé, como no canvas. Dentro delas os atalhos da conversa ficam desativados; widgets da conversa são sempre buscados em `app.main_screen`
+- Telas cheias: `/status` (dashboard), `/skills` (cartuchos), `/log` (buffer do logger + timeline do último turno com skill), `/vault` (Obsidian; "usar no chat" manda a nota como contexto via `prompts/vault_note_context.md`), `/config` (preferências em `services/user_prefs.py`; cada grupo é montado em cards de seção a partir de `screens/settings_rows.py` (`SECTIONS`, rótulos curtos, ajuda ↳ da linha em foco; `PrefRow` com selo ● ON/○ OFF para liga/desliga e pontos de posição nas escolhas; preferência nova entra numa `Section` e no `HELP`); a fala do JARVIS é a `QuipLine` `#cfg-quip` (digitando) na faixa `#cfg-quip-box` do pé — sem caixa de diálogo; animações só por evento (cards entram um a um na troca de grupo, valor novo pisca); SISTEMA tem o campo "Fontes de notícias" com botão Salvar → `core/news.py`; INTEGRAÇÕES = cards de `services/integrations.py`: Enter conecta em worker de thread, card fica AGUARDANDO, Del desconecta com `ConfirmScreen`). Nova integração = uma entrada em `integrations._build()` com `status()`/`connect()`/`disconnect()` que devolvem texto e nunca levantam. Boot: `JarvisApp(boot_fn=core.boot.run_boot)`; `Esc` na conversa toca o CRT (`Esc` de novo sai já). Labels com `[  OK  ]` precisam de `markup=False`. `JarvisScreen._merge_bindings` põe `esc Voltar` no fim do rodapé, como no canvas. Dentro delas os atalhos da conversa ficam desativados; widgets da conversa são sempre buscados em `app.main_screen`
 - Não existe `/help`: a paleta `Ctrl+K` lista os comandos (`/`, `/help`, `/h` e `/?` abrem a paleta). `frontend/commands.py` é a fonte única — novo comando entra em `COMMANDS` e em `JarvisApp.run_command`
 - `//texto` envia uma mensagem que começa com `/`
 - Explicar (`JarvisApp.explain_snippet`): o trecho vira um turno normal do Chat (fica na sessão → dá para continuar perguntando) e vai ao modelo com `force_chat=True` — `execute_command_stream` pula classificador, vault e ação pendente, porque o conteúdo de um trecho nunca pode virar skill nem um "ok" de confirmação. Prompts `explain_code.md` / `explain_error.md` (stack trace → causa, onde olhar, correção, como confirmar). Chegam por ali: o atalho global (agente → `presence.write_explain` + evento `EXPLAIN`; `_take_explain` no sinal e no fim do boot) e `/clip explicar [n]`
@@ -349,6 +354,8 @@ AUTO_UPDATE=True                 # atualiza no logon pelo Release do GitHub (só
 UPDATE_REPO=                     # dono/nome dos Releases; vazio = repositório oficial
 GOOGLE_CLIENT_ID=                # client OAuth "App para computador" do próprio usuário (+ GOOGLE_CLIENT_SECRET)
 TOMTOM_API_KEY=                  # opcional: trânsito ao vivo (sem ela, OSRM)
+OCR_LANGUAGE=                    # leitura de tela (SCREEN_READ); vazio = pt-BR → en-US → idiomas do Windows
+SCREEN_TEXT_MAX=6000             # caracteres do OCR enviados ao modelo
 POMODORO_FOCUS_MIN=25            # + POMODORO_SHORT_BREAK_MIN, _LONG_BREAK_MIN, _CYCLES
 DEFAULT_LANGUAGE=pt-BR
 DEBUG_MODE=False

@@ -41,6 +41,8 @@ Importar `core` abre o banco, carrega as skills e prepara o cliente MCP. Por iss
 | `alerts.py` | `process_system_alert`: passa pelo `services/notify_filter`, fala/notifica, guarda no backlog ou pede confirmação para matar processo (`PROCESS_JUDGEMENT_CACHE`) |
 | `notifications.py` | Liga/desliga os toasts do Windows (HKCU) |
 | `window_utils.py` | Win32: monitores, janela em foco, tela cheia, detecção de apresentação |
+| `screen_capture.py` | Captura para a skill `SCREEN_READ`: janela em foco ou, se for o terminal do JARVIS, a 1ª janela real abaixo na ordem Z; "monitor N" captura o monitor. Imagem só em memória |
+| `ocr.py` | OCR nativo do Windows (`Windows.Media.Ocr` via pywinrt, import tardio, 0 VRAM): `OCR_LANGUAGE` → pt-BR → en-US, 2ª leitura em en-US mesclada (`merge_readings`: dígitos do inglês, acentos do português); `mask_secrets()` esconde linhas com token de cara de chave |
 
 ## Memória
 
@@ -55,11 +57,13 @@ Importar `core` abre o banco, carrega as skills e prepara o cliente MCP. Por iss
 | Módulo | Papel |
 |---|---|
 | `briefing.py` | Briefing diário: coleta isolada por fonte, seções fixas, frase de fecho do LLM |
-| `news.py` | Manchetes: uma por fonte, a mais relevante (RSS oficial ou busca; Crossref para DOI) |
+| `news.py` | Manchetes: uma por fonte, a mais relevante (RSS oficial ou busca; Crossref para DOI). Nota por assunto com radicais (`morr*`) e contexto que anula ("bolsa de estudos"); com a pref `news_ai`, os 3 melhores de cada fonte vão numa única chamada ao Ollama (`prompts/news_rank.md`) |
 | `weather.py` | Clima (Open-Meteo, local por IP guardado no Obsidian) e saudação |
 | `google_calendar.py` | Google Agenda só leitura: briefing, skill `CALENDAR`, `is_busy()` para o filtro |
 | `traffic.py` | Locais fixos (`/rota`), rota OSRM (grátis) ou TomTom (ao vivo), aviso de saída |
 | `github_client.py` | PRs, issues, último commit, CI, `create_issue` (quem chama confirma antes) |
+| `browser.py` | Navegador Chromium sem CDP: acha a janela (ordem Z, pula o terminal do JARVIS), manda atalhos só com foco confirmado e usa a UI Automation (comtypes) para URL da aba, listar/selecionar/fechar abas; `is_fetch_safe` decide se a página pode ser baixada de novo |
+| `youtube.py` | `find_video` (página de resultados do YouTube (1º `videoId` do HTML) → ddgs de reserva → senão abre os resultados), `clean_title`/`is_youtube_title` |
 | `spotify.py` | OAuth PKCE, Web API (busca, playlists, dispositivos) e player |
 | `oauth.py` | OAuth Desktop genérico: PKCE + callback no loopback |
 | `secrets_store.py` | Tokens no Cofre de Credenciais do Windows (`keyring`); fallback JSON |

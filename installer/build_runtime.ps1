@@ -93,13 +93,17 @@ foreach ($arq in 'env.example', 'LICENSE', 'README.md', 'VERSION') {
 }
 if ($Versao) { Set-Content -Path (Join-Path $app 'VERSION') -Value $Versao -Encoding ascii -NoNewline }
 
+# Wrappers COM da UI Automation (core/browser.py): o comtypes gera no 1o uso;
+# gerar aqui evita escrever no runtime instalado (pasta so leitura)
+Roda $py @('-c', 'import comtypes.client; comtypes.client.GetModule(''UIAutomationCore.dll''); from comtypes.gen import UIAutomationClient; print(''UIA OK'')')
+
 # Bytecode pre-compilado: a pasta instalada pode ser so leitura
 Roda $py @('-m', 'compileall', '-q', '-j', '0', $app, $site)
 
 # --- 5. Smoke test -----------------------------------------------------------
 Passo 'Smoke test das libs'
 $env:PYGAME_HIDE_SUPPORT_PROMPT = '1'
-Roda $py @('-c', 'import textual, ollama, faster_whisper, PIL, dotenv, speech_recognition, pyaudio, edge_tts, pyttsx3, pygame, pyautogui, comtypes, pycaw, psutil, GPUtil, requests, ddgs, github, colorama, pystray, keyring, cryptography.hazmat.primitives.asymmetric.ed25519; print(''libs OK'')')
+Roda $py @('-c', 'import textual, ollama, faster_whisper, PIL, dotenv, speech_recognition, pyaudio, edge_tts, pyttsx3, pygame, pyautogui, comtypes, pycaw, psutil, GPUtil, requests, ddgs, github, colorama, pystray, keyring, cryptography.hazmat.primitives.asymmetric.ed25519, winrt.windows.media.ocr, winrt.windows.graphics.imaging; print(''libs OK'')')
 
 # --- 6. MAX_PATH ---------------------------------------------------------------
 # O ISCC (Inno Setup) nao aceita caminhos com mais de 260 caracteres e falha so

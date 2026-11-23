@@ -1,5 +1,5 @@
 """Fases 3 e 4 das telas 16-bit: nível do mic (RMS), preferências, boot,
-/vault, /config, voz na VoiceBar, shutdown CRT e easter egg."""
+/vault, /config, voz na VoiceStage, shutdown CRT e easter egg."""
 import math
 import os
 import struct
@@ -185,24 +185,36 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
         await pilot.press("enter")
         await pilot.pause(0.3)
 
-    async def test_voicebar_shows_real_level_and_resets(self):
+    def test_vault_score_rows_and_sweep_label(self):
+        from frontend.screens.vault import score_rows, sweep_label
+        rows = score_rows([{"filename": "Projetos/J.A.R.V.I.S/Memória/rotina_trabalho.md", "score": 0.923},
+                           {"filename": "Sobre mim.md", "score": 0.71}])
+        self.assertEqual(rows, [("0.92", "rotina_trabalho"), ("0.71", "Sobre mim")])
+        self.assertEqual(sweep_label(6), "varredura 6/8")
+
+    async def test_voice_stage_shows_real_level_and_resets(self):
         app = self._app()
         async with app.run_test(size=(140, 45)) as pilot:
-            bar = app.main_screen.query_one("#voicebar")
+            bar = app.main_screen.query_one("#voice-stage")
+            left, right = bar.query_one("#voice-spec-left"), bar.query_one("#voice-spec-right")
             bar.set_level(1.0)
             await pilot.pause()
-            self.assertTrue(str(bar.query_one("#voice-wave").render()).endswith("█"))
-            self.assertEqual(str(bar.query_one("#voice-vu").render()), "█" * 15)
+            self.assertEqual(left.values[-1], 1.0)   # mais recente encostado na orb…
+            self.assertEqual(right.values[0], 1.0)   # …dos dois lados (espelhado)
+            self.assertIn("█", str(left.render()))
+            self.assertEqual(str(bar.query_one("#voice-vu").render()), "█" * 30)
+            self.assertEqual(str(bar.query_one("#voice-db").render()), "-12 dB")
             bar.set_level(None)
             await pilot.pause()
-            self.assertEqual(str(bar.query_one("#voice-vu").render()), "░" * 15)
-            self.assertNotIn("█", str(bar.query_one("#voice-wave").render()))
+            self.assertEqual(str(bar.query_one("#voice-vu").render()), "░" * 30)
+            self.assertEqual(str(bar.query_one("#voice-db").render()), "-∞ dB")
+            self.assertNotIn("█", str(left.render()))
 
-    async def test_voicebar_rises_fast_and_falls_smoothly(self):
+    async def test_voice_stage_rises_fast_and_falls_smoothly(self):
         app = self._app()
         async with app.run_test(size=(140, 45)) as pilot:
-            bar = app.main_screen.query_one("#voicebar")
-            self.assertNotIn("█", str(bar.query_one("#voice-wave").render()))  # sem onda falsa
+            bar = app.main_screen.query_one("#voice-stage")
+            self.assertNotIn("█", str(bar.query_one("#voice-spec-left").render()))  # sem onda falsa
             bar.set_level(1.0)
             bar.set_level(0.0)
             await pilot.pause()
@@ -215,13 +227,53 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
         async with app.run_test(size=(140, 45)) as pilot:
             await self._cmd(app, pilot, "/config")
             self.assertIsInstance(app.screen, tui_app.SettingsScreen)
-            await pilot.press("tab")       # foca as opções do grupo VOZ
+            await pilot.press("tab")       # foca a 1ª linha do grupo VOZ
+            self.assertTrue(app.screen.query_one("#pref-tts_voice").has_focus)
             await pilot.press("down")      # Velocidade
             await pilot.press("right")
             await pilot.pause()
             self.assertEqual(user_prefs.get("tts_rate"), 20)
-            self.assertIn("+20%", str(app.screen.query_one("#cfg-options").get_option_at_index(1).prompt))
-            self.assertIn("Velocidade", str(app.screen.query_one("#cfg-quip").render()))
+            row = app.screen.query_one("#pref-tts_rate")
+            self.assertEqual(row.row.value, "+20%")
+            self.assertIn("+20%", row.plain())
+            self.assertIn("Velocidade", app.screen.query_one("#cfg-quip").text)
+            self.assertIn("alterado às", str(app.screen.query_one("#cfg-saved-at").render()))
+
+    async def test_config_rotinas_cards_navigation_and_flash(self):
+        app = self._app()
+        async with app.run_test(size=(160, 50)) as pilot:
+            await self._cmd(app, pilot, "/config")
+            screen = app.screen
+            screen.query_one("#cfg-menu").highlighted = 2  # ROTINAS
+            await self._wait(pilot, lambda: len(screen.query(".cfg-card")) == 5)
+            await pilot.pause()
+            cards = list(screen.query(".cfg-card"))
+            self.assertEqual([c.border_title.split(" ", 1)[1] for c in cards],
+                             ["BRIEFING", "ASSISTENTE", "SEGURANÇA", "AGENDA", "SILÊNCIO & PALCO"])
+            self.assertTrue(screen.query_one("#cfg-col-1").display)       # 2 colunas
+            self.assertRegex(str(cards[0].border_subtitle), r"^\d/3$")
+            self.assertRegex(str(screen.query_one("#cfg-summary-n").render()), r"\d+/14")
+            self.assertIn("ROTINAS ·", str(screen.query_one("#topbar-info").render()))
+            await pilot.press("enter")                                     # menu → 1ª linha
+            first = screen.query_one("#pref-briefing_auto")
+            self.assertTrue(first.has_focus)
+            self.assertEqual(first.size.height, 2)                         # ajuda ↳ sob a linha em foco
+            await pilot.press("down")
+            self.assertTrue(screen.query_one("#pref-briefing_news").has_focus)
+            self.assertEqual(first.size.height, 1)
+            from unittest.mock import MagicMock
+            news_row = screen.query_one("#pref-briefing_news")
+            news_row.start_flash = MagicMock(wraps=news_row.start_flash)
+            before = user_prefs.get("briefing_news")
+            await pilot.press("right" if not before else "left")
+            self.assertNotEqual(user_prefs.get("briefing_news"), before)
+            news_row.start_flash.assert_called_once()                      # pisca ao trocar
+            await pilot.press("right" if before else "left")              # volta ao valor anterior…
+            news_row.start_flash.reset_mock()
+            await pilot.press("right" if before else "left")              # …e no limite não pisca
+            news_row.start_flash.assert_not_called()
+            await pilot.press("up", "up")                                  # sai pelo topo → menu
+            self.assertTrue(screen.query_one("#cfg-menu").has_focus)
 
     async def test_config_has_no_dialog_box_and_quip_lives_in_panel(self):
         app = self._app()
@@ -231,7 +283,7 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
             self.assertFalse(screen.query("#cfg-dialog"))
             self.assertFalse(screen.query("#cfg-face"))
             quip = screen.query_one("#cfg-quip")
-            self.assertIs(quip.parent, screen.query_one("#cfg-panel"))
+            self.assertIs(quip.parent, screen.query_one("#cfg-quip-box"))  # faixa própria no pé
             self.assertFalse(screen.query_one("#cfg-news").display)  # só em SISTEMA
 
     async def test_config_system_saves_news_sources(self):
@@ -245,7 +297,9 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
                 await self._cmd(app, pilot, "/config")
                 screen = app.screen
                 screen.query_one("#cfg-menu").highlighted = 4  # SISTEMA
-                await pilot.pause()
+                # as seções montam em async: espera o campo e as 3 linhas aparecerem
+                await self._wait(pilot, lambda: screen.query_one("#cfg-news").display
+                                 and len(screen.query("PrefRow")) == 3)
                 self.assertEqual(screen.group, "SISTEMA")
                 field = screen.query_one("#cfg-news-input")
                 self.assertTrue(screen.query_one("#cfg-news").display)
@@ -265,7 +319,7 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
                 self.assertEqual(news.get_sources(self.db), "G1, BBC, DOI")
                 self.assertEqual(field.value, "G1, BBC, DOI")
-                self.assertIn("Fontes salvas: 3", str(screen.query_one("#cfg-quip").render()))
+                self.assertIn("Fontes salvas: 3", screen.query_one("#cfg-quip").text)
 
     async def test_config_integrations_cards_connect_and_disconnect(self):
         import threading
@@ -297,7 +351,7 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
                 self.assertEqual(screen.group, "INTEGRAÇÕES")
                 self.assertTrue(screen.query_one("#cfg-cards").display)
-                self.assertFalse(screen.query_one("#cfg-options").display)
+                self.assertFalse(screen.query_one("#cfg-sections").display)
                 await pilot.press("enter")          # menu → 1º card
                 card = screen.query_one("#int-fake")
                 self.assertTrue(card.has_focus)
@@ -309,7 +363,7 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
                 release.set()
                 await self._wait(pilot, lambda: card.has_class("-on"))
                 self.assertIn("conta x", str(card.query_one(".int-detail").render()))
-                self.assertIn("Fake conectado", str(screen.query_one("#cfg-quip").render()))
+                self.assertIn("Fake conectado", screen.query_one("#cfg-quip").text)
                 await pilot.press("delete")         # pede confirmação
                 await pilot.pause(0.2)
                 self.assertIsInstance(app.screen, tui_app.ConfirmScreen)
@@ -347,6 +401,11 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
                 await self._wait(pilot, lambda: not app.screen.query_one("#vault-use").disabled)
                 self.assertEqual(client.searched, ["rotina"])
                 self.assertFalse(app.screen.query_one("#radar").animated)  # radar para depois da busca
+                self.assertEqual(str(app.screen.query_one("#radar-state").render()), "varredura 8/8")
+                scores = app.screen.query_one("#vault-results")
+                self.assertEqual(scores.rows[0][1], "rotina")             # lista de scores, sem OptionList
+                self.assertRegex(str(scores.render()), r"^\d\.\d\d rotina")
+                self.assertRegex(str(app.screen.query_one("#vault-count").render()), r"resultados · \d+ ms")
                 await pilot.click("#vault-use")
                 await pilot.pause(0.2)
                 self.assertIs(app.screen, app.main_screen)

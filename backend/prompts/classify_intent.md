@@ -31,6 +31,16 @@ $skills_prompts
 - "me lembra em 30 minutos de tirar a roupa da máquina" -> {"intent": "REMINDER", "entity": "tirar a roupa da máquina", "confidence": 1.0}
 - "inicia um pomodoro de 50 minutos" -> {"intent": "FOCUS_MODE", "entity": "50", "confidence": 1.0}
 - "modo não perturbe por uma hora" -> {"intent": "FOCUS_MODE", "entity": "60", "confidence": 1.0}
+- "explica o erro que está na minha tela" -> {"intent": "SCREEN_READ", "entity": null, "confidence": 1.0}
+- "resolve a questão aberta no monitor 2" -> {"intent": "SCREEN_READ", "entity": "monitor 2", "confidence": 1.0}
+- "diminui o brilho da tela" -> {"intent": "SCREEN_CONTROL", "entity": "brilho", "confidence": 1.0}
+- "resume essa página aberta" -> {"intent": "SCREEN_READ", "entity": null, "confidence": 1.0}
+- "fecha a aba do youtube" -> {"intent": "BROWSER_TABS", "entity": "youtube", "confidence": 1.0}
+- "abre uma aba nova no github" -> {"intent": "BROWSER_TABS", "entity": "github", "confidence": 1.0}
+- "fecha o chrome" -> {"intent": "APP_CONTROL", "entity": "chrome", "confidence": 1.0}
+- "toca lo-fi no youtube" -> {"intent": "YOUTUBE_CONTROL", "entity": "lo-fi", "confidence": 1.0}
+- "pausa o vídeo" -> {"intent": "YOUTUBE_CONTROL", "entity": null, "confidence": 1.0}
+- "toca Coldplay" -> {"intent": "SPOTIFY_CONTROL", "entity": "Coldplay", "confidence": 1.0}
 
 Comando do Usuário: "$text"
 Schema de Resposta: 
