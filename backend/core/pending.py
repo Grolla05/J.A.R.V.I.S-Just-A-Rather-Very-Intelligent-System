@@ -22,10 +22,14 @@ import threading
 import time
 import unicodedata
 import uuid
+from contextlib import contextmanager
 
 import core.state as state
 
 DEFAULT_TIMEOUT_S = 30
+
+# Dono padrão: a TUI/voz deste processo. A ponte Telegram/Discord usa "canal:usuário".
+LOCAL = "local"
 
 # Resultado de take()
 OK, EMPTY, EXPIRED, REPLACED = "ok", "empty", "expired", "replaced"
@@ -36,6 +40,22 @@ YES, NO = "yes", "no"
 BUSY_REPLY = "Há outra confirmação aberta, Senhor. Responda a ela primeiro."
 
 _lock = threading.RLock()
+_ctx = threading.local()   # dono de quem está rodando a skill nesta thread
+
+
+def current_owner():
+    return getattr(_ctx, "owner", LOCAL)
+
+
+@contextmanager
+def owner_scope(owner):
+    """Tudo o que for armado dentro do bloco (pela skill) fica com este dono."""
+    previous = current_owner()
+    _ctx.owner = owner or LOCAL
+    try:
+        yield
+    finally:
+        _ctx.owner = previous
 
 
 def _expired(action, now):
@@ -43,8 +63,13 @@ def _expired(action, now):
 
 
 def arm(kind, question, on_confirm, *, target=None, on_decline=None, timeout_s=DEFAULT_TIMEOUT_S,
-        clock=time.time):
-    """Arma a ação e devolve o id dela; None se já há outra pendente e válida."""
+        clock=time.time, owner=None, on_other=None):
+    """Arma a ação e devolve o id dela; None se já há outra pendente e válida.
+
+    `owner`: só uma resposta do mesmo dono resolve a pendência (um "sim" no Telegram
+    nunca aprova o que foi armado para outra pessoa/canal).
+    `on_other(frase)`: chamado quando a resposta não é sim nem não (ex.: "deixa mais
+    formal" diante de um rascunho de e-mail) — pode re-armar e devolver o texto."""
     with _lock:
         now = clock()
         current = state.pending_critical_action
@@ -54,6 +79,7 @@ def arm(kind, question, on_confirm, *, target=None, on_decline=None, timeout_s=D
         state.pending_critical_action = {
             "id": action_id, "type": kind, "target": target, "question": question,
             "timeout": now + timeout_s, "on_confirm": on_confirm, "on_decline": on_decline,
+            "owner": owner or current_owner(), "on_other": on_other,
         }
         return action_id
 
@@ -96,7 +122,9 @@ _VERBS = {"encerrar", "encerre", "encerra", "fechar", "feche", "fecha", "matar",
           "finalizar", "finalize", "finaliza", "terminar", "termine", "termina", "criar", "crie", "cria",
           "prosseguir", "prossiga", "prossegue", "seguir", "siga", "segue", "continuar", "continue",
           "continua", "desligar", "desligue", "desliga", "executar", "execute", "executa",
-          "bloquear", "bloqueie", "bloqueia"}
+          "bloquear", "bloqueie", "bloqueia", "mandar", "mande", "enviar", "envie", "envia", "aplicar",
+          "aplique", "aplica", "organizar", "organize", "organiza", "instalar", "instale", "instala",
+          "baixar", "baixe", "baixa"}
 _FILLER = {"senhor", "jarvis", "por", "favor", "agora", "ja", "entao", "o", "a", "os", "as", "ele", "ela",
            "mesmo", "tudo", "la", "ai", "de", "do", "da", "e", "com", "certeza", "em", "frente", "pra", "para"}
 
@@ -105,6 +133,12 @@ def _plain_words(text):
     text = unicodedata.normalize("NFKD", (text or "").lower())
     text = "".join(c for c in text if not unicodedata.combining(c))
     return re.findall(r"\w+", text)
+
+
+def is_pure_denial(text):
+    """Frase feita só de negação/enchimento ("não", "não, cancela") — sem pedido de ajuste."""
+    words = _plain_words(text)
+    return bool(words) and all(w in _DENY or w in _FILLER for w in words)
 
 
 def parse_reply(text, target=None):

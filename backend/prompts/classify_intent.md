@@ -38,6 +38,13 @@ $skills_prompts
 - "fecha a aba do youtube" -> {"intent": "BROWSER_TABS", "entity": "youtube", "confidence": 1.0}
 - "abre uma aba nova no github" -> {"intent": "BROWSER_TABS", "entity": "github", "confidence": 1.0}
 - "fecha o chrome" -> {"intent": "APP_CONTROL", "entity": "chrome", "confidence": 1.0}
+- "quais são meus e-mails mais urgentes?" -> {"intent": "EMAIL_READ", "entity": null, "confidence": 1.0}
+- "leia o e-mail 2" -> {"intent": "EMAIL_READ", "entity": "2", "confidence": 1.0}
+- "responda o e-mail 2 dizendo que confirmo" -> {"intent": "EMAIL_SEND", "entity": "2", "confidence": 1.0}
+- "manda a proposta do arquivo proposta.txt para o Guilherme" -> {"intent": "EMAIL_SEND", "entity": "Guilherme", "confidence": 1.0}
+- "organize meu e-mail" -> {"intent": "EMAIL_ORGANIZE", "entity": null, "confidence": 1.0}
+- "instala o 7-zip" -> {"intent": "SOFTWARE_INSTALL", "entity": "7-zip", "confidence": 1.0}
+- "baixa o instalador do vlc" -> {"intent": "SOFTWARE_INSTALL", "entity": "vlc", "confidence": 1.0}
 - "toca lo-fi no youtube" -> {"intent": "YOUTUBE_CONTROL", "entity": "lo-fi", "confidence": 1.0}
 - "pausa o vídeo" -> {"intent": "YOUTUBE_CONTROL", "entity": null, "confidence": 1.0}
 - "toca Coldplay" -> {"intent": "SPOTIFY_CONTROL", "entity": "Coldplay", "confidence": 1.0}

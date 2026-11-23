@@ -36,8 +36,11 @@ PREFS = {
     "briefing_auto": ("Briefing no 1º boot do dia", _ONOFF, True, _onoff_label),
     "briefing_news": ("Manchetes no briefing", _ONOFF, False, _onoff_label),
     "news_ai": ("Manchetes escolhidas pela IA", _ONOFF, True, _onoff_label),
+    "briefing_email": ("E-mails no briefing", _ONOFF, True, _onoff_label),
     "clipboard_monitor": ("Monitor de clipboard", _ONOFF, False, _onoff_label),
     "auto_insights": ("Registro de insights", _ONOFF, True, _onoff_label),
+    "remote_telegram": ("Ponte Telegram", _ONOFF, False, _onoff_label),
+    "remote_discord": ("Ponte Discord", _ONOFF, False, _onoff_label),
     "commute_alert": ("Aviso de saída", COMMUTE_TIMES, 0, _time_label),
     "event_reminders": ("Lembretes da agenda", _ONOFF, True, _onoff_label),
     "reminder_lead": ("Antecedência do lembrete", (30, 60, 120, 180), 120, lambda v: f"{v} min antes"),
@@ -54,7 +57,7 @@ PREFS = {
 GROUPS = {
     "VOZ": ("tts_voice", "tts_rate", "tts_volume"),
     "MICROFONE": ("mic_threshold", "attention_window"),
-    "ROTINAS": ("briefing_auto", "briefing_news", "news_ai", "clipboard_monitor", "auto_insights", "commute_alert",
+    "ROTINAS": ("briefing_auto", "briefing_news", "news_ai", "briefing_email", "clipboard_monitor", "auto_insights", "remote_telegram", "remote_discord", "commute_alert",
                 "event_reminders", "reminder_lead", "reminder_final", "net_monitor",
                 "dnd_auto_meeting", "dnd_auto_fullscreen", "presentation_auto", "presentation_open"),
 }

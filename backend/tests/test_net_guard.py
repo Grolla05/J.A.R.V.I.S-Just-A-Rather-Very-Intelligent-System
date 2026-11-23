@@ -53,8 +53,21 @@ class GuardCase(unittest.TestCase):
         net_guard._judge_cache.clear()
         net_guard._last["snapshot"] = None
         self.ctx = FREE
+        self.kept = {}   # nome minúsculo -> exe  (tabela net_trusted_apps em memória)
+
+        def keep(name, exe, kind, reason="mantido"):
+            self.kept[name.lower()] = exe or ""
+            return True
+
+        def is_trusted(name, exe):
+            stored = self.kept.get((name or "").lower())
+            return stored is not None and (not stored or not exe or stored.lower() == exe.lower())
+
         self._patches = [patch.object(net_guard, "db", self.db),
-                         patch.object(notify_filter, "context", side_effect=lambda: self.ctx)]
+                         patch.object(notify_filter, "context", side_effect=lambda: self.ctx),
+                         patch.object(net_guard.net_trust, "keep", side_effect=keep),
+                         patch.object(net_guard.net_trust, "is_trusted", side_effect=is_trusted),
+                         patch.object(net_guard.net_trust, "count", side_effect=lambda: len(self.kept))]
         for p in self._patches:
             p.start()
 
@@ -136,6 +149,37 @@ class TestHandle(GuardCase):
         state.pending_critical_action["timeout"] = time.time() - 1   # ConfirmScreen expirou
         self.assertIsNone(brain.confirm_pending_action(False))
         self.assertNotIn(net_guard.BASELINE_KEY, self.db.data)
+
+    def test_declining_saves_the_software_in_the_kept_table(self):
+        self._handle({**TALKER, "exe": r"C:\Apps\updater.exe"})
+        brain.confirm_pending_action(False)
+        self.assertEqual(self.kept, {"updater.exe": r"C:\Apps\updater.exe"})
+
+    def test_kept_software_never_reaches_the_judge_again(self):
+        self.kept["updater.exe"] = r"C:\Apps\updater.exe"
+        judge = MagicMock(return_value=net_guard.SUSPECT)
+        handled = net_guard.handle({**TALKER, "exe": r"C:\Apps\updater.exe"}, judge_fn=judge,
+                                   announce=self.said.append)
+        self.assertTrue(handled)
+        judge.assert_not_called()
+        self.assertEqual(self.said, [])
+        self.assertIsNone(state.pending_critical_action)
+        self.assertIn("updater.exe", self.db.data[net_guard.BASELINE_KEY]["talkers"])   # absorvido na base
+
+    def test_kept_name_with_other_executable_is_still_judged(self):
+        self.kept["updater.exe"] = r"C:\Apps\updater.exe"
+        self.assertTrue(self._handle({**TALKER, "exe": r"C:\Users\x\AppData\Temp\updater.exe"}))
+        self.assertEqual(state.pending_critical_action["target"], "updater.exe")
+
+    def test_kept_survives_reset(self):
+        self._handle(LISTENER)
+        brain.confirm_pending_action(False)
+        self.assertIn("preservad", net_guard.reset_text())
+        self.assertIn("svch0st.exe", self.kept)
+        judge = MagicMock()
+        self.assertTrue(net_guard.handle({**LISTENER, "port": 5555, "key": "listener:svch0st.exe:5555"},
+                                         judge_fn=judge, announce=self.said.append))
+        judge.assert_not_called()
 
     def test_voice_only_trusts_on_explicit_no(self):
         self._handle(LISTENER)
@@ -235,6 +279,7 @@ class TestTexts(GuardCase):
         self.assertIn("8099 · python.exe", text)
         self.assertIn("chrome.exe (7)", text)
         self.assertIn("Ainda sem linha de base", text)
+        self.assertIn("**Softwares mantidos:** 0", text)
 
     def test_scan_marks_what_is_outside_the_baseline(self):
         self.db.data[net_guard.BASELINE_KEY] = {"listeners": [], "talkers": ["chrome.exe"],
@@ -268,6 +313,10 @@ class TestTexts(GuardCase):
         self.assertIn("Não há achado 3", net_guard.trust_text(3))
         self.assertIn("passa a ser conhecido", net_guard.trust_text(1))
         self.assertIn("de-ad-be-ef-00-02", self.db.data[net_guard.BASELINE_KEY]["devices"])
+        self.assertEqual(self.kept, {})                     # aparelho não é software: tabela intacta
+        net_guard._recent.appendleft({"time": "01/01 00:00", "finding": TALKER})
+        net_guard.trust_text(1)
+        self.assertIn("updater.exe", self.kept)             # confiar num processo = manter
         self.assertEqual(net_guard.recent(), [])
         self.assertIn("apagada", net_guard.reset_text())
         self.assertIsNone(net_guard.load_baseline())

@@ -163,6 +163,13 @@ class Settings:
 
     # --- Trânsito (core/traffic.py): OSRM grátis; com chave TomTom = trânsito ao vivo ---
     TOMTOM_API_KEY: str = os.getenv("TOMTOM_API_KEY", "").strip()
+    # Gmail (/config → INTEGRAÇÕES): caracteres do corpo do e-mail enviados ao modelo
+    EMAIL_TEXT_MAX: int = _env_int("EMAIL_TEXT_MAX", 6000)
+    # Ponte Telegram/Discord (messenger.py). Tokens dos bots do PRÓPRIO usuário; allowlist = IDs que podem conversar
+    TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    TELEGRAM_ALLOWED_IDS: tuple = parse_word_list(os.getenv("TELEGRAM_ALLOWED_IDS", ""))
+    DISCORD_BOT_TOKEN: str = os.getenv("DISCORD_BOT_TOKEN", "").strip()
+    DISCORD_ALLOWED_IDS: tuple = parse_word_list(os.getenv("DISCORD_ALLOWED_IDS", ""))
 
     SPOTIFY_SCOPES: str = (
         "user-read-playback-state "

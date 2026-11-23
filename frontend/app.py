@@ -735,6 +735,15 @@ class JarvisApp(App, inherit_bindings=False):
             self._lembrete(arg)
         elif name == "rede":
             self._rede(arg)
+        elif name == "email":
+            self._email(arg)
+        elif name in ("instalar", "baixar"):
+            from services import software
+            if not arg.strip():
+                self.notify(f"Uso: /{name} <programa>", severity="warning")
+            else:
+                action = software.INSTALL if name == "instalar" else software.DOWNLOAD
+                self.tool_reply(f"{name} · {arg.strip()}", software.request, arg.strip(), action)
         elif name == "focus":
             self._focus_action(parse_focus_arg(arg), "Uso: /focus [minutos|stop|skip|status]")
         elif name == "dnd":
@@ -758,11 +767,18 @@ class JarvisApp(App, inherit_bindings=False):
     @work(thread=True, group="tools")
     def _tool_worker(self, view, fn, args, speak):
         try:
-            text = fn(*args) or "Nada a relatar, Senhor."
+            text = fn(*args)
+            if text is not None and not isinstance(text, str):   # stream (ex.: resumo de e-mail)
+                text = "".join(chunk for chunk in text if chunk)
+            text = text or "Nada a relatar, Senhor."
         except Exception as e:
             log.error(f"Ferramenta '{getattr(fn, '__name__', fn)}' falhou: {e}")
             text = f"**Erro:** `{e}`"
         self.call_from_thread(view.set_text, text)
+        pending_action = state.pending_critical_action
+        if pending_action and pending_action.get("on_confirm") and pending_action.get("owner", "local") == "local":
+            # A ferramenta armou uma confirmação (ex.: enviar e-mail): abre o ConfirmScreen.
+            self.call_from_thread(self._ask_pending_confirmation, pending_action.get("question", text))
         if speak:
             self._speak_always(text)
 
@@ -955,6 +971,11 @@ class JarvisApp(App, inherit_bindings=False):
             self._sync_clipboard_monitor()
         elif key == "net_monitor":
             self._sync_net_watch()
+        elif key in ("remote_telegram", "remote_discord"):
+            from core import messenger_ctl
+            from services import user_prefs
+            if user_prefs.get(key):
+                messenger_ctl.start()   # desligar: a ponte percebe sozinha em até 30 s
 
     # ------------------------------------------------------------ vigia de rede
     def _sync_net_watch(self):
@@ -972,7 +993,10 @@ class JarvisApp(App, inherit_bindings=False):
 
     _REDE_TRUST = ("confiar", "confia", "trust", "ok")
     _REDE_BLOCK = ("bloquear", "bloqueia", "block")
-    REDE_USAGE = "Uso: /rede · /rede confiar <n> · /rede bloquear <ip> · /rede reset"
+    _REDE_KEPT = ("mantidos", "mantido", "kept")
+    _REDE_FORGET = ("esquecer", "esquece", "forget")
+    REDE_USAGE = ("Uso: /rede · /rede confiar <n> · /rede bloquear <ip> · /rede mantidos · "
+                  "/rede esquecer <n> · /rede reset")
 
     def _rede(self, arg):
         """/rede — varredura agora; `confiar <n>` aceita um achado; `bloquear <ip>` e `reset` pedem confirmação."""
@@ -983,6 +1007,18 @@ class JarvisApp(App, inherit_bindings=False):
             self.tool_reply("rede · varredura", net_guard.scan_text)
         elif word in self._REDE_TRUST and rest.isdigit():
             self.tool_reply("rede · confiar", net_guard.trust_text, int(rest))
+        elif word in self._REDE_KEPT and not rest:
+            from services import net_trust
+            self.tool_reply("rede · mantidos", net_trust.list_text)
+        elif word in self._REDE_FORGET and rest.isdigit():
+            from services import net_trust
+
+            def answer(confirmed, n=int(rest)):
+                if confirmed:
+                    self.tool_reply("rede · esquecer", net_trust.forget, n)
+            self.push_screen(ConfirmScreen(f"Tirar o software {rest} da lista de mantidos? O próximo acesso dele "
+                                           "volta a ser julgado.", title="VIGIA DE REDE", yes="Esquecer",
+                                           no="Manter"), answer)
         elif word in self._REDE_BLOCK and rest:
             def answer(confirmed, ip=rest):
                 if confirmed:
@@ -997,6 +1033,36 @@ class JarvisApp(App, inherit_bindings=False):
                                            title="VIGIA DE REDE", yes="Reaprender", no="Manter"), answer)
         else:
             self.notify(self.REDE_USAGE, severity="warning")
+
+    # ------------------------------------------------------------------ e-mail
+    EMAIL_USAGE = ("Uso: /email · /email ler <n> · /email responder <n> <texto> · /email novo <para> <texto> · "
+                   "/email organizar · /email vip <e-mail> · /email contato <apelido> <e-mail> · "
+                   "/email assinatura <texto>")
+
+    def _email(self, arg):
+        """/email — Gmail por prioridade; ler/responder/novo/organizar; envio e organização pedem confirmação."""
+        from services import email_compose, email_organize, mailbox
+        word, _, rest = arg.strip().partition(" ")
+        word, rest = word.lower(), rest.strip()
+        n_text, _, tail = rest.partition(" ")
+        if not word:
+            self.tool_reply("email · prioridades", mailbox.priority_text)
+        elif word in ("ler", "leia", "abrir") and rest.isdigit():
+            self.tool_reply(f"email · ler {rest}", mailbox.read_text, int(rest))
+        elif word in ("responder", "responde", "reply") and n_text.isdigit() and tail.strip():
+            self.tool_reply(f"email · responder {n_text}", mailbox.reply_text, int(n_text), tail.strip())
+        elif word in ("novo", "escrever", "new") and n_text and tail.strip():
+            self.tool_reply(f"email · novo {n_text}", mailbox.new_text, n_text, tail.strip())
+        elif word in ("organizar", "organiza", "organize") and not rest:
+            self.tool_reply("email · organizar", email_organize.organize)
+        elif word == "vip" and rest:
+            self.tool_reply("email · vip", mailbox.add_vip, rest)
+        elif word == "contato" and n_text and tail.strip():
+            self.tool_reply("email · contato", mailbox.contact_text, n_text, tail.strip())
+        elif word == "assinatura":
+            self.tool_reply("email · assinatura", email_compose.set_signature, rest)
+        else:
+            self.notify(self.EMAIL_USAGE, severity="warning")
 
     def _sync_clipboard_monitor(self):
         from services import user_prefs

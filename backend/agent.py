@@ -278,6 +278,14 @@ def main():
             installing.release()
         threading.Thread(target=run, daemon=True, name="jarvis-install").start()
 
+    # Ponte Telegram/Discord (messenger.py): sobe junto com o agente se algum canal está ligado.
+    try:
+        from core import messenger_ctl
+        if messenger_ctl.should_run():
+            messenger_ctl.start()
+    except Exception as e:
+        log.warning(f"Ponte Telegram/Discord não subiu: {e}")
+
     presence.wait_signals(lambda _name: start_install(), threading.Event(), events=presence.AGENT_EVENTS)
     if install_now:
         start_install()

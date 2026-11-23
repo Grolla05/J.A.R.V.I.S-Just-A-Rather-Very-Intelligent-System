@@ -261,8 +261,8 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
             self.assertEqual([c.border_title.split(" ", 1)[1] for c in cards],
                              ["BRIEFING", "ASSISTENTE", "SEGURANÇA", "AGENDA", "SILÊNCIO & PALCO"])
             self.assertTrue(screen.query_one("#cfg-col-1").display)       # 2 colunas
-            self.assertRegex(str(cards[0].border_subtitle), r"^\d/3$")
-            self.assertRegex(str(screen.query_one("#cfg-summary-n").render()), r"\d+/14")
+            self.assertRegex(str(cards[0].border_subtitle), r"^\d/4$")          # + e-mails no briefing
+            self.assertRegex(str(screen.query_one("#cfg-summary-n").render()), r"\d+/17")  # + pontes
             self.assertIn("ROTINAS ·", str(screen.query_one("#topbar-info").render()))
             await pilot.press("enter")                                     # menu → 1ª linha
             first = screen.query_one("#pref-briefing_auto")

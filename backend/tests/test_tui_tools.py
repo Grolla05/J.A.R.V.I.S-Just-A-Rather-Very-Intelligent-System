@@ -332,6 +332,56 @@ class TestReminders(ToolsAppCase):
         remove.assert_called_once_with(2)
 
 
+class TestEmailCommand(ToolsAppCase):
+    async def test_list_read_and_usage(self):
+        from services import mailbox
+        app = self._app()
+        with patch.object(mailbox, "priority_text", return_value="**E-mails por prioridade**") as listing, \
+             patch.object(mailbox, "read_text", return_value=iter(["**Prova** — Ana\n\n", "resumo"])) as read:
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/email")
+                self.assertEqual(self._last_reply(app).text, "**E-mails por prioridade**")
+                await self._send(pilot, "/email ler 2")
+                self.assertEqual(self._last_reply(app).text, "**Prova** — Ana\n\nresumo")
+                await self._send(pilot, "/email dançar")
+        listing.assert_called_once()
+        read.assert_called_once_with(2)
+
+    async def test_reply_opens_confirm_screen(self):
+        from core import pending
+        from services import mailbox
+
+        def arm(n, text):
+            pending.arm("EMAIL_SEND", "Rascunho pronto. Confirma o envio?", lambda: "enviado", timeout_s=60)
+            return "Rascunho pronto. Confirma o envio?"
+
+        app = self._app()
+        with patch.object(mailbox, "reply_text", side_effect=arm) as reply:
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/email responder 1 diga que confirmo")
+                await pilot.app.workers.wait_for_complete()
+                await pilot.pause()
+                self.assertIsInstance(app.screen, tui_app.ConfirmScreen)
+                await pilot.press("n")
+                await pilot.app.workers.wait_for_complete()
+                await pilot.pause()
+        reply.assert_called_once_with(1, "diga que confirmo")
+        self.assertIsNone(state.pending_critical_action)
+
+
+class TestInstallCommand(ToolsAppCase):
+    async def test_install_and_download_route_to_software(self):
+        from services import software
+        app = self._app()
+        with patch.object(software, "request", return_value="Instalar 7-Zip?") as req:
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/instalar 7-zip")
+                self.assertEqual(self._last_reply(app).text, "Instalar 7-Zip?")
+                await self._send(pilot, "/baixar vlc")
+        self.assertEqual(req.call_args_list[0].args, ("7-zip", software.INSTALL))
+        self.assertEqual(req.call_args_list[1].args, ("vlc", software.DOWNLOAD))
+
+
 class TestRedeCommand(ToolsAppCase):
     async def test_scan_trust_and_usage(self):
         from services import net_guard
@@ -346,6 +396,27 @@ class TestRedeCommand(ToolsAppCase):
                 await self._send(pilot, "/rede dançar")
         scan.assert_called_once()
         trust.assert_called_once_with(2)
+
+    async def test_kept_list_and_forget_needs_confirmation(self):
+        from services import net_trust
+        app = self._app()
+        with patch.object(net_trust, "list_text", return_value="mantidos") as listing, \
+             patch.object(net_trust, "forget", return_value="esquecido") as forget:
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/rede mantidos")
+                self.assertEqual(self._last_reply(app).text, "mantidos")
+                await self._send(pilot, "/rede esquecer 1")
+                self.assertIsInstance(app.screen, tui_app.ConfirmScreen)
+                await pilot.press("n")
+                await pilot.pause()
+                forget.assert_not_called()
+                await self._send(pilot, "/rede esquecer 1")
+                await pilot.press("s")
+                await pilot.app.workers.wait_for_complete()
+                await pilot.pause()
+                self.assertEqual(self._last_reply(app).text, "esquecido")
+        listing.assert_called_once()
+        forget.assert_called_once_with(1)
 
     async def test_block_and_reset_need_confirmation(self):
         from services import net_guard

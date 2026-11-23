@@ -98,6 +98,14 @@ def _news():
     return news.headlines()
 
 
+def _email_enabled():
+    try:
+        from services import user_prefs
+        return bool(user_prefs.get("briefing_email"))
+    except Exception:
+        return False
+
+
 def collect(include_news=False, now=None):
     """Dados do briefing. Chave ausente/None = fonte indisponível."""
     from core import github_client, google_calendar, traffic
@@ -115,6 +123,9 @@ def collect(include_news=False, now=None):
         sources["traffic"] = lambda: traffic.commute_line(now)
     if include_news:
         sources["news"] = _news
+    if _email_enabled():
+        from services import mailbox
+        sources["email"] = mailbox.briefing_line
     data = {"date": now.strftime("%d/%m/%Y"), "weekday": _WEEKDAYS[now.weekday()]}
     for key, fn in sources.items():
         try:
@@ -152,6 +163,7 @@ def to_markdown(data):
         _section("Computador", _computer_lines(data.get("computer"))),
         _section("GitHub", [data.get("github")]),
         _section("Agenda", [data.get("agenda")]),
+        _section("E-mail", [data.get("email")]),
         _section("Trânsito", [data.get("traffic")]),
         "**Manchetes e últimas notícias:**\n\n" +"\n".join(news_lines) if news_lines else None,
     ]
