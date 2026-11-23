@@ -1,3 +1,5 @@
+# ⚠️ ACESSO SENSÍVEL: lê arquivos do usuário para anexar e envia e-mail pela conta Gmail dele;
+# só envia depois de confirmação explícita, com destinatário e anexo à vista.
 """Skill EMAIL_SEND — responde ou escreve e-mail (com anexo do computador) e pede confirmação.
 
 Fluxo: o modelo extrai {reply_to_index, recipient, file, instruction} (`prompts/email_extract.md`)

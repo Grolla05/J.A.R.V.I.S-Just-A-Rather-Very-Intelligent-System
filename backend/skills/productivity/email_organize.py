@@ -1,3 +1,5 @@
+# ⚠️ ACESSO SENSÍVEL: altera a caixa do Gmail (arquiva, marca como lido, aplica marcadores);
+# só depois de confirmação explícita. Nunca apaga mensagens.
 """Skill EMAIL_ORGANIZE — organiza a caixa de entrada do Gmail com confirmação (services.email_organize)."""
 from core.prompts import load_prompt
 from services import email_organize, mailbox

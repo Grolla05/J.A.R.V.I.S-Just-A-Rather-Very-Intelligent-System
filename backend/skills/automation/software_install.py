@@ -1,3 +1,5 @@
+# ⚠️ ACESSO SENSÍVEL: instala programas ou baixa instaladores pelo winget (subprocesso, sem shell);
+# só depois de confirmação explícita do usuário.
 """Skill SOFTWARE_INSTALL — busca e instala/baixa software pelo winget, sempre com confirmação.
 
 Categoria automation: só no Copilot/voz (nunca pelo Chat nem pela ponte Telegram/Discord).
