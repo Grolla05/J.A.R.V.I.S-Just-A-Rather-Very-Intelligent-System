@@ -26,10 +26,14 @@ COMMANDS = {
     "rota":     ("/rota [<local> <endereço>]", "cadastra um local fixo (casa, trabalho, faculdade…); sem argumento lista"),
     "clip":     ("/clip [explicar|traduzir|resumir] [n] · hist · buscar <termo> · usar <n> · limpar",
                  "age sobre o que você copiou ou sobre o histórico (monitor no /config)"),
+    "email":    ("/email [ler <n> | responder <n> <texto> | novo <para> <texto> | organizar | vip <e-mail> | contato <apelido> <e-mail> | assinatura <texto>]",
+                 "Gmail: e-mails por prioridade, ler, responder, escrever e organizar (envio sempre confirmado)"),
+    "instalar": ("/instalar <programa>", "procura no winget e instala (pede confirmação)"),
+    "baixar":   ("/baixar <programa>", "baixa o instalador pelo winget para Downloads (pede confirmação)"),
     "ideia":    ("/ideia <texto>", "anota uma ideia em 🧠 Brainstorms no Obsidian (a conversa também registra sozinha)"),
     "lembrete": ("/lembrete [<quando> <assunto> | rm <n>]",
                  "lembrete com horário (em 30 min…, às 18h…); sem argumento lista os pendentes"),
-    "rede":     ("/rede [confiar <n> | bloquear <ip> | reset]",
+    "rede":     ("/rede [confiar <n> | bloquear <ip> | mantidos | esquecer <n> | reset]",
                  "perímetro de rede: aparelhos, portas expostas e programas na internet (vigia no /config)"),
     "focus":    ("/focus [min|stop|skip|status]", "pomodoro 25/5 (liga o Não Perturbe no foco)"),
     "dnd":      ("/dnd [on|off|min]", "Não Perturbe: silencia notificações do Windows e alertas"),
@@ -155,7 +159,7 @@ def dropped_paths(text):
 
 # ------------------------------------------------------------ paleta (Ctrl+K)
 # Comandos que não fazem sentido sem argumento: a paleta só preenche o input.
-NEEDS_ARG = {"rename", "attach", "web", "ideia"}
+NEEDS_ARG = {"rename", "attach", "web", "ideia", "instalar", "baixar"}
 # Fora da paleta: ela mesma e os que já têm entrada própria (modo/foco).
 _PALETTE_SKIP = {"menu", "mode", "focus", "dnd"}
 

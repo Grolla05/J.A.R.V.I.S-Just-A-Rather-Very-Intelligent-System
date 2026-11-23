@@ -2,6 +2,104 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+## E-mail (Gmail), ponte Telegram/Discord, download pelo winget e softwares mantidos no Vigia de rede
+
+**Data:** 2026-11-23
+**Escopo:** Quatro entregas planejadas juntas:
+1. Correção do Vigia de rede: "Manter" agora grava o software numa tabela própria e persistente.
+2. E-mail pelo Gmail: ler por prioridade, resumir, responder, escrever com anexo do computador e organizar a caixa.
+3. Conversa com o JARVIS pelo Telegram e pelo Discord. A plataforma é só a ponte; o cérebro roda no PC.
+4. Busca e instalação/download de software pelo winget.
+
+Tudo o que envia, organiza ou instala pede confirmação.
+
+### 1. Vigia de rede: softwares mantidos persistentes
+
+**Problema:** "Manter" só gravava o nome do processo no JSON `net_baseline` (tabela `config`). Por isso:
+- `/rede reset` apagava a decisão;
+- a base não guardava o executável;
+- o software voltava a ser julgado e alertado.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | Nova tabela `net_trusted_apps`, criada no boot (bancos antigos também a ganham). Colunas: `name`, `name_key`, `exe`, `exe_key`, `kind`, `reason` e `decided_at`, com `UNIQUE(name_key, exe_key)` | `backend/core/database.py` |
+| 2 | Novo serviço `net_trust`, com `keep` (UPSERT), `is_trusted`, `list_all`, `count`, `forget` e `list_text`. `is_trusted` compara o nome sem caixa e exige o mesmo executável quando os dois lados o conhecem; executável desconhecido casa só pelo nome. Erro de banco nunca levanta | `backend/services/net_trust.py` (novo) |
+| 3 | `netwatch._proc_info` também devolve o executável (`proc.exe()`, vazio em AccessDenied). Os listeners e talkers da foto levam `exe`. O `proc_info` antigo, de 2 campos, continua aceito | `backend/core/netwatch.py` |
+| 4 | `net_guard.handle` consulta a tabela **antes** do juiz. Software mantido entra na linha de base em silêncio, sem LLM, alerta nem pendência. Um processo com o mesmo nome em outra pasta (ex.: `chrome.exe` em Temp) é julgado de novo | `backend/services/net_guard.py` |
+| 5 | "Manter" (`on_decline`) e `/rede confiar <n>` gravam na tabela quando o achado é de processo (`keep_software`). `/rede reset` apaga só a linha de base e avisa que os mantidos foram preservados. `/rede` mostra "Softwares mantidos: N" | `backend/services/net_guard.py` |
+| 6 | Comandos novos `/rede mantidos` (lista numerada, com o executável) e `/rede esquecer <n>` (com `ConfirmScreen`) | `frontend/app.py`, `frontend/commands.py` |
+
+### 2. E-mail pelo Gmail
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | `GoogleAccount` genérico: OAuth Desktop (PKCE + loopback), token no Cofre do Windows, refresh e `request()` autenticado. Erros saem traduzidos: 401 = sessão expirou; 403 de escopo = reconectar. Cada integração Google tem segredo e card próprios, então conectar o Gmail não mexe na Agenda. A Agenda não foi refatorada, para não arriscar o que já funciona | `backend/core/google_auth.py` (novo) |
+| 2 | Cliente Gmail (escopo `gmail.modify`, segredo `google_gmail`). Leitura: `inbox`, `parse_message`, `read_body`/`extract_body` (text/plain, ou HTML convertido em texto). Escrita: `build_mime` (UTF-8, anexos; na resposta, `In-Reply-To`, `References` e `Re:`), `send` e `save_draft`. Organização: `list_labels`, `ensure_label` e `batch_modify`. Contatos: `find_contacts` e `valid_address`. Não existe função de lixeira nem de exclusão | `backend/core/gmail.py` (novo) |
+| 3 | Triagem com lógica pura. O score usa IMPORTANT/STARRED, remetente VIP, palavras de urgência, assunto financeiro, não lido e promoções/social, e vira ALTA/MÉDIA/BAIXA. Também define a categoria usada para organizar e gera a lista em Markdown numerado e o resumo para voz/briefing | `backend/services/email_triage.py` (novo) |
+| 4 | `mailbox`: lista priorizada com cache (o número que o usuário viu é o que vale) e resumo de um e-mail em stream, com o corpo entrando no prompt como **dado**. Também cuida dos VIPs (`email_vip`), da linha do briefing e das ações do `/email` | `backend/services/mailbox.py` (novo) |
+| 5 | Composição segura. O LLM escreve só assunto e corpo; o destinatário vem da fala do usuário ou do remetente original, nunca do e-mail nem do LLM. `confirm_send` arma a pendência (180 s) mostrando Para, Assunto, anexo (caminho + tamanho) e corpo. **sim** envia; **não** salva como rascunho no Gmail; outra frase ("deixa mais formal") refaz o rascunho e pergunta de novo. Assinatura opcional (`/email assinatura`). O apelido é gravado depois de um envio confirmado | `backend/services/email_compose.py` (novo) |
+| 6 | Contatos: "Guilherme" é procurado primeiro nos apelidos salvos (nova tabela `email_contacts`) e depois nas mensagens do Gmail. Com vários candidatos, o JARVIS pergunta | `backend/services/email_contacts.py` (novo), `backend/core/database.py` |
+| 7 | Arquivos locais para anexo: aceita caminho absoluto ou busca pelo nome em Área de Trabalho, Documentos, Downloads e OneDrive (profundidade 4, mais recente primeiro). Bloqueia `.env`, chaves, cofres de senha, `.ssh`/`AppData`, arquivos fora do perfil e acima de 25 MB | `backend/services/local_files.py` (novo) |
+| 8 | Organizar: o plano arquiva promoções e social (marcando como lidos), põe faturas em `JARVIS/Financeiro` e urgentes em `JARVIS/Urgente` com estrela. VIP nunca é arquivado. Só depois da confirmação roda o `batchModify` | `backend/services/email_organize.py` (novo) |
+| 9 | Skills `EMAIL_READ`, `EMAIL_SEND` e `EMAIL_ORGANIZE` (productivity: Chat, Copilot e ponte), com prompts e exemplos no classificador. `EMAIL_SEND` extrai em JSON `{reply_to_index, recipient, file, instruction}` | `backend/skills/productivity/email_*.py`, `backend/prompts/email_*.md`, `backend/prompts/skills/email_*.md`, `backend/prompts/classify_intent.md` |
+| 10 | Comando `/email`, com `ler`, `responder`, `novo`, `organizar`, `vip`, `contato` e `assinatura`. `tool_reply` junta respostas em stream e, se a ferramenta armou uma confirmação local, abre o `ConfirmScreen` | `frontend/app.py`, `frontend/commands.py` |
+| 11 | Card **Gmail** em INTEGRAÇÕES. Seção **E-mail** no briefing (pref `briefing_email`, em ROTINAS → BRIEFING). `EMAIL_TEXT_MAX` no `Settings` | `backend/services/integrations.py`, `backend/core/briefing.py`, `backend/services/user_prefs.py`, `frontend/screens/settings*.py`, `backend/core/config.py` |
+
+### 3. Pendência com dono e ajuste
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | Toda pendência tem `owner`. O padrão é `pending.current_owner()`, que vale `local` na TUI e `canal:usuário` na ponte (via `pending.owner_scope` no brain). `_check_pending_action(command, owner)` ignora pendência de outro dono: "sim" no Telegram nunca aprova algo da TUI, e vice-versa | `backend/core/pending.py`, `backend/services/brain.py` |
+| 2 | `on_other(frase)`: resposta que não é "sim" nem negação pura vai para quem armou a pendência (ex.: ajuste do rascunho). `is_pure_denial` distingue "não, cancela" de "deixa mais formal" | `backend/core/pending.py`, `backend/services/brain.py` |
+| 3 | O vocabulário de confirmação ganha verbos de enviar, aplicar, instalar e baixar ("sim, pode mandar") | `backend/core/pending.py` |
+
+### 4. Download inteligente (winget)
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | Módulo `winget`: `available`, `search`, `best_match`, `install`, `download` e `valid_id`. `parse_search` lê as colunas pelo cabeçalho, em pt-BR e en-US, inclusive quando o nome transborda a coluna. `best_match` aceita nome/id exato ou difflib ≥ 0,75. `install` usa `--exact --silent --source winget`; `download` usa `--download-directory`. O id é validado por regex antes de virar argumento, e nada roda com `shell=True` | `backend/core/winget.py` (novo) |
+| 2 | `software.request`: busca, escolhe o pacote e pede confirmação com nome, id e versão. Sem certeza, lista as opções e não arma nada. Instala ou baixa numa thread daemon e anuncia o resultado | `backend/services/software.py` (novo) |
+| 3 | Skill `SOFTWARE_INSTALL` (automation: só Copilot/voz) com prompt; `/instalar <programa>` e `/baixar <programa>` na TUI; card **Downloads** em INTEGRAÇÕES | `backend/skills/automation/software_install.py`, `backend/prompts/skills/software_install.md`, `frontend/*`, `backend/services/integrations.py` |
+
+### 5. Ponte Telegram / Discord
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | Núcleo da ponte (`remote_chat`). Allowlist por canal: lista vazia = ninguém, e um estranho só recebe o próprio ID em `/id`. Uma sessão por usuário (`/nova` abre outra). Chama `brain.execute_command_stream(mode="chat", owner="canal:usuário")` e grava o histórico com `mode="remote"`. Comandos: `/start`, `/id`, `/nova`, `/email`, `/briefing`. `split_message` corta no limite de cada plataforma | `backend/services/remote_chat.py` (novo) |
+| 2 | Telegram por long polling, só com `requests`: chat privado, indicador de digitação, token mascarado no log, backoff só em erro | `backend/core/telegram_bot.py` (novo) |
+| 3 | Discord por `discord.py`: responde DM ou menção, com intents mínimos. Sem a biblioteca, o card fica em CONFIGURAR | `backend/core/discord_bot.py` (novo), `backend/requirements.txt`, `backend/requirements.lock` (só `discord-py` entrou), `installer/build_runtime.ps1` (smoke) |
+| 4 | Processo `messenger.py` (pythonw, mutex `Local\\JARVIS_MESSENGER`): carrega as skills e a cada 30 s liga ou desliga cada canal conforme token e pref; encerra quando nenhum canal está ligado. `messenger_ctl` (leve, usado pelo agente): `active_channels`, `is_running` e `start` | `backend/messenger.py` (novo), `backend/core/messenger_ctl.py` (novo) |
+| 5 | Cards **Telegram** e **Discord** em INTEGRAÇÕES: CONFIGURAR sem token ou IDs; Enter liga a ponte; Del desliga. Prefs `remote_telegram`/`remote_discord` em ROTINAS → ASSISTENTE. O agente sobe a ponte no logon, e o `/config` sobe ao ligar um canal | `backend/services/integrations.py`, `backend/services/user_prefs.py`, `frontend/screens/settings*.py`, `frontend/app.py`, `backend/agent.py` |
+| 6 | Variáveis novas, todas com default: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_IDS`, `DISCORD_BOT_TOKEN`, `DISCORD_ALLOWED_IDS` e `EMAIL_TEXT_MAX` | `backend/core/config.py`, `env.example` |
+
+### Documentação
+
+- `AGENTS.md`: estrutura, 8 tabelas, comandos, regras de pendência e do Vigia.
+- `docs/arquitetura.md`: seções 5.7 (e-mail), 5.8 (winget) e 5.9 (ponte).
+- `docs/integracoes-oauth.md`: Gmail (API + escopo), passo a passo do Telegram e do Discord, problemas comuns.
+- `backend/skills/README.md`: skills novas, `owner` e `on_other`.
+
+**Testes novos:**
+- `test_net_trust.py`
+- `test_gmail.py`
+- `test_email_triage.py`
+- `test_local_files.py`
+- `test_email_contacts.py`
+- `test_email_compose.py`
+- `test_email_organize.py`
+- `test_email_skills.py`, com o caso "manda o proposta.txt para o Guilherme" ponta a ponta
+- `test_pending_owner.py`
+- `test_winget.py`, incluindo a saída real do winget
+- `test_software_install.py`
+- `test_remote_chat.py`
+- `test_telegram_bot.py`
+- `test_integrations_cards.py`
+
+**Testes ajustados:**
+- `test_net_guard.py`: mantidos, reset que preserva a tabela, mesmo nome com outro executável.
+- `test_tui_tools.py`: `/email`, `/instalar`, `/baixar` e `/rede mantidos|esquecer`.
+- `test_tui_phase34.py`: contagens do `/config` (BRIEFING 4 prefs, ROTINAS 17).
+
 ## /config redesenhado: seções, selos e fala do JARVIS
 
 **Data:** 2026-11-21

@@ -127,6 +127,110 @@ def _calendar_disconnect():
     return gc.disconnect()
 
 
+# ------------------------------------------------------------------- Gmail
+def _gmail_status():
+    from core import gmail
+    if not gmail.is_configured():
+        return SETUP, "falta GOOGLE_CLIENT_ID no .env"
+    if gmail.is_connected():
+        account = gmail.account.account()
+        return ON, f"conta: {account}" if account else "conta conectada"
+    return OFF, "ler, responder e organizar"
+
+
+def _gmail_connect():
+    from core import gmail
+    if not gmail.is_configured():
+        _open(gmail.CONSOLE_URL)
+        return gmail.NOT_CONFIGURED
+    if gmail.is_connected():
+        return _already("Gmail", gmail.account.account())
+    return gmail.connect()
+
+
+def _gmail_disconnect():
+    from core import gmail
+    return gmail.disconnect()
+
+
+# -------------------------------------------------- Ponte Telegram / Discord
+BRIDGE_DOCS_URL = "https://github.com/Jarvis-Project-2026/J.A.R.V.I.S/blob/main/docs/integracoes-oauth.md"
+_BRIDGE = {
+    "telegram": {"name": "Telegram", "token": "TELEGRAM_BOT_TOKEN", "ids": "TELEGRAM_ALLOWED_IDS",
+                 "how": "crie o bot no @BotFather"},
+    "discord": {"name": "Discord", "token": "DISCORD_BOT_TOKEN", "ids": "DISCORD_ALLOWED_IDS",
+                "how": "crie o bot no Discord Developer Portal"},
+}
+
+
+def _bridge_status(channel):
+    from core import messenger_ctl
+    from core.config import settings
+    from services import user_prefs
+    info = _BRIDGE[channel]
+    if not getattr(settings, info["token"]):
+        return SETUP, f"falta {info['token']} no .env"
+    if not getattr(settings, info["ids"]):
+        return SETUP, f"falta {info['ids']} no .env"
+    if channel == "discord":
+        from core import discord_bot
+        if not discord_bot.available():
+            return SETUP, "falta instalar discord.py"
+    if user_prefs.get(f"remote_{channel}"):
+        running = messenger_ctl.is_running()
+        ids = len(getattr(settings, info["ids"]))
+        return (ON, f"ponte no ar · {ids} ID(s) autorizados") if running else (WAIT, "subindo a ponte…")
+    return OFF, "converse com o JARVIS pelo celular"
+
+
+def _bridge_connect(channel):
+    from core import messenger_ctl
+    from services import user_prefs
+    state, detail = _bridge_status(channel)
+    info = _BRIDGE[channel]
+    if state == SETUP:
+        _open(BRIDGE_DOCS_URL)
+        return (f"Para o {info['name']}: {info['how']}, ponha o token em `{info['token']}` e o seu ID em "
+                f"`{info['ids']}` no .env e reinicie o JARVIS ({detail}).")
+    user_prefs.set(f"remote_{channel}", True)
+    if not messenger_ctl.start():
+        return f"Não consegui subir a ponte do {info['name']}, Senhor. Veja o log."
+    return (f"Ponte do {info['name']} ligada, Senhor. Mande uma mensagem ao bot — eu respondo daqui do "
+            "computador. Ações (enviar e-mail, organizar) sempre pedem o seu \"sim\".")
+
+
+def _bridge_disconnect(channel):
+    from services import user_prefs
+    user_prefs.set(f"remote_{channel}", False)
+    return f"Ponte do {_BRIDGE[channel]['name']} desligada (encerra em até 30 s)."
+
+
+# ------------------------------------------------------- Downloads (winget)
+_winget_cache = {}
+
+
+def _winget_ok():
+    if "ok" not in _winget_cache:
+        from core import winget
+        _winget_cache["ok"] = winget.available()
+    return _winget_cache["ok"]
+
+
+def _winget_status():
+    if _winget_ok():
+        return ON, "catálogo winget · /instalar · /baixar"
+    return SETUP, "instale o App Installer (winget)"
+
+
+def _winget_connect():
+    _winget_cache.clear()
+    if _winget_ok():
+        return ("Downloads pelo winget prontos, Senhor: `/instalar <programa>` ou `/baixar <programa>` — "
+                "por voz, \"instala o 7-zip\". Sempre pergunto antes.")
+    _open("ms-windows-store://pdp/?productid=9NBLGGH4NNS1")
+    return "O winget não está neste Windows. Instale o \"App Installer\" pela Microsoft Store e tente de novo."
+
+
 # ---------------------------------------------------------------- Trânsito
 def _traffic_status():
     from core import traffic
@@ -159,6 +263,16 @@ def _build():
     return [
         Integration("google_calendar", "Google Agenda", "Agenda no briefing e por voz.",
                     _calendar_status, _calendar_connect, _calendar_disconnect),
+        Integration("gmail", "Gmail", "Ler, priorizar, responder e organizar e-mails.",
+                    _gmail_status, _gmail_connect, _gmail_disconnect),
+        Integration("telegram", "Telegram", "Conversar com o JARVIS pelo Telegram.",
+                    lambda: _bridge_status("telegram"), lambda: _bridge_connect("telegram"),
+                    lambda: _bridge_disconnect("telegram"), connect_label="Ligar ponte"),
+        Integration("discord", "Discord", "Conversar com o JARVIS pelo Discord.",
+                    lambda: _bridge_status("discord"), lambda: _bridge_connect("discord"),
+                    lambda: _bridge_disconnect("discord"), connect_label="Ligar ponte"),
+        Integration("winget", "Downloads", "Buscar e instalar programas (winget).",
+                    _winget_status, _winget_connect, connect_label="Como usar"),
         Integration("github", "GitHub", "PRs, issues e CI (/gh).",
                     _github_status, _github_connect, connect_label="Como configurar"),
         Integration("spotify", "Spotify", "Música pela skill de mídia.",
