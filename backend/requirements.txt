@@ -23,7 +23,7 @@ winrt-runtime>=4.2,<5
 winrt-Windows.Media.Ocr>=4!10.0,<4!11
 winrt-Windows.Graphics.Imaging>=4!10.0,<4!11
 winrt-Windows.Storage.Streams>=4!10.0,<4!11
-winrt-Windows.Globalization>=4!10.0,<4!11
+winrt-Windows.Globalization>=4!10.0.28000.2957,<4!11
 winrt-Windows.Foundation>=4!10.0,<4!11
 
 # --- CONFIGURAÇÃO E AMBIENTE ---
