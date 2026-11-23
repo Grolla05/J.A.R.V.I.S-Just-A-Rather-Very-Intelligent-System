@@ -15,7 +15,7 @@ O J.A.R.V.I.S é um assistente pessoal **local** para Windows, 100% Python:
                 ┌──────────────────────── processo da TUI (python main.py) ───────────────────────┐
  teclado ─────▶ │ frontend/app.py (JarvisApp)                                                       │
  microfone ───▶ │   ├─ modo CHAT  : PromptInput ─┐                                                  │
-                │   └─ modo COPILOT: VoiceBar ◀── services/listen.py (wake word + Google STT)       │
+                │   └─ modo COPILOT: VoiceStage ◀── services/listen.py (wake word + Google STT)       │
                 │                                ▼                                                  │
                 │                 services/brain.py  execute_command_stream(texto, sessão, modo)    │
                 │                   ├─ ação crítica pendente? → confirm_pending_action              │
@@ -88,7 +88,7 @@ Nenhuma etapa trava a TUI. Depois do boot:
 
 ### 3.2 Modo Copilot (voz)
 
-1. Entrar no Copilot (`Shift+Tab`/`Ctrl+T`/`Win+J`) liga a voz (`state.voice_enabled = True`); o input dá lugar à `VoiceBar` e à orb pixel-art.
+1. Entrar no Copilot (`Shift+Tab`/`Ctrl+T`/`Win+J`) liga a voz (`state.voice_enabled = True`); input e conversa dão lugar à `VoiceStage`: espectro dos dois lados da orb pixel-art, estado, a fala no centro e o VU em dB.
 2. `services/listen` abre o microfone sob demanda (`get_ear()`), espera a *wake word* (`WAKE_WORDS`) e transcreve com o Google STT. Depois do nome, há uma **janela de atenção** (pref `attention_window`, padrão 60 s) em que não é preciso repetir "Jarvis".
 3. `_voice_loop` mostra a fala na sessão atual e chama o **mesmo** `_run_turn` do Chat com `mode="copilot"`: aqui todas as skills executam.
 4. A orb muda de estado: ouvindo → pensando → respondendo (8 fps, só nesses dois últimos).
@@ -105,7 +105,7 @@ Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub
 | Módulo | Papel |
 |---|---|
 | `app.py` | `JarvisApp`: modos, atalhos, worker de stream, voz, alertas, telemetria, briefing automático, atualização |
-| `widgets.py` | `MessageView` (Markdown), `PromptInput` (arrastar arquivo = `/attach`), `StatusLine`, `JarvisOrb`, `CopilotHero`, `VoiceBar`, `ConfirmScreen` (30 s), `PixelSprite` |
+| `widgets.py` | `MessageView` (Markdown), `PromptInput` (arrastar arquivo = `/attach`), `StatusLine`, `JarvisOrb`, `Spectrum`, `VoiceStage`, `ConfirmScreen` (30 s), `PixelSprite` |
 | `commands.py` | Parser puro dos `/comandos`, aliases e entradas/busca fuzzy da paleta `Ctrl+K` |
 | `orb.py` | Quadros 16×16 da orb e conversão para meio-bloco (lógica pura) |
 | `sprites.py` | Sprites 16-bit e efeitos de texto: `block_bar` (▰▱), `sparkline`, `bar_chart`, CRT, scanline |
@@ -116,7 +116,8 @@ Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub
 | `screens/skills.py` | `/skills`: cartuchos por categoria; Enter liga/desliga, `c` liga/desliga a categoria |
 | `screens/log.py` | `/log`: buffer do logger com filtros, busca e a timeline do último turno com skill |
 | `screens/vault.py` | `/vault`: árvore do Obsidian, busca, prévia e "usar no chat" |
-| `screens/settings.py` | `/config`: VOZ, MICROFONE, ROTINAS, INTEGRAÇÕES, SISTEMA, MODELO, SOBRE |
+| `screens/settings.py` | `/config`: VOZ, MICROFONE, ROTINAS, INTEGRAÇÕES, SISTEMA, MODELO, SOBRE — cada grupo em cards de seção |
+| `screens/settings_rows.py` | Seções, rótulos curtos e ajuda do `/config` (lógica pura) + `PrefRow` (▌ nome ◀ valor ▶, selo ● ON/○ OFF, ajuda ↳) e `QuipLine` (fala digitando) |
 | `screens/integrations_panel.py` | Cards de INTEGRAÇÕES (Google Agenda, Spotify, GitHub…) |
 | `screens/save_slots.py` | `Ctrl+O`: sessões como save slots (carregar, fixar, apagar, buscar) |
 | `screens/palette.py` | `Ctrl+K`: paleta de comandos, modos, foco e skills |

@@ -216,6 +216,48 @@ def spaced_bar_chart(values, width, height, top=100.0, gap=1):
     return [spacer.join(line) for line in lines], padded
 
 
+def spectrum(values, height, gap=1):
+    """Espectro da voz (canvas "Visualizador de voz"): barras de 0..1
+    centradas na vertical, com precisão de meio bloco (▄ em cima, ▀ embaixo)
+    e `gap` colunas vazias entre elas. Retorna as `height` linhas, de cima p/ baixo."""
+    halves = height * 2
+    cols = []
+    for v in values:
+        try:
+            v = max(0.0, min(1.0, float(v)))
+        except (TypeError, ValueError):
+            v = 0.0
+        size = int(round(v * height)) * 2  # meias-linhas, sempre par → simétrico
+        cols.append((halves - size) // 2)  # 1ª meia-linha preenchida
+    lines = []
+    for row in range(height):
+        top, bottom = row * 2, row * 2 + 1
+        chars = []
+        for start in cols:
+            end = halves - start  # exclusivo
+            up, down = start <= top < end, start <= bottom < end
+            chars.append("█" if up and down else "▀" if up else "▄" if down else " ")
+        lines.append((" " * gap).join(chars))
+    return lines
+
+
+# Mesma escala do services/listen.py (LEVEL_FLOOR_DB..LEVEL_CEIL_DB): a TUI
+# não importa o listen (speech_recognition é pesado e opcional).
+LEVEL_FLOOR_DB = -50.0
+LEVEL_CEIL_DB = -12.0
+
+
+def level_db(level):
+    """Nível 0..1 do microfone → texto em dBFS ('-18 dB'); silêncio = '-∞ dB'."""
+    try:
+        level = max(0.0, min(1.0, float(level)))
+    except (TypeError, ValueError):
+        level = 0.0
+    if level <= 0:
+        return "-∞ dB"
+    return f"{LEVEL_FLOOR_DB + level * (LEVEL_CEIL_DB - LEVEL_FLOOR_DB):.0f} dB"
+
+
 def load_level(value):
     """Faixa de carga p/ cor/rótulo: 'baixa' (<65), 'moderada' (<85), 'alta'."""
     try:

@@ -23,6 +23,24 @@ class TestSprites(unittest.TestCase):
         self.assertIn(sprites.WARN, codes)
         self.assertNotIn(sprites.NEON, codes)
 
+    def test_spectrum_bars_are_centered_with_half_blocks(self):
+        lines = sprites.spectrum([0, 1 / 8, 0.5, 1], height=8)
+        self.assertEqual(len(lines), 8)
+        self.assertTrue(all(len(line) == 7 for line in lines))     # 4 barras + 3 vãos
+        cols = ["".join(line[i] for line in lines) for i in range(0, 7, 2)]
+        self.assertEqual(cols[0], " " * 8)                         # silêncio: nada
+        self.assertEqual(cols[1], "   ▄▀   ")                      # meio bloco em cada lado do centro
+        self.assertEqual(cols[2], "  ████  ")
+        self.assertEqual(cols[3], "█" * 8)
+
+    def test_spectrum_ignores_garbage(self):
+        self.assertEqual(sprites.spectrum([None, "x", 5], height=2), [" " * 4 + "█", " " * 4 + "█"])
+
+    def test_level_db_follows_listen_scale(self):
+        self.assertEqual(sprites.level_db(0), "-∞ dB")
+        self.assertEqual(sprites.level_db(1), "-12 dB")
+        self.assertEqual(sprites.level_db(32 / 38), "-18 dB")  # o -18 dB do canvas
+
     def test_radar_has_8_distinct_frames(self):
         frames = [sprites.radar(n) for n in range(sprites.RADAR_FRAMES)]
         self.assertEqual(len({str(f) for f in frames}), sprites.RADAR_FRAMES)

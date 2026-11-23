@@ -291,66 +291,127 @@ class PixelSprite(Widget):
         return paint_grid(self, self._frames[self.frame % len(self._frames)], "px")
 
 
-class CopilotHero(Horizontal):
-    """Boas-vindas do Copilot: orb + identificação + estado da voz."""
+class Spectrum(Widget):
+    """Espectro vertical da voz (um lado da orb). Barras centradas de 0..1;
+    a cor vem da altura (component classes spec--lo/mid/hi, como no canvas)."""
 
-    def __init__(self, model="", skills=0, **kwargs):
+    COMPONENT_CLASSES = {"spec--lo", "spec--mid", "spec--hi"}
+    BARS = 16
+    HEIGHT = 8   # = altura da orb
+    GAP = 1
+    DEFAULT_CSS = "Spectrum { width: 31; height: 8; }"
+
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._model = model
-        self._skills = skills
-
-    def compose(self) -> ComposeResult:
-        yield JarvisOrb(id="orb")
-        with Vertical(id="hero-text"):
-            yield Label(Content.assemble(("J.A.R.V.I.S", "bold"), " · Copilot"), id="hero-title")
-            yield Label(self._info(), id="hero-info")
-            yield Label(id="hero-state")
-            yield Label('Diga "Jarvis" e peça uma ação.', id="hero-hint")
-
-    def on_mount(self):
-        self.set_state(self.query_one(JarvisOrb).state)
-
-    def _info(self):
-        return f"{self._model or '?'} · {self._skills} skills de automação"
-
-    def set_info(self, model, skills):
-        self._model, self._skills = model, skills
-        try:
-            label = self.query_one("#hero-info", Label)
-        except NoMatches:
-            return  # ainda não montado ou já desmontado: o compose() usa os valores guardados
-        label.update(self._info())
+        self._values = [0.0] * self.BARS
 
     @property
-    def state(self):
-        return self.query_one(JarvisOrb).state
+    def values(self):
+        return list(self._values)
 
-    def set_state(self, state):
-        self.query_one(JarvisOrb).state = state
-        self.query_one("#hero-state", Label).update(f"▶ {orb.STATE_LABEL.get(state, state)}")
+    def set_values(self, values):
+        values = list(values)[-self.BARS:]
+        self._values = [0.0] * (self.BARS - len(values)) + values
+        self.refresh()
+
+    @staticmethod
+    def tier(value):
+        return "hi" if value > 0.7 else "mid" if value > 0.45 else "lo"
+
+    def render(self):
+        styles = {t: self.get_component_rich_style(f"spec--{t}", partial=True) for t in ("lo", "mid", "hi")}
+        lines = sprites.spectrum(self._values, self.HEIGHT, self.GAP)
+        step = 1 + self.GAP
+        text = Text(no_wrap=True, end="")
+        for i, line in enumerate(lines):
+            for col, char in enumerate(line):
+                if char == " " or col % step:
+                    text.append(char)
+                else:
+                    text.append(char, styles[self.tier(self._values[col // step])])
+            if i < len(lines) - 1:
+                text.append("\n")
+        return text
 
 
-class VoiceBar(Horizontal):
-    """Substitui o campo de texto no Copilot (que é só por voz)."""
+class VoiceStage(Vertical):
+    """Tela de voz do Copilot (canvas "Visualizador de voz"): espectro dos dois
+    lados da orb, estado ("O U V I N D O"), a transcrição no centro e o VU com
+    o nível em dB. Ocupa o corpo inteiro — o Copilot é só por voz."""
 
-    LISTENING = 'Ouvindo… diga "Jarvis" e peça uma ação'
-    AWAITING = 'Aguardando sua resposta: diga "sim" ou "não"'
+    COMPONENT_CLASSES = {"voice--cursor"}
 
-    WAVE_WIDTH = 24  # amostras do espectro (8 por segundo → ~3 s de histórico)
-    VU_WIDTH = 15
+    LISTENING = 'diga "Jarvis" e peça uma ação'
+    AWAITING = 'aguardando sua resposta: diga "sim" ou "não"'
+
+    WAVE_WIDTH = Spectrum.BARS  # amostras por lado (8 por segundo → 2 s de histórico)
+    VU_WIDTH = 30
     RELEASE = 0.6    # queda por quadro: sobe na hora, desce suave (não pisca entre sílabas)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.levels = deque([0.0] * self.WAVE_WIDTH, maxlen=self.WAVE_WIDTH)
-        self.shown = 0.0  # nível exibido no VU (com release)
+        self.shown = 0.0         # nível exibido no VU (com release)
+        self._transcript = ""    # última fala reconhecida (some ao voltar a ouvir)
+        self._awaiting = False
 
     def compose(self) -> ComposeResult:
-        yield Static("●", id="voice-mic")
-        yield Static(sprites.sparkline(self.levels, width=self.WAVE_WIDTH), id="voice-wave")
-        yield Static(self.LISTENING, id="voice-text", markup=False)
-        yield Static(sprites.block_bar(0, self.VU_WIDTH, "█", "░"), id="voice-vu")
-        yield Static("Esc interrompe", id="voice-hint")
+        with Horizontal(id="voice-row"):
+            yield Spectrum(id="voice-spec-left")
+            yield JarvisOrb(id="orb")
+            yield Spectrum(id="voice-spec-right")
+        yield Label(id="voice-state")
+        yield Static(id="voice-text")
+        with Horizontal(id="voice-level"):
+            yield Label("nível", id="voice-level-label")
+            yield Static(sprites.block_bar(0, self.VU_WIDTH, "█", "░"), id="voice-vu")
+            yield Label(sprites.level_db(0), id="voice-db")
+
+    def on_mount(self):
+        self.set_state(self.query_one(JarvisOrb).state)
+
+    @property
+    def state(self):
+        return self.query_one(JarvisOrb).state
+
+    @staticmethod
+    def state_label(state):
+        """'ouvindo' → 'O U V I N D O' (o espaçamento das letras do canvas)."""
+        return " ".join(str(state).upper())
+
+    def set_state(self, state):
+        try:
+            self.query_one(JarvisOrb).state = state
+            self.query_one("#voice-state", Label).update(self.state_label(state))
+        except NoMatches:
+            return  # desmontado (app fechando)
+        if state == "ouvindo":
+            self._transcript = ""  # nova escuta: a fala anterior sai do centro
+        self._refresh_text()
+
+    def set_transcript(self, text):
+        self._transcript = " ".join(str(text or "").split())
+        self._refresh_text()
+
+    def set_awaiting(self, awaiting):
+        self._awaiting = bool(awaiting)
+        self._refresh_text()
+
+    def _refresh_text(self):
+        try:
+            widget = self.query_one("#voice-text", Static)
+        except NoMatches:
+            return
+        if self._awaiting:
+            widget.update(Text(self.AWAITING))
+            return
+        if self._transcript:
+            widget.update(Text(f"“{self._transcript}”"))
+            return
+        out = Text(self.LISTENING)
+        if self.query_one(JarvisOrb).state == "ouvindo":
+            out.append("▌", self.get_component_rich_style("voice--cursor", partial=True))
+        widget.update(out)
 
     def set_level(self, level):
         """Nível real do microfone (0..1) — vem do RMS do listen.py. `None`
@@ -362,13 +423,15 @@ class VoiceBar(Horizontal):
             level = max(0.0, min(1.0, float(level)))
             self.shown = max(level, self.shown * self.RELEASE)
             self.levels.append(self.shown)
-        self.query_one("#voice-wave", Static).update(
-            sprites.sparkline([v * 100 for v in self.levels], width=self.WAVE_WIDTH))
-        self.query_one("#voice-vu", Static).update(
-            sprites.block_bar(self.shown * 100, self.VU_WIDTH, "█", "░"))
-
-    def set_awaiting(self, awaiting):
-        self.query_one("#voice-text", Static).update(self.AWAITING if awaiting else self.LISTENING)
+        try:
+            # Mais recente encostado na orb: à direita no lado esquerdo e espelhado no direito
+            self.query_one("#voice-spec-left", Spectrum).set_values(self.levels)
+            self.query_one("#voice-spec-right", Spectrum).set_values(list(self.levels)[::-1])
+            self.query_one("#voice-vu", Static).update(
+                sprites.block_bar(self.shown * 100, self.VU_WIDTH, "█", "░"))
+            self.query_one("#voice-db", Label).update(sprites.level_db(self.shown))
+        except NoMatches:
+            return
 
 
 class ConfirmScreen(ModalScreen):

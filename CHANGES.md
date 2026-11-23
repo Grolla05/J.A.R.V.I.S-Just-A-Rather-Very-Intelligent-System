@@ -2,6 +2,39 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+## /config redesenhado: seções, selos e fala do JARVIS
+
+**Data:** 2026-11-21
+**Escopo:** Tela `/config` refeita a partir do artboard aprovado no canvas "JARVIS TUI" ("10 · Configurações — Rotinas (seções)"). Antes: 14 opções de ROTINAS numa lista só, colunas tortas, barra ▰▱ em liga/desliga e o texto de ajuda despejado no fim.
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | Cada grupo vira **cards de seção** com título, ícone e contagem de ativas (`2/3`). ROTINAS em 2 colunas: ☀ BRIEFING, ✎ ASSISTENTE, ⛨ SEGURANÇA · ◷ AGENDA, ☾ SILÊNCIO & PALCO. VOZ (♪ FALA), MICROFONE (◉ ESCUTA) e SISTEMA (⚙ INICIALIZAÇÃO) seguem o mesmo padrão. Rótulos curtos (o título da seção dá o contexto) e a ajuda de cada grupo foi para o pé do seu card | `frontend/screens/settings_rows.py` (novo: `SECTIONS`, `SHORT_LABELS`, `HELP`), `frontend/screens/settings.py` |
+| 2 | Linha `PrefRow`: `▌ nome ◀ valor ▶ pontos` em colunas fixas. Liga/desliga = selo `● ON` verde / `○ OFF` apagado (agente: `● RODANDO`/`○ PARADO`); escolhas mostram a posição em pontos `▮▮▮▯`. Setas só na linha em foco, que ganha fundo de seleção e a ajuda `↳` embaixo | `frontend/screens/settings_rows.py` (`PrefRow`, `row_segments`) |
+| 3 | Menu com ícone e contagem por grupo (`↻ ROTINAS 14`); no pé, "✓ salvo no SQLite · alterado às HH:MM:SS". Topo do painel: subtítulo do grupo e barra `▮▮▮▯ 11/14` (só em grupos com liga/desliga); topo da tela: `ROTINAS · 11 de 14 ativas` | `frontend/screens/settings.py`, `frontend/jarvis.tcss` |
+| 4 | Fala do JARVIS numa faixa própria no pé (rosto pixel-art + `jarvis ›` + `QuipLine` digitando 30 car./quadro com cursor `▌`) | `frontend/screens/settings_rows.py` (`QuipLine`), `frontend/screens/settings.py` |
+| 5 | Animações só por evento: troca de grupo = cards entram um a um (0,06 s cada); trocar valor = selo desliza `○──●` e pisca (2 quadros); no limite da lista nada muda e nada pisca. O fade por opacidade foi descartado: o compositor do Textual deixava fundo velho nas linhas | `frontend/screens/settings.py`, `frontend/screens/settings_rows.py` |
+| 6 | Navegação: `↑↓` andam entre as linhas de todos os cards (sair pelo topo volta ao menu), `←→` ajustam, `tab` alterna menu/opções (+ campo de fontes em SISTEMA), Enter no menu volta à última linha usada. Setas presas na própria linha: o `VerticalScroll` do painel escondia `←→ Ajustar` do rodapé | `frontend/screens/settings_rows.py`, `frontend/screens/settings.py` |
+| 7 | Cores novas do tema: `$j-select`, `$j-focus-help`, `$j-on-bg`, `$j-on-fg` | `frontend/jarvis.tcss` |
+| 8 | Documentação | `AGENTS.md`, `docs/arquitetura.md`, `frontend/README.md` |
+
+**Testes:** `test_tui_settings_rows.py` (novo: toda pref em uma seção só, ajuda sem emoji, 2 colunas em ROTINAS, selo em vez de barra, largura exata e corte com `…`, setas só em foco, valor compacto e pontos, desligado apagado, quadros do flash, selo do agente, resumo, máquina de escrever, rótulos curtos); `test_tui_phase34.py` (cards de ROTINAS, contagens, ajuda só na linha em foco, ↑↓ entre linhas e saída pelo topo, flash ao trocar e nada no limite; testes antigos do `/config` adaptados).
+
+## Interface igual ao canvas: Voz, Vault e Protocolo Crítico
+
+**Data:** 2026-11-21
+**Escopo:** Três telas que estavam diferentes do canvas "JARVIS TUI": "Visualizador de voz" (Copilot), "Memória / Vault" e "Protocolo crítico".
+
+| # | Mudança | Arquivos |
+|---|---------|----------|
+| 1 | **Voz (Copilot):** `CopilotHero` + `VoiceBar` saem; entra `VoiceStage`, tela de voz inteira: espectro vertical dos dois lados da orb (o mais recente encostado na orb, espelhado), estado espaçado (`O U V I N D O`), a fala reconhecida no centro entre aspas (cursor `▌` enquanto ouve; "aguardando sua resposta" numa confirmação) e o VU de 30 blocos com o nível em dB (`-18 dB`, mesma escala do `listen.py`). A conversa fica escondida no Copilot (segue gravada na sessão e volta no Chat). Topo do Copilot: `mic N · 16 kHz` | `frontend/widgets.py` (`Spectrum`, `VoiceStage`), `frontend/sprites.py` (`spectrum`, `level_db`), `frontend/app.py`, `frontend/jarvis.tcss` |
+| 2 | **Vault:** o `OptionList` de resultados virou a lista de scores do canvas (`0.92 rotina_trabalho`; o melhor em ciano, o resto apagado; clique abre a nota) e o estado "parado" virou `varredura N/8`, seguindo o quadro do radar (8/8 ao terminar). A contagem mostra o tempo da busca (`3 resultados · 140 ms`) | `frontend/screens/vault.py` (`ScoreList`, `score_rows`, `sweep_label`), `frontend/jarvis.tcss` |
+| 3 | **Crítico:** o topo mostra só `⚠ PROTOCOLO CRÍTICO`, sem os motivos. Eles continuam no log (`log.warning` vira notificação e aparece no `/log`) | `frontend/app.py`, `backend/core/SystemInfo.py` (comentários) |
+
+**Testes:** `test_tui_sprites.py` (espectro centrado com meio bloco, lixo na entrada, escala de dB); `test_tui_phase34.py` (VU/espectro com nível real e zerando, lista de scores, `varredura 8/8`, tempo da busca); `test_tui_app.py` (Copilot esconde input e conversa, fala no centro, topo `mic N · 16 kHz`, selo crítico sem motivos); `test_tui_orb.py` (`VoiceStage` desmontado não levanta).
+
+**Observação:** `test_tui_tools.py::TestClipCommand::test_clip_bad_action_and_empty_history` já falhava antes destas mudanças (falha igual com o código anterior).
+
 ## Navegador: Abas, YouTube Pro e Extração de Conteúdo
 
 **Data:** 2026-11-21
