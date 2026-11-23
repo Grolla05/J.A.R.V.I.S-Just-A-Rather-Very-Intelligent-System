@@ -1,6 +1,6 @@
 # Arquitetura do J.A.R.V.I.S — ponta a ponta
 
-Este documento explica como o J.A.R.V.I.S funciona do boot à resposta, módulo a módulo. Para regras de código (o que é proibido, onde cada coisa deve morar), veja o [`CLAUDE.md`](../CLAUDE.md).
+Este documento explica como o J.A.R.V.I.S funciona do boot à resposta, módulo a módulo. Para regras de código (o que é proibido, onde cada coisa deve morar), veja o [`AGENTS.md`](../AGENTS.md) e [`regras-backend.md`](regras-backend.md).
 
 ## 1. Visão geral
 

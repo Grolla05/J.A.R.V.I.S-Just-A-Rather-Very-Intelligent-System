@@ -40,6 +40,7 @@ Registro das mudanças aplicadas no J.A.R.V.I.S.
 - Instalação e testes: `requirements-dev.txt` (pytest, pytest-xdist, ruff), `-n auto` e `--copilot`, que antes não estavam no `AGENTS.md`.
 - Removida a lista "Principais pacotes do `requirements.txt`" (cópia parcial e desatualizada; a fonte é o próprio `requirements.txt`).
 - `docs/estrutura.md`: a linha de `docs/` na árvore lista os arquivos novos.
+- `docs/arquitetura.md`: o link para `CLAUDE.md` (arquivo local, ignorado pelo git, que não existe no CI nem em quem clona) passou a apontar para `AGENTS.md` e `regras-backend.md`. O teste `test_links_dos_docs_existem` achou esse link quebrado no CI.
 - Os arquivos novos linkam entre si e para o `AGENTS.md`; o teste abaixo confere todos os links.
 
 ### Termos de Uso e Política de Privacidade (novos)
