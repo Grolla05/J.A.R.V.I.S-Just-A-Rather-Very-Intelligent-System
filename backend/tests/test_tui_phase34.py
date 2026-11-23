@@ -185,6 +185,16 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
         await pilot.press("enter")
         await pilot.pause(0.3)
 
+    async def _open_config(self, app, pilot):
+        """Abre o /config e espera o 1º grupo (VOZ) terminar de montar: a
+        montagem das seções é async e no CI lento passava da pausa fixa."""
+        await self._cmd(app, pilot, "/config")
+        self.assertIsInstance(app.screen, tui_app.SettingsScreen)
+        screen = app.screen
+        await self._wait(pilot, lambda: screen.query("#pref-tts_voice")
+                         and not screen.query_one("#cfg-news").display)
+        return screen
+
     def test_vault_score_rows_and_sweep_label(self):
         from frontend.screens.vault import score_rows, sweep_label
         rows = score_rows([{"filename": "Projetos/J.A.R.V.I.S/Memória/rotina_trabalho.md", "score": 0.923},
@@ -225,7 +235,7 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
     async def test_config_adjusts_and_persists(self):
         app = self._app()
         async with app.run_test(size=(140, 45)) as pilot:
-            await self._cmd(app, pilot, "/config")
+            await self._open_config(app, pilot)
             self.assertIsInstance(app.screen, tui_app.SettingsScreen)
             await pilot.press("tab")       # foca a 1ª linha do grupo VOZ
             self.assertTrue(app.screen.query_one("#pref-tts_voice").has_focus)
@@ -242,7 +252,7 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
     async def test_config_rotinas_cards_navigation_and_flash(self):
         app = self._app()
         async with app.run_test(size=(160, 50)) as pilot:
-            await self._cmd(app, pilot, "/config")
+            await self._open_config(app, pilot)
             screen = app.screen
             screen.query_one("#cfg-menu").highlighted = 2  # ROTINAS
             await self._wait(pilot, lambda: len(screen.query(".cfg-card")) == 5)
@@ -278,7 +288,7 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
     async def test_config_has_no_dialog_box_and_quip_lives_in_panel(self):
         app = self._app()
         async with app.run_test(size=(140, 45)) as pilot:
-            await self._cmd(app, pilot, "/config")
+            await self._open_config(app, pilot)
             screen = app.screen
             self.assertFalse(screen.query("#cfg-dialog"))
             self.assertFalse(screen.query("#cfg-face"))
@@ -294,7 +304,7 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
              patch.object(updater, "is_enabled", return_value=False):
             app = self._app()
             async with app.run_test(size=(140, 45)) as pilot:
-                await self._cmd(app, pilot, "/config")
+                await self._open_config(app, pilot)
                 screen = app.screen
                 screen.query_one("#cfg-menu").highlighted = 4  # SISTEMA
                 # as seções montam em async: espera o campo e as 3 linhas aparecerem
@@ -344,11 +354,12 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
              patch.object(integrations, "get", lambda i: {"fake": fake, "other": other}.get(i)):
             app = self._app()
             async with app.run_test(size=(150, 48)) as pilot:
-                await self._cmd(app, pilot, "/config")
+                await self._open_config(app, pilot)
                 screen = app.screen
                 menu = screen.query_one("#cfg-menu")
                 menu.highlighted = 3  # INTEGRAÇÕES
-                await pilot.pause()
+                # o grupo monta em async (seções saem antes dos cards): espera no CI lento
+                await self._wait(pilot, lambda: screen.query_one("#cfg-cards").display)
                 self.assertEqual(screen.group, "INTEGRAÇÕES")
                 self.assertTrue(screen.query_one("#cfg-cards").display)
                 self.assertFalse(screen.query_one("#cfg-sections").display)
@@ -523,7 +534,7 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
     async def test_escape_in_full_screen_goes_back(self):
         app = self._app()
         async with app.run_test(size=(140, 45)) as pilot:
-            await self._cmd(app, pilot, "/config")
+            await self._open_config(app, pilot)
             await pilot.press("escape")
             await pilot.pause(0.1)
             self.assertIs(app.screen, app.main_screen)
