@@ -57,10 +57,11 @@ O bloqueio no Chat vem de `CHAT_BLOCKED_CATEGORIES` em `services/intent.py`: ess
 | system | `SYSTEM_REPORT` | Relatório da máquina (também usado na saudação) |
 | system | `SYSTEM_CLEANUP` | Esvazia a Lixeira, limpa temporários, desinstala app |
 | system | `SYSTEM_SECURITY` | Bloquear, suspender, desligar, modo sentinela |
-| productivity | `CALENDAR` | Eventos do Google Agenda (hoje, amanhã, dia da semana, próxima reunião) |
+| productivity | `CALENDAR` | Eventos do Google Agenda: dia (hoje, amanhã, dia da semana), semana, fim de semana, mês, ano, os próximos e a próxima reunião |
 | productivity | `DAILY_BRIEFING` | Briefing do dia (`core/briefing.py`) |
 | productivity | `EMAIL_READ` | E-mails do Gmail por prioridade; "leia o e-mail 2" resume (conteúdo como dado) |
 | productivity | `EMAIL_SEND` | Responde/escreve e-mail, com anexo do computador e contato por nome; rascunho + "sim" |
+| productivity | `EMAIL_TRASH` | "Apaga o e-mail 3" / "as promoções" → Lixeira do Gmail (30 dias) com confirmação |
 | productivity | `EMAIL_ORGANIZE` | Plano de organização da caixa (arquivar/marcadores) + "sim"; nunca apaga |
 | productivity | `FOCUS_MODE` | Pomodoro e Não Perturbe |
 | productivity | `REMINDER` | "Me lembra em 30 min de…", listar e cancelar lembretes |

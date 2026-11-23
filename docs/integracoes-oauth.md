@@ -53,13 +53,15 @@ O Gmail usa o **mesmo** `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, mas tem card 
 1. Abra [Gmail API](https://console.cloud.google.com/apis/library/gmail.googleapis.com) → **Ativar**.
 2. **Acesso a dados** → **Adicionar ou remover escopos** → marque
    `https://www.googleapis.com/auth/gmail.modify` → **Atualizar** → **Salvar**.
-   - `gmail.modify` permite ler, criar rascunho, enviar e mover/etiquetar. **Não** permite apagar
-     de vez — e o JARVIS nem tem código para lixeira/exclusão.
+   - `gmail.modify` permite ler, criar rascunho, enviar, mover/etiquetar e mandar para a Lixeira. **Não**
+     permite apagar de vez — e o JARVIS não tem código de exclusão permanente.
+   - ⚠️ **Não** marque `https://mail.google.com/` (acesso total, inclui excluir para sempre).
    - É um escopo "restrito": o login mostra o aviso de app não verificado (esperado, o app é seu).
 3. `/config` → **INTEGRAÇÕES** → **Gmail** → Enter.
 
 O que o JARVIS faz com ele: `/email` (prioridades), ler e resumir, responder, escrever com anexo do
-computador e organizar a caixa. **Enviar e organizar sempre mostram o rascunho/plano e esperam o seu "sim".**
+computador, mover para a **Lixeira** ("apaga o e-mail 3", recuperável por 30 dias) e organizar a caixa.
+**Enviar, apagar e organizar sempre mostram o rascunho/lista/plano e esperam o seu "sim".**
 
 ---
 

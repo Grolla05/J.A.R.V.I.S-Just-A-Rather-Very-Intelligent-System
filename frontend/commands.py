@@ -26,7 +26,7 @@ COMMANDS = {
     "rota":     ("/rota [<local> <endereço>]", "cadastra um local fixo (casa, trabalho, faculdade…); sem argumento lista"),
     "clip":     ("/clip [explicar|traduzir|resumir] [n] · hist · buscar <termo> · usar <n> · limpar",
                  "age sobre o que você copiou ou sobre o histórico (monitor no /config)"),
-    "email":    ("/email [ler <n> | responder <n> <texto> | novo <para> <texto> | organizar | vip <e-mail> | contato <apelido> <e-mail> | assinatura <texto>]",
+    "email":    ("/email [ler <n> | responder <n> <texto> | novo <para> <texto> | apagar <n…|promoções> | organizar | vip <e-mail> | contato <apelido> <e-mail> | assinatura <texto>]",
                  "Gmail: e-mails por prioridade, ler, responder, escrever e organizar (envio sempre confirmado)"),
     "instalar": ("/instalar <programa>", "procura no winget e instala (pede confirmação)"),
     "baixar":   ("/baixar <programa>", "baixa o instalador pelo winget para Downloads (pede confirmação)"),

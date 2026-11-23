@@ -1036,7 +1036,7 @@ class JarvisApp(App, inherit_bindings=False):
 
     # ------------------------------------------------------------------ e-mail
     EMAIL_USAGE = ("Uso: /email · /email ler <n> · /email responder <n> <texto> · /email novo <para> <texto> · "
-                   "/email organizar · /email vip <e-mail> · /email contato <apelido> <e-mail> · "
+                   "/email apagar <n…|promoções> · /email organizar · /email vip <e-mail> · /email contato <apelido> <e-mail> · "
                    "/email assinatura <texto>")
 
     def _email(self, arg):
@@ -1053,6 +1053,9 @@ class JarvisApp(App, inherit_bindings=False):
             self.tool_reply(f"email · responder {n_text}", mailbox.reply_text, int(n_text), tail.strip())
         elif word in ("novo", "escrever", "new") and n_text and tail.strip():
             self.tool_reply(f"email · novo {n_text}", mailbox.new_text, n_text, tail.strip())
+        elif word in ("apagar", "apaga", "excluir", "lixeira") and rest:
+            from services import email_trash
+            self.tool_reply("email · lixeira", email_trash.request, rest)
         elif word in ("organizar", "organiza", "organize") and not rest:
             self.tool_reply("email · organizar", email_organize.organize)
         elif word == "vip" and rest:

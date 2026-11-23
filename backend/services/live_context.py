@@ -33,16 +33,21 @@ def is_calendar_question(text):
     return bool(_CALENDAR_RE.search(_plain(text)))
 
 
-def format_events_for_llm(items):
-    """Uma linha por evento: '- 09:00–10:00 Daily' / '- dia inteiro: Feriado'."""
+_SHORT_WEEKDAYS = ("seg", "ter", "qua", "qui", "sex", "sáb", "dom")
+
+
+def format_events_for_llm(items, with_date=False):
+    """Uma linha por evento: '- 09:00–10:00 Daily' / '- dia inteiro: Feriado'.
+    `with_date` (semana/mês/ano) prefixa o dia: '- qui 26/11 10:00–11:00 Daily'."""
     lines = []
     for e in items:
+        day = f"{_SHORT_WEEKDAYS[e['start'].weekday()]} {e['start']:%d/%m} " if with_date and e["start"] else ""
         if e["all_day"] or not e["start"]:
-            lines.append(f"- dia inteiro: {e['title']}")
+            lines.append(f"- {day}dia inteiro: {e['title']}")
         elif e.get("end") and e["end"].date() == e["start"].date():
-            lines.append(f"- {e['start']:%H:%M}–{e['end']:%H:%M} {e['title']}")
+            lines.append(f"- {day}{e['start']:%H:%M}–{e['end']:%H:%M} {e['title']}")
         else:
-            lines.append(f"- {e['start']:%H:%M} {e['title']}")
+            lines.append(f"- {day}{e['start']:%H:%M} {e['title']}")
     return "\n".join(lines) or "(nenhum evento)"
 
 
@@ -53,16 +58,27 @@ def calendar_context(text, today=None, calendar=None):
     if calendar is None:
         from core import google_calendar as calendar
     today = today or datetime.date.today()
-    day, label = calendar.resolve_day(text, today)
-    if day == "next":
-        day, label = today, "hoje"
-    date_txt = f"{label} ({day:%d/%m/%Y}, {calendar.WEEKDAYS[day.weekday()]})"
+    period = calendar.resolve_period(text, today) if hasattr(calendar, "resolve_period") else None
+    if period and period["kind"] == "range":
+        last = period["end"] - datetime.timedelta(days=1)
+        date_txt = f"{period['label']} ({period['start']:%d/%m/%Y} a {last:%d/%m/%Y})"
+
+        def fetch():
+            return format_events_for_llm(calendar.events_range(period["start"], period["end"]), with_date=True)
+    else:
+        day, label = calendar.resolve_day(text, today)
+        if day == "next":
+            day, label = today, "hoje"
+        date_txt = f"{label} ({day:%d/%m/%Y}, {calendar.WEEKDAYS[day.weekday()]})"
+
+        def fetch():
+            return format_events_for_llm(calendar.events(day))
 
     if not (calendar.is_configured() and calendar.is_connected()):
         status, events = "NÃO CONECTADA", "(sem acesso à agenda)"
     else:
         try:
-            status, events = "CONECTADA", format_events_for_llm(calendar.events(day))
+            status, events = "CONECTADA", fetch()
         except Exception as e:
             log.warning(f"[CONTEXTO] Agenda indisponível: {e}")
             status, events = "INDISPONÍVEL AGORA", f"(erro ao consultar: {e})"

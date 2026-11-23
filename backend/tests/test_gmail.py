@@ -151,8 +151,18 @@ class TestApi(ApiCase):
         self.assertTrue(args.args[1].endswith("/messages/batchModify"))
         self.assertEqual(args.kwargs["json"], {"ids": ["m1", "m2"], "addLabelIds": ["L1"],
                                                "removeLabelIds": ["INBOX"]})
-        self.assertFalse(hasattr(gmail, "delete"))
-        self.assertFalse(hasattr(gmail, "trash"))
+        self.assertFalse(hasattr(gmail, "delete"))   # exclusão permanente não existe (só Lixeira)
+
+    def test_trash_moves_each_message_and_never_deletes(self):
+        self.http.request.return_value = Resp(data={"id": "m1", "labelIds": ["TRASH"]})
+        self.assertEqual(gmail.trash(["m1", "m2"]), 2)
+        calls = self.http.request.call_args_list
+        self.assertEqual([c.args[0] for c in calls], ["POST", "POST"])
+        self.assertTrue(calls[0].args[1].endswith("/messages/m1/trash"))
+        self.assertTrue(calls[1].args[1].endswith("/messages/m2/trash"))
+        self.assertEqual(gmail.trash([]), 0)
+        for c in calls:
+            self.assertNotIn("delete", c.args[1])
 
     def test_ensure_label_reuses_or_creates(self):
         self.http.request.side_effect = [Resp(data={"labels": [{"id": "L9", "name": "JARVIS/Urgente"}]})]
