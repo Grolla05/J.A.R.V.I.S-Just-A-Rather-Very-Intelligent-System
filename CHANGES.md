@@ -2,6 +2,54 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+## Correção: busca no vault do Obsidian (RAG) e alucinação sobre notas
+
+**Data:** 2026-11-23
+**Escopo:** Pelo Discord, "JARVIS acesse meu obsidian e leia a nota sobre o meu projeto OHMFLOW e me diga do que que ele se trata" virou uma descrição inventada ("sistema de hidrólise em micro-ondas"). O vault estava acessível; o RAG é que nunca trazia a nota. Vale para TUI, voz e ponte Telegram/Discord (todos passam por `get_vault_context`).
+
+### Causas
+
+| # | Causa | Efeito |
+|---|-------|--------|
+| 1 | `search_scored` / `search` chamavam `GET /search/simple/`. No plugin Local REST API essa rota é **POST**; o GET dá 404, que o `_send` lê como "nota não existe" | A Camada 2 (busca no vault) **sempre** voltava vazia |
+| 2 | A consulta pegava as 4 primeiras palavras com mais de 3 letras | Virou `acesse obsidian leia nota`: o nome do projeto ficou de fora |
+| 3 | O ranking era só o score do plugin | `System Boost - CHANGES.md` (que só cita "ohmflow") vinha antes das notas do OhmFlow |
+| 4 | Sem nota no contexto, nada impedia o modelo de inventar; o prompt de sistema citava a tag `[MEMÓRIA DO VAULT — ...]`, mas o bloco real se chamava `[MEMÓRIA PESSOAL — ...]` | O modelo escreveu a tag e inventou o conteúdo |
+
+### O que mudou
+
+| Arquivo | Mudança |
+|---------|---------|
+| `backend/core/obsidian.py` | Busca por **POST** com timeout de 15 s (`SEARCH_TIMEOUT_S`; a 1ª busca com o índice frio passava de 5 s). `search_keywords()`: ignora palavras do pedido (`_REQUEST_WORDS`: acesse, leia, nota, obsidian, diga, sobre, projeto…), põe nome próprio/sigla (com maiúscula) primeiro e só ignora "jarvis" quando é chamado ("JARVIS, …"), não quando é o assunto. `_rank()`: caminho que cita as palavras > nota principal da pasta > score. `_main_note()`: se a pasta é o assunto (`🚀 Projetos/OhmFlow/…`), lê `OhmFlow.md`/`index.md`, a não ser que o nome da nota cite outra palavra da pergunta ("arquitetura" → `OhmFlow - 02 Arquitetura.md`). Busca com vários termos vazia → tenta só o principal. `asks_vault()`: detecta pedido explícito de nota/projeto/vault |
+| `backend/services/brain.py` | Passa `vault_missing=True` quando o usuário pediu uma nota e o vault não trouxe nada |
+| `backend/services/chat.py` | `vault_missing` → bloco `vault_not_found.md`. Temperatura 0,1 também quando há nota do vault ou o aviso de nota não achada |
+| `backend/prompts/vault_not_found.md` | Novo: "não encontrei essa nota, qual o nome exato?", sem inventar. Escrito como instrução simples, sem tag — o gemma2:2b copiava o bloco com tag palavra por palavra |
+| `backend/prompts/vault_memory.md` | Tag alinhada com o prompt de sistema: `[MEMÓRIA DO VAULT — nota]` |
+| `backend/prompts/system_prompt.md` | Regra 6: sem bloco do vault, não leu nota nenhuma — nunca inventar conteúdo nem escrever a tag |
+| `backend/tests/test_vault_search.py` | Novo (21 testes): POST, palavras do assunto, ranking, nota principal × nota do tema, nova tentativa, `asks_vault`, aviso e temperatura, flag no `brain` |
+
+### Documentação
+
+| Arquivo | Mudança |
+|---------|---------|
+| `backend/docs/core/obsidian.md` | Reescrito: ainda descrevia o `ObsidianMCPClient`/`uvx` (removidos em 19/11). Agora: cliente REST, busca POST e score negativo, as duas camadas do RAG passo a passo, aviso de nota não encontrada e como manter `_REQUEST_WORDS` |
+| `backend/core/README.md` | Linha do `obsidian.py` atualizada; tirado `mcp_client` do exemplo de import e o "prepara o cliente MCP" |
+| `backend/services/README.md` | `build_messages` inclui `vault_not_found.md` |
+| `backend/docs/services/brain.md` | Passo 5 do pipeline com `vault_missing` |
+| `docs/banco-de-dados.md` | Camada 2 descrita como está agora (assunto, POST, ranking, nota principal, aviso) |
+| `docs/arquitetura.md` | Fluxo do Chat cita o aviso de nota não encontrada |
+
+### Validação
+
+- `pytest tests -q -n auto`: 1192 passaram. A única falha (`test_tui_tools.py::TestClipCommand::test_clip_bad_action_and_empty_history`) já falha na `DEV` sem estas mudanças.
+- `ruff check .` limpo em `backend/` e `frontend/`.
+- Vault real: a pergunta original agora lê `🚀 Projetos/OhmFlow/OhmFlow.md`; "arquitetura do OhmFlow" lê `OhmFlow - 02 Arquitetura.md`; "projeto System Boost" lê `System Boost.md`.
+- Ollama (gemma2:2b): a resposta sobre o OhmFlow sai da nota (C99, Windows, SQLite, desfazer/refazer, instalador); nota inexistente → "Não encontrei nenhuma nota relacionada ao projeto Xyzabc no vault…".
+
+### Pendente (fora deste escopo)
+
+- O classificador estoura `TIMEOUT_API` (10 s) em toda mensagem: o gemma2:2b só cabe ~77% na VRAM e o prompt do classificador tem ~3,4 mil tokens. Toda mensagem cai em CHAT (skills não disparam pela ponte). O Ollama limita o gemma2 a 8192 de contexto, mesmo com o servidor em 32k.
+
 ## Refatoração do AGENTS.md: documentação dividida em `docs/`
 
 **Data:** 2026-11-23

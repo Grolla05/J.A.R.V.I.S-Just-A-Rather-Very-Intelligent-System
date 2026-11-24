@@ -60,9 +60,11 @@ def _prompt(filename, **kwargs):
 
 
 def build_messages(text, intent_type="CHAT", vault_context="", vault_filename="", session_id="default",
-                   live_context="", mode="chat"):
+                   live_context="", mode="chat", vault_missing=False):
     """Mensagens do chat: system (personalidade + modo + HARDWARE/MEMORY_READ),
     telemetria ao vivo, nota do vault, dados reais (live_context), histórico e a pergunta.
+    vault_missing=True: o usuário pediu uma nota e a busca não achou → aviso
+    (`vault_not_found.md`) para o modelo não inventar o conteúdo.
     Todo texto de instrução vem de backend/prompts/*.md."""
     sys_instruction = SYSTEM_PROMPT['content'] + "\n\n" + _prompt(MODE_PROMPTS.get(mode, "mode_chat.md"))
 
@@ -82,6 +84,8 @@ def build_messages(text, intent_type="CHAT", vault_context="", vault_filename=""
         log.info(f"[VAULT PREVIEW — {vault_filename}]: {vault_context[:500]}")
         messages.append({'role': 'system',
                          'content': _prompt("vault_memory.md", note=vault_filename, content=vault_context)})
+    elif vault_missing:
+        messages.append({'role': 'system', 'content': _prompt("vault_not_found.md")})
 
     if live_context:  # dados reais (agenda…) — services/live_context.py
         messages.append({'role': 'system', 'content': live_context})
@@ -89,22 +93,24 @@ def build_messages(text, intent_type="CHAT", vault_context="", vault_filename=""
     return messages + get_session_history_for_ai(session_id) + [{'role': 'user', 'content': text}]
 
 
-def _temperature(intent_type, live_context):
-    return 0.1 if live_context or intent_type in ("HARDWARE", "MEMORY_READ") else 0.7
+def _temperature(intent_type, grounded):
+    """Baixa quando a resposta deve sair de uma fonte (dados reais, nota do vault, aviso de nota não achada)."""
+    return 0.1 if grounded or intent_type in ("HARDWARE", "MEMORY_READ") else 0.7
 
 
 def ask_local_ai(text, intent_type="CHAT", entity=None, vault_context="", vault_filename="", session_id="default",
-                 live_context=""):
+                 live_context="", vault_missing=False):
     """Modo voz (standalone): resposta inteira, sem Markdown."""
-    messages = build_messages(text, intent_type, vault_context, vault_filename, session_id, live_context, mode="voice")
-    reply = query_ollama(messages, temperature=_temperature(intent_type, live_context))
+    messages = build_messages(text, intent_type, vault_context, vault_filename, session_id, live_context, mode="voice",
+                              vault_missing=vault_missing)
+    reply = query_ollama(messages, temperature=_temperature(intent_type, live_context or vault_context or vault_missing))
     if reply:
         return reply.replace("*", "").replace("#", "").strip()
     return LEGACY_ERROR_REPLY
 
 
 def ask_local_ai_stream(text, intent_type="CHAT", entity=None, vault_context="", vault_filename="", session_id="default",
-                        images=None, mode="chat", live_context=""):
+                        images=None, mode="chat", live_context="", vault_missing=False):
     """Stream da resposta. Falha do Ollama sobe como `core.llm.LLMError`."""
     if images:
         # Imagem anexada: roteia pro modelo de visão com um contexto mínimo e
@@ -126,6 +132,7 @@ def ask_local_ai_stream(text, intent_type="CHAT", entity=None, vault_context="",
         return
 
     messages = build_messages(text, intent_type, vault_context, vault_filename, session_id, live_context,
-                              mode="copilot" if mode == "copilot" else "chat")
-    for chunk in query_ollama_stream(messages, temperature=_temperature(intent_type, live_context)):
+                              mode="copilot" if mode == "copilot" else "chat", vault_missing=vault_missing)
+    grounded = live_context or vault_context or vault_missing
+    for chunk in query_ollama_stream(messages, temperature=_temperature(intent_type, grounded)):
         yield chunk

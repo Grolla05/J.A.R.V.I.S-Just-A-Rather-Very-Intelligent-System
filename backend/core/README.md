@@ -3,11 +3,11 @@
 Singletons e serviços de baixo nível usados pelo resto do JARVIS. O `__init__.py` expõe os principais:
 
 ```python
-from core import settings, log, db, obsidian, mcp_client, get_vault_context, manager, SystemInfo, load_prompt
+from core import settings, log, db, obsidian, get_vault_context, manager, SystemInfo, load_prompt
 import core.state as state   # estado global (não instancie SystemInfo de novo)
 ```
 
-Importar `core` abre o banco, carrega as skills e prepara o cliente MCP. Por isso o agente residente (`agent.py`) registra um pacote `core` vazio e importa só os módulos leves (`config`, `logger`, `hotkey`, `presence`, `autostart`, `launcher`, `window_utils`, `updater`, `selection`, `wt_profile`).
+Importar `core` abre o banco e prepara os singletons (as skills carregam no boot, por `manager.ensure_loaded()`). Por isso o agente residente (`agent.py`) registra um pacote `core` vazio e importa só os módulos leves (`config`, `logger`, `hotkey`, `presence`, `autostart`, `launcher`, `window_utils`, `updater`, `selection`, `wt_profile`).
 
 ## Fundação
 
@@ -48,7 +48,7 @@ Importar `core` abre o banco, carrega as skills e prepara o cliente MCP. Por iss
 
 | Módulo | Papel |
 |---|---|
-| `obsidian.py` | `ObsidianClient` (REST) + `ObsidianMCPClient` (`uvx mcp-obsidian`). `get_vault_context(texto)`: camada 1 = palavras de perfil → `⚙️ Configurações/🧠 Sobre mim.md`; camada 2 = busca no vault → nota de maior score. `save_memory` nunca sobrescreve |
+| `obsidian.py` | `ObsidianClient` (API REST do plugin Local REST API; busca por **POST**). `get_vault_context(texto)`: camada 1 = palavras de perfil → `⚙️ Configurações/🧠 Sobre mim.md`; camada 2 = palavras do assunto (`search_keywords`) → busca → ranking por caminho/nota principal da pasta (`_rank`, `_main_note`). `asks_vault()` marca pedido de nota sem resultado (o chat avisa em vez de inventar). `save_memory` nunca sobrescreve. Detalhes: `docs/core/obsidian.md` |
 | `transcription.py` | Whisper local (faster-whisper) para áudio anexado |
 | `uploads.py` | Valida (MIME, tamanho) e grava anexos em `DIR_UPLOADS` |
 
