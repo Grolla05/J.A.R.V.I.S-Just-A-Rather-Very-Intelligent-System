@@ -102,7 +102,7 @@ J.A.R.V.I.S/
 │   │   ├── automation/      ← app_control, audio_control, browser_tabs, clipboard_assistant, keyboard_control,
 │   │   │                       screen_control, software_install, spotify_control, work_macros, youtube_control  (só Copilot/voz)
 │   │   ├── system/          ← network_guard, status_report, system_clear, system_security (só Copilot/voz)
-│   │   ├── productivity/    ← calendar_agenda, daily_briefing, email_organize, email_read, email_send, email_trash, focus_mode,
+│   │   ├── productivity/    ← calendar_agenda, daily_briefing, email_management, focus_mode,
 │   │   │                       github_control, insight_note, presentation_mode, reminder, screen_read, traffic_commute (Chat e Copilot)
 │   │   └── web/             ← web_search                                          (Chat e Copilot)
 │   ├── prompts/             ← Arquivos .md de prompt (system_prompt, classify_intent, mode_chat, mode_copilot, briefing...; skills/ p/ PROMPT_TEXT)

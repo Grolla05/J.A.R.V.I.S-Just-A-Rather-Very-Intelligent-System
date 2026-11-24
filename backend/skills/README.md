@@ -40,7 +40,7 @@ Antes de chamar o Ollama, `services/intent.py` compara a mensagem (minúsculas, 
 | `productivity` | sim | sim |
 | `web` | sim | sim |
 
-O bloqueio no Chat vem de `CHAT_BLOCKED_CATEGORIES` em `services/intent.py`: essas skills nem são oferecidas ao classificador, e o `brain` confere de novo antes de executar. O usuário ainda pode desligar qualquer skill ou categoria em `/skills`.
+O Chat usa a lista branca `CHAT_ALLOWED_CATEGORIES = ("productivity", "web")` em `services/intent.py`: skills de outras categorias nem são oferecidas ao classificador, e o `brain` confere de novo antes de executar. O usuário ainda pode desligar qualquer skill ou categoria em `/skills`.
 
 ## Skills atuais
 
@@ -59,10 +59,7 @@ O bloqueio no Chat vem de `CHAT_BLOCKED_CATEGORIES` em `services/intent.py`: ess
 | system | `SYSTEM_SECURITY` | Bloquear, suspender, desligar, modo sentinela |
 | productivity | `CALENDAR` | Eventos do Google Agenda: dia (hoje, amanhã, dia da semana), semana, fim de semana, mês, ano, os próximos e a próxima reunião |
 | productivity | `DAILY_BRIEFING` | Briefing do dia (`core/briefing.py`) |
-| productivity | `EMAIL_READ` | E-mails do Gmail por prioridade; "leia o e-mail 2" resume (conteúdo como dado) |
-| productivity | `EMAIL_SEND` | Responde/escreve e-mail, com anexo do computador e contato por nome; rascunho + "sim" |
-| productivity | `EMAIL_TRASH` | "Apaga o e-mail 3" / "as promoções" → Lixeira do Gmail (30 dias) com confirmação |
-| productivity | `EMAIL_ORGANIZE` | Plano de organização da caixa (arquivar/marcadores) + "sim"; nunca apaga |
+| productivity | `EMAIL_MANAGEMENT` | Cartucho do Gmail: lê por prioridade e resume ("leia o e-mail 2"); responde/escreve com anexo e contato por nome (rascunho + "sim"); "apaga o e-mail 3" → Lixeira (30 dias) com confirmação; organiza a caixa (plano + "sim", nunca apaga). Ação escolhida por regex |
 | productivity | `FOCUS_MODE` | Pomodoro e Não Perturbe |
 | productivity | `REMINDER` | "Me lembra em 30 min de…", listar e cancelar lembretes |
 | productivity | `INSIGHT_SAVE` | "Anota essa ideia: …" → 🧠 Brainstorms no Obsidian |

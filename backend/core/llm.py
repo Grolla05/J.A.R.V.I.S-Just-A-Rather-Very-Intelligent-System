@@ -77,7 +77,7 @@ def query_ollama(messages, format=None, temperature=0.7, timeout=None, model=Non
     """Centraliza chamadas ao Ollama para tratamento de erro e config.
 
     timeout: segundos antes de desistir. None = 120s (default robusto).
-    Classificação/extração devem passar um timeout curto (settings.TIMEOUT_API).
+    Classificação/extração devem passar settings.TIMEOUT_LLM.
     keep_alive mantém o modelo residente na VRAM (settings.OLLAMA_KEEP_ALIVE).
     model/keep_alive: override explícito (ex: modelo de visão + keep_alive curto).
     """

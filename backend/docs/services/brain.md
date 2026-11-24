@@ -16,7 +16,7 @@ O `brain` recebe cada mensagem (digitada ou falada) e decide o destino: confirma
 ```
 1. Há ação crítica pendente?      → a mensagem é a resposta (sim/pode/ok… = aprovado)
 2. classify_intent(...)           → {intent, entity, confidence}
-      modo chat: exclude_categories = ("automation", "system")
+      modo chat: allowed_categories = ("productivity", "web")
 3. intent == MEMORY_WRITE         → memory.extract_fact_to_memory(command)
 4. skill ligada e permitida       → on_route(intent); skill.execute(entity, command)
       copilot: qualquer skill · chat: só skill_allowed_in_chat()

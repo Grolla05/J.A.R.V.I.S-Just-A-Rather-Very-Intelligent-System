@@ -9,7 +9,7 @@ texto (TUI ou voz)
   └─ brain.execute_command_stream(texto, session_id, images, mode, on_route)
        ├─ ação crítica pendente?  → confirm_pending_action (sim/não)
        ├─ intent.classify_intent  → Ollama em JSON {intent, entity, confidence}
-       │     Chat: exclude_categories=("automation", "system")
+       │     Chat: allowed_categories=("productivity", "web")
        ├─ MEMORY_WRITE            → memory.extract_fact_to_memory → Obsidian
        ├─ skill ligada/permitida  → on_route(intent) → skill.execute(entity, texto)
        │     str → 1 pedaço · iterável (ex.: SCREEN_READ) → repassado em stream
@@ -23,8 +23,8 @@ texto (TUI ou voz)
 
 | Módulo | Papel |
 |---|---|
-| `brain.py` | Roteador. Modos `chat` (só skills fora de `automation`/`system`) e `copilot` (todas). `force_chat=True` manda direto ao LLM (trecho a explicar). `confirm_pending_action(approved, explicit_decline)` executa `pending['on_confirm']`, ou `pending['on_decline']` na recusa explícita, ou encerra o processo-alvo |
-| `intent.py` | `classify_intent(texto, skip_skills, exclude_categories)` com cache TTL (30 s, 64 entradas). Intents fixos: `HARDWARE`, `MEMORY_READ`, `MEMORY_WRITE`, `CHAT`, mais os `INTENT` das skills ligadas. `is_skill_enabled`, `skill_allowed_in_chat` |
+| `brain.py` | Roteador. Modos `chat` (só skills ativas de `productivity`/`web`) e `copilot` (todas). `force_chat=True` manda direto ao LLM (trecho a explicar). `confirm_pending_action(approved, explicit_decline)` executa `pending['on_confirm']`, ou `pending['on_decline']` na recusa explícita, ou encerra o processo-alvo |
+| `intent.py` | `classify_intent(texto, skip_skills, allowed_categories)` com cache TTL (30 s, 64 entradas). Intents fixos: `HARDWARE`, `MEMORY_READ`, `MEMORY_WRITE`, `CHAT`, mais os `INTENT` das skills ligadas. `is_skill_enabled`, `skill_allowed_in_chat` |
 | `chat.py` | `build_messages` monta: `system_prompt.md` + regras do modo (`mode_chat.md`, `mode_copilot.md` ou `mode_voice.md`) + `hardware_context.md` (intent `HARDWARE`) ou `memory_read.md` (intent `MEMORY_READ`) + `live_data.md` (telemetria) + `vault_memory.md` (nota do vault) ou `vault_not_found.md` (`vault_missing`: pediu nota e o vault não achou) + `live_context` + últimas 8 mensagens da sessão. Nenhum texto de prompt no `.py`. Imagens vão para o modelo de visão (`vision_context.md`) |
 | `live_context.py` | Pergunta sobre agenda ("o que tenho amanhã?") → eventos reais do Google Agenda no prompt, com instrução de não inventar |
 | `memory.py` | Extrai chave/valor de "lembre que…" e grava em `🚀 Projetos/J.A.R.V.I.S/Memória/{chave}.md` |

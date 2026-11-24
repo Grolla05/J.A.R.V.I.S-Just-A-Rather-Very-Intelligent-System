@@ -1,4 +1,4 @@
-"""services.email_trash + skill EMAIL_TRASH — "apaga o e-mail 3" move para a Lixeira, só depois do "sim"."""
+"""services.email_trash + skill EMAIL_MANAGEMENT (ação apagar) — "apaga o e-mail 3" move para a Lixeira, só depois do "sim"."""
 import importlib.util
 import os
 import unittest
@@ -14,7 +14,7 @@ from core import gmail, pending  # noqa: E402
 from services import email_trash, mailbox  # noqa: E402
 
 PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "skills", "productivity",
-                    "email_trash.py")
+                    "email_management.py")
 
 
 def msg(i, subject, labels=(), name="Loja"):
@@ -106,10 +106,10 @@ class TestRequest(TrashCase):
 
 class TestSkill(TrashCase):
     def test_contract(self):
-        spec = importlib.util.spec_from_file_location("email_trash_skill", PATH)
+        spec = importlib.util.spec_from_file_location("email_management_skill", PATH)
         skill = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(skill)
-        self.assertEqual(skill.INTENT, "EMAIL_TRASH")
+        self.assertEqual(skill.INTENT, "EMAIL_MANAGEMENT")
         with patch.object(email_trash, "request", return_value="pergunta") as req:
             self.assertEqual(skill.execute("3", "apaga o e-mail 3"), "pergunta")
         req.assert_called_once_with("3 apaga o e-mail 3")

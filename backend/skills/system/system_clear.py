@@ -36,7 +36,7 @@ def _ask_ollama_cleanup_expert(user_text):
     # core.llm normaliza OLLAMA_HOST e trata erro (devolve None).
     return query_ollama([{"role": "system", "content": CLEANUP_DECISION_PROMPT},
                          {"role": "user", "content": user_text}],
-                        format="json", temperature=0.1, timeout=settings.TIMEOUT_API)
+                        format="json", temperature=0.1, timeout=settings.TIMEOUT_LLM)
 
 # --- HELPERS DE DESCOBERTA DE APPS (Baseado no app_control) ---
 def get_installed_apps():
