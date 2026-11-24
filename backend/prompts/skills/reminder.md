@@ -2,3 +2,5 @@
   Use quando: Usuário pedir "me lembra em 30 minutos de...", "me avisa às 18h para...", "cria um lembrete para amanhã às 9h", "quais lembretes eu tenho", "cancela o lembrete 2".
   NÃO use para consultar a agenda do Google (isso é CALENDAR) nem para anotar ideia sem horário (isso é INSIGHT_SAVE).
   Entity: o assunto do lembrete, se citado.
+  Exemplos:
+  - "me lembra em 30 minutos de tirar a roupa da máquina" -> {"intent": "REMINDER", "entity": "tirar a roupa da máquina", "confidence": 1.0}

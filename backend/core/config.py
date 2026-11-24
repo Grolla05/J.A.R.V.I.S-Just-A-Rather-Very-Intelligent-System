@@ -182,7 +182,10 @@ class Settings:
     TIMEOUT_SPOTIFY: int = 8          # s — timeout de cada request à Web API
 
     # Adicionado: Timeouts Globais (Robustez de Rede)
-    TIMEOUT_API: int = 10  # Segundos para esperar a IA responder
+    TIMEOUT_API: int = _env_int("TIMEOUT_API", 10)  # s — requisições HTTP (GitHub, notícias, web, YouTube)
+    # s — chamadas curtas ao Ollama (classificador, decisões das skills). Modelo pequeno com
+    # parte das camadas na CPU passa de 10 s num prompt de ~3 mil tokens.
+    TIMEOUT_LLM: int = _env_int("TIMEOUT_LLM", 30)
     TIMEOUT_VOICE: int = 5 # Segundos para esperar o reconhecimento de voz
 
     # --- Cache de Classificação de Intenção (LRU + TTL) ---

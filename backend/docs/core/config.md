@@ -35,7 +35,8 @@ Todas as chaves leem valores padrões via `os.getenv`, garantindo tolerância a 
 - **Mecanismos de Cérebro (Ollama)**: Controla centralmente o endereço e modelo local (`OLLAMA_MODEL`, `OLLAMA_HOST`). Alterar o modelo aqui propaga instantaneamente a inteligência na inicialização do `brain.py`.
 - **Credenciais do Cofre de Memória (Obsidian)**: Configura o acesso com `OBSIDIAN_HOST` e a porta criptografada pela `OBSIDIAN_API_KEY`.
 - **Métricas de Rede e Resiliência (Timeouts)**:
-  - `TIMEOUT_API (10s)`: Define o prazo de desistência da requisição do LLM.
+  - `TIMEOUT_API (10s)`: Prazo das requisições HTTP (GitHub, notícias, web, YouTube).
+  - `TIMEOUT_LLM (30s)`: Prazo das chamadas curtas ao Ollama (classificador de intenção e decisões das skills).
   - `TIMEOUT_VOICE (5s)`: Interrupção segura do STT de reconhecimento para que o loop cognitivo não fique congelado caso o microfone trave.
 - **Acústica e STT (Microfone/Falas)**: Define `DEFAULT_LANGUAGE` (nativamente pt-BR), velocidade de processamento vocal (`SPEECH_RATE`), o índice local de placa de som (`MIC_INDEX`), `MIC_ENERGY_THRESHOLD` e as `WAKE_WORDS`.
 - **Demais grupos**: Ollama avançado (`OLLAMA_KEEP_ALIVE`, `OLLAMA_NUM_CTX`, `OLLAMA_NUM_GPU`, `OLLAMA_AUTOSTART`, `OLLAMA_VISION_MODEL`), Whisper (`WHISPER_*`), leitura de tela (`OCR_LANGUAGE`, `SCREEN_TEXT_MAX`), anexos (`MAX_UPLOAD_SIZE_MB`), integrações (`GOOGLE_CLIENT_ID/SECRET`, `SPOTIFY_CLIENT_ID`, `GITHUB_TOKEN`, `GITHUB_DEFAULT_REPO`, `TOMTOM_API_KEY`), agente (`GLOBAL_HOTKEY`, `TRANSLATE_HOTKEY`), atualização (`AUTO_UPDATE`, `UPDATE_REPO`) e Pomodoro (`POMODORO_*`). A lista comentada fica no `env.example`.

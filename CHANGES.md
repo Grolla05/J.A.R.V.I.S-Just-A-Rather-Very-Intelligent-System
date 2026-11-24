@@ -2,6 +2,50 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+## Correção: classificador estourando o tempo + cartucho único de e-mail
+
+**Data:** 2026-11-24
+**Escopo:** Em toda mensagem (visto pela ponte do Discord, modo Chat) o classificador passava de `TIMEOUT_API` (10 s) e caía em CHAT: skills não disparavam. Causa: gemma2:2b só ~77% na VRAM e prompt do classificador com ~3,4 mil tokens. A janela de contexto **não** foi aumentada: o gemma2:2b tem teto de 8192 e mais contexto = mais KV cache na VRAM (~104 KB/token), o que pioraria a parte que já roda na CPU.
+
+### O que mudou
+
+| Arquivo | Mudança |
+|---------|---------|
+| `backend/core/config.py` | Novo `TIMEOUT_LLM` (padrão 30 s) para as chamadas curtas ao Ollama. `TIMEOUT_API` (10 s) fica só para HTTP (GitHub, notícias, web, YouTube); os dois agora podem vir do `.env` |
+| `backend/services/intent.py` | Classificador usa `TIMEOUT_LLM`. Chat por **lista branca**: `CHAT_ALLOWED_CATEGORIES = ("productivity", "web")` no lugar de `CHAT_BLOCKED_CATEGORIES`; `classify_intent(..., allowed_categories=)` (None = todas, Copilot). Só skills ativas dessas categorias entram no prompt; categoria nova não vaza para o Chat |
+| `backend/services/brain.py` | Chat passa `allowed_categories=CHAT_ALLOWED_CATEGORIES` |
+| `backend/skills/**` | Chamadas de decisão ao Ollama (app, áudio, abas, teclado, tela, Spotify, macros, YouTube, GitHub, limpeza, segurança) usam `TIMEOUT_LLM` |
+| `backend/prompts/classify_intent.md` | Exemplos de skills saíram do prompt base (ficaram só os de MEMORY_READ/WRITE). Prompt base: 5,2 mil → 1,9 mil caracteres. Regra 4 dizia "use CHAT apenas se for saudação", contradizendo a definição de CHAT: no teste real, "me explica recursão em python" virava `SCREEN_READ`. Agora: skill só quando o pedido se encaixa no "Use quando" dela; o resto é CHAT |
+| `backend/prompts/skills/*.md` | Cada skill ganhou os seus exemplos no próprio bloco: só entram quando a skill é oferecida (no Chat não aparecem mais exemplos de APP_CONTROL, SPOTIFY, SYSTEM_SECURITY…) |
+| `backend/skills/productivity/email_management.py` | Novo cartucho **`EMAIL_MANAGEMENT`** no lugar de `EMAIL_READ`, `EMAIL_SEND`, `EMAIL_TRASH` e `EMAIL_ORGANIZE`. A ação sai da frase por regex (`action_for`, sem nova ida ao modelo): apagar → organizar → enviar/responder → ler. Comportamento igual ao de antes: mesmas confirmações (`pending` com os tipos `EMAIL_SEND`/`EMAIL_TRASH`/`EMAIL_ORGANIZE`), nada é excluído de vez |
+| `backend/prompts/skills/email_management.md` | Um bloco só (substitui os 4 `email_*.md`) |
+| `env.example` | `TIMEOUT_LLM=30` e `TIMEOUT_API=10` |
+| `backend/tests/test_tui_tools.py` | `test_clip_bad_action_and_empty_history` agora usa o banco de teste: lia o histórico de clipboard real do usuário e falhava em quem tinha histórico |
+
+### Tamanho do prompt do classificador (estimado, ~3,5 caracteres/token)
+
+| Mensagem | Modo | Antes | Depois |
+|----------|------|-------|--------|
+| "me explica recursão em python" (nenhuma KEYWORD) | Chat | ~3.440 | ~2.800 |
+| "qual minha agenda amanhã?" | Chat | ~1.660 | ~810 |
+| "leia o e-mail 2" | Chat | ~2.000 | ~945 |
+| "me explica recursão em python" | Copilot | ~5.190 | ~4.930 |
+
+### Atenção
+
+- Quem tinha desligado alguma `EMAIL_*` em `/skills` precisa desligar `EMAIL_MANAGEMENT` de novo (a chave antiga fica órfã no banco, sem efeito).
+
+### Documentação
+
+`docs/skills.md`, `docs/arquitetura.md` (seção 5.7 e classificador), `docs/fluxos.md`, `docs/estrutura.md`, `backend/skills/README.md`, `backend/services/README.md`, `backend/docs/services/brain.md`, `backend/docs/core/config.md`.
+
+### Validação
+
+- `pytest tests -q -n auto`: todos passam, inclusive o teste do `/clip` que falhava na `DEV`. Novos: lista branca (categoria inventada fica fora do Chat, skill desligada some), timeout do classificador, exemplos no bloco de cada skill, roteamento das 15 frases do cartucho de e-mail.
+- `ruff check .` limpo em `backend/` e `frontend/`.
+- Ollama real (gemma2:2b, 8192 de contexto, 23%/77% CPU/GPU), 16 frases: com KEYWORD o classificador responde em **2–4 s** (na `DEV`: 6–10 s, e a 1ª estourou os 10 s). Sem KEYWORD (todas as productivity/web): 10–15 s, dentro dos 30 s. Acertos: 14 de 16.
+- Erros que sobram (limite do gemma2:2b): "abre o spotify" no Chat vira `SCREEN_READ` (na `DEV` virava `APP_CONTROL`, bloqueado depois pelo `brain`); "qual a capital da França?" vira `WEB_SEARCH` (responde, só que pela busca).
+
 ## Correção: busca no vault do Obsidian (RAG) e alucinação sobre notas
 
 **Data:** 2026-11-23

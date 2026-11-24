@@ -21,7 +21,7 @@ Passo a passo de uma fala (modo Copilot) e de uma mensagem digitada (modo Chat).
 2. JarvisApp.send      → monta bolhas e dispara o worker _stream (thread)
 3. db.log_interaction  → salva a mensagem (com anexo, se houver /attach)
 4. brain.py            → execute_command_stream(text, session_id, images, mode)
-5. intent.py           → classify_intent(text, exclude_categories=("automation", "system") no Chat)
+5. intent.py           → classify_intent(text, allowed_categories=("productivity", "web") no Chat)
 6. chat.py             → ask_local_ai_stream() → Ollama stream (ou skill no Copilot)
 7. MessageView         → call_from_thread(set_text) a cada 50 ms → Markdown em tempo real
 ```

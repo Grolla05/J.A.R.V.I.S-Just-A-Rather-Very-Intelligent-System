@@ -46,7 +46,7 @@ def _ask_ollama_keyboard_expert(user_text):
     # core.llm normaliza OLLAMA_HOST e trata erro (devolve None).
     return query_ollama([{"role": "system", "content": KEYBOARD_EXPERT_PROMPT},
                          {"role": "user", "content": user_text}],
-                        format="json", temperature=0.1, timeout=settings.TIMEOUT_API)
+                        format="json", temperature=0.1, timeout=settings.TIMEOUT_LLM)
 
 def execute(entity, command_text):
     if not command_text:

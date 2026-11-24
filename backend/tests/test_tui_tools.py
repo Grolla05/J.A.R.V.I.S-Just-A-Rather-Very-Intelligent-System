@@ -584,8 +584,10 @@ class TestClipCommand(ToolsAppCase):
 
     async def test_clip_bad_action_and_empty_history(self):
         from core import clipboard
+        from services import clip_history
         app = self._app()
-        with patch.object(clipboard, "act") as act:
+        # banco de teste vazio: sem o patch, /clip hist lia o histórico real do usuário
+        with patch.object(clip_history, "db", self.db), patch.object(clipboard, "act") as act:
             async with app.run_test() as pilot:
                 await self._send(pilot, "/clip dançar")
                 await self._send(pilot, "/clip hist")

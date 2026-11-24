@@ -6,7 +6,7 @@ from core.alerts import process_system_alert
 from core.obsidian import asks_vault, get_vault_context
 from services import live_context
 from services.chat import ask_local_ai, ask_local_ai_stream
-from services.intent import CHAT_BLOCKED_CATEGORIES, classify_intent, is_skill_enabled, skill_allowed_in_chat
+from services.intent import CHAT_ALLOWED_CATEGORIES, classify_intent, is_skill_enabled, skill_allowed_in_chat
 from services.memory import extract_fact_to_memory
 
 # Modos da interface de texto: CHAT roda só skills de consulta/produtividade
@@ -130,8 +130,8 @@ def execute_command_stream(command, session_id='default', images=None, mode=MODE
         yield res
         return
 
-    exclude = () if mode == MODE_COPILOT else CHAT_BLOCKED_CATEGORIES
-    decision = classify_intent(command, exclude_categories=exclude)
+    allowed = None if mode == MODE_COPILOT else CHAT_ALLOWED_CATEGORIES
+    decision = classify_intent(command, allowed_categories=allowed)
     intent = decision.get("intent")
     entity = decision.get("entity")
     log.info(f"🧠 [INTENÇÃO DETECTADA STREAM/{mode}]: {intent} (Confiança: {decision.get('confidence')})")

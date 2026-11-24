@@ -19,7 +19,7 @@ def execute(entity: str, command: str) -> str:
 
 > ⚠️ `execute()` recebe **2 argumentos**: `entity` e `command`. Skills antigas com 1 argumento quebrarão o routing.
 > `execute()` devolve `str` ou, para resposta longa do LLM, um iterável de pedaços (stream): o `brain` repassa na TUI e junta na voz (ex.: `SCREEN_READ`).
-> No modo **Copilot** (e no modo voz) todas as skills executam. No modo **Chat** só as de categoria fora de `CHAT_BLOCKED_CATEGORIES` (`automation` e `system`, em `services/intent.py`): o classificador roda com `exclude_categories=` e o `brain` confere `skill_allowed_in_chat()`. Productivity e web (agenda, trânsito, GitHub, busca, briefing, foco, apresentação, leitura de tela) rodam nos dois modos.
+> No modo **Copilot** (e no modo voz) todas as skills executam. No modo **Chat** só as **ativas** das categorias em `CHAT_ALLOWED_CATEGORIES` (`productivity` e `web`, lista branca em `services/intent.py`): o classificador roda com `allowed_categories=` e o `brain` confere `skill_allowed_in_chat()`. Categoria nova fica fora do Chat até entrar na lista. Productivity e web (agenda, trânsito, GitHub, busca, briefing, foco, apresentação, leitura de tela) rodam nos dois modos.
 > Dado externo que o Chat precisa responder (ex.: agenda) entra como contexto via `services/live_context.py` (detecção por palavra-chave + bloco de sistema em `prompts/*_context.md` com "não invente") — nunca deixe o LLM responder sobre dado pessoal sem a fonte no prompt.
 
 ## Como criar uma nova skill

@@ -2,3 +2,7 @@
   Use quando: o usuário se referir ao que está NA TELA/janela/monitor sem colar o conteúdo — "explica o erro na minha tela", "lê essa janela", "resolve a questão que está aberta", "resume o que tem no monitor 2", "o que está escrito aqui na tela?", "traduz essa página aberta", "resume essa página", "do que fala esse artigo aberto?".
   NÃO use para brilho, luz azul, mover janela ou trocar de monitor — isso é SCREEN_CONTROL. NÃO use quando o texto, código ou erro já veio colado na própria mensagem (isso é CHAT). NÃO use para o que foi copiado (isso é CLIPBOARD) nem para imagem anexada.
   Entity: "monitor N" se o usuário citar um monitor; "tela inteira" se pedir a tela toda; senão null.
+  Exemplos:
+  - "explica o erro que está na minha tela" -> {"intent": "SCREEN_READ", "entity": null, "confidence": 1.0}
+  - "resolve a questão aberta no monitor 2" -> {"intent": "SCREEN_READ", "entity": "monitor 2", "confidence": 1.0}
+  - "resume essa página aberta" -> {"intent": "SCREEN_READ", "entity": null, "confidence": 1.0}
