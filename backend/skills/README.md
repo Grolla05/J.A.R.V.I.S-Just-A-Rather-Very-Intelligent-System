@@ -59,6 +59,7 @@ O Chat usa a lista branca `CHAT_ALLOWED_CATEGORIES = ("productivity", "web")` em
 | system | `SYSTEM_REPORT` | Relatório da máquina (também usado na saudação) |
 | system | `SYSTEM_CLEANUP` | Esvazia a Lixeira, limpa temporários, desinstala app |
 | system | `SYSTEM_SECURITY` | Bloquear, suspender, desligar, modo sentinela |
+| system | `POWER_REPORT` | "Quanto o PC está gastando?" — watts agora, kWh e custo de hoje e do mês (`core/power.py`) |
 | productivity | `CALENDAR` | Eventos do Google Agenda: dia (hoje, amanhã, dia da semana), semana, fim de semana, mês, ano, os próximos e a próxima reunião |
 | productivity | `DAILY_BRIEFING` | Briefing do dia (`core/briefing.py`) |
 | productivity | `EMAIL_MANAGEMENT` | Cartucho do Gmail: lê por prioridade e resume ("leia o e-mail 2"); responde/escreve com anexo e contato por nome (rascunho + "sim"); "apaga o e-mail 3" → Lixeira (30 dias) com confirmação; organiza a caixa (plano + "sim", nunca apaga). Ação escolhida por regex |

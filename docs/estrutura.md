@@ -69,6 +69,7 @@ J.A.R.V.I.S/
 │   │   ├── utils.py         ← TTLCache
 │   │   ├── selection.py     ← Copia a seleção (Ctrl+C; `restore=True` devolve o clipboard anterior) e lê/escreve o clipboard via Win32 (agente)
 │   │   ├── skill_loader.py  ← Auto-discovery de skills (plug-and-play); carrega na etapa do boot (`manager.ensure_loaded()`), não no import
+│   │   ├── power.py         ← Consumo de energia: GPU medida (nvidia-smi) + CPU/resto estimados; `meter` integra kWh/dia (config `power_daily`)
 │   │   └── SystemInfo.py    ← psutil — monitoramento de hardware
 │   ├── services/            ← Serviços cognitivos
 │   │   ├── brain.py         ← Roteador: execute_command (voz) / execute_command_stream (TUI, por modo)
@@ -102,7 +103,7 @@ J.A.R.V.I.S/
 │   ├── skills/
 │   │   ├── automation/      ← app_control, audio_control, browser_tabs, clipboard_assistant, keyboard_control,
 │   │   │                       screen_control, software_install, spotify_control, work_macros, youtube_control  (só Copilot/voz)
-│   │   ├── system/          ← network_guard, status_report, system_clear, system_security (só Copilot/voz)
+│   │   ├── system/          ← network_guard, power_report, status_report, system_clear, system_security (só Copilot/voz)
 │   │   ├── productivity/    ← calendar_agenda, daily_briefing, email_management, focus_mode,
 │   │   │                       github_control, insight_note, presentation_mode, reminder, screen_read, traffic_commute (Chat e Copilot)
 │   │   └── web/             ← web_search                                          (Chat e Copilot)

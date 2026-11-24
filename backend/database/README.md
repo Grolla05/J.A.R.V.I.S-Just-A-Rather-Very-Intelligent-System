@@ -30,6 +30,7 @@ Chaves em uso:
 | `insights_pending`, `insights_seen` | `services/insights.py` | ideias na fila (Obsidian fora do ar) e as já gravadas |
 | `reminders_fired`, `reminders_geo_cache` | `services/reminders.py` | avisos de evento já dados e cache de geocodificação |
 | `net_baseline` | `services/net_guard.py` | linha de base do Vigia de rede |
+| `power_daily` | `core/power.py` | kWh e custo por dia (últimos dias) do consumo de energia |
 | `email_vip` | `services/mailbox.py` | remetentes VIP (`/email vip`) |
 | `email_signature` | `services/email_compose.py` | assinatura dos e-mails (`/email assinatura`) |
 | `remote_session:<canal>:<id>` | `services/remote_chat.py` | sessão atual de cada usuário da ponte Telegram/Discord |

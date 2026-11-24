@@ -42,7 +42,7 @@ Comandos `/` só existem no Chat.
 |---|---|---|
 | Boot (BIOS, `[  OK  ]`) | início | `screens/boot.py` |
 | Atualização disponível | início, se houver Release novo | `screens/update.py` |
-| Dashboard (CPU, RAM, GPU, rede, processos, saúde) | `/status` | `screens/status.py` |
+| Dashboard (CPU, RAM, GPU, rede, energia, processos, saúde) | `/status` | `screens/status.py` |
 | Cartuchos das skills | `/skills` | `screens/skills.py` |
 | Log de atividade + timeline do último turno | `/log` | `screens/log.py` |
 | Memória (vault do Obsidian) | `/vault` | `screens/vault.py` |
@@ -84,7 +84,7 @@ Todas herdam de `JarvisScreen` (`screens/base.py`): topo com selo, corpo e a lin
 
 ## Linha de status
 
-Uma única linha: telemetria (CPU, RAM, GPU, rede a cada 3 s) · selo de foco (`◷ FOCO 24m 1/4`, `☾ DND`, `[SILENT]`) · voz, e os atalhos à direita. Estado crítico pinta a conversa de vermelho (classe `-critical`); o Copilot usa a classe `-copilot`.
+Uma única linha: telemetria (CPU, RAM, GPU, rede e watts a cada 3 s) · selo de foco (`◷ FOCO 24m 1/4`, `☾ DND`, `[SILENT]`) · voz, e os atalhos à direita. Estado crítico pinta a conversa de vermelho (classe `-critical`); o Copilot usa a classe `-copilot`.
 
 ## Testes
 

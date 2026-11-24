@@ -5,7 +5,7 @@
 ## O que ele faz
 
 - **Chat** (texto, Markdown) e **Copilot** (só voz, com wake word "Jarvis"), alternados com `Shift+Tab`.
-- **Skills** plug-and-play (25): abrir/fechar apps, volume, Spotify, brilho, limpeza, bloqueio, agenda do Google, Gmail, GitHub, trânsito, pesquisa na web, Pomodoro, Modo Apresentação, lembretes, ideias no Obsidian… No Chat só rodam as de produtividade e web; no Copilot, todas. Ação que apaga, envia ou encerra algo sempre pede confirmação.
+- **Skills** plug-and-play (26): abrir/fechar apps, volume, Spotify, brilho, limpeza, bloqueio, agenda do Google, Gmail, GitHub, trânsito, pesquisa na web, Pomodoro, Modo Apresentação, lembretes, ideias no Obsidian, consumo de energia… No Chat só rodam as de produtividade e web; no Copilot, todas. Ação que apaga, envia ou encerra algo sempre pede confirmação.
 - **Leitura de tela**: "explica o erro na minha tela", "resolve a questão aberta". O OCR do próprio Windows lê a janela (sem gastar VRAM) e o modelo local explica o erro, o código, o documento ou a questão. Com o navegador em foco, "resume essa página" baixa a página inteira pela URL da aba (inclusive o que está fora da tela); página logada ou link com token cai no OCR.
 - **Navegador por voz** (Opera GX, Chrome, Edge, Brave, Vivaldi — sem extensão): abas ("abre uma aba no github", "fecha a aba do YouTube", "vai para a terceira aba", "lista as abas", "reabre a aba"; fechar várias pede confirmação) e **YouTube** ("toca lo-fi no YouTube" abre o vídeo direto, "pausa o vídeo", "avança 30 segundos", "legenda", "tela cheia", "velocidade 1.5", "próximo vídeo"). Usa a UI Automation do Windows e atalhos de teclado; tecla só sai com o navegador em foco.
 - **Gmail**: "quais são meus e-mails mais urgentes?" (lista por prioridade), "leia o e-mail 2", "responda o e-mail 2 dizendo que confirmo", "manda a proposta.txt para o Guilherme" (anexo do computador, contato por nome), "apaga as promoções" (Lixeira, 30 dias) e "organize meu e-mail". O rascunho, a lista ou o plano aparecem antes, e nada é excluído de vez. Também por `/email`.
@@ -14,6 +14,7 @@
 - **Clipboard, lembretes e ideias**: histórico do clipboard (`/clip`, sem guardar senhas), lembretes com horário (`/lembrete`, avisos antes dos eventos da agenda com o tempo de trajeto) e ideias da conversa registradas em 🧠 Brainstorms no Obsidian (`/ideia`).
 - **Vigia de rede**: aprende o que é normal na sua rede e avisa de porta exposta, programa novo falando com a internet ou aparelho desconhecido (`/rede`); encerrar ou bloquear pede confirmação.
 - **Briefing diário** no 1º boot do dia: clima, computador (CPU, RAM, GPU, internet), GitHub, agenda, trânsito e a manchete mais relevante de cada portal, escolhida pela IA entre as mais importantes do dia.
+- **Consumo de energia**: watts na linha de status, medidor no `/status`, kWh e custo do dia e do mês ("quanto o PC está gastando?"). A GPU NVIDIA é medida; CPU e resto são estimados (ajuste `POWER_*` no `.env`).
 - **Alertas de hardware** com filtro de interrupções (Não Perturbe, reunião, tela cheia, apresentação).
 - **Memória de longo prazo** no Obsidian (RAG) e histórico de sessões estilo *save slots*.
 - **Agente residente** na bandeja: `Win+J` abre/foca o JARVIS de qualquer lugar, `Ctrl+Alt+T` traduz o texto selecionado e `Ctrl+Alt+E` explica no Chat o código ou erro selecionado, em qualquer app.

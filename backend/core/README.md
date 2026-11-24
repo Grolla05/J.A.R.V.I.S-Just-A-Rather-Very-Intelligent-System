@@ -38,6 +38,7 @@ Importar `core` abre o banco e prepara os singletons (as skills carregam no boot
 | Módulo | Papel |
 |---|---|
 | `SystemInfo.py` | CPU, RAM, GPU (GPUtil), disco, rede, bateria, processos; limites (`DEFAULT_THRESHOLDS`: CPU/RAM 90 %, GPU 85 °C, disco 20/10 GB, bateria 15 %) e monitor proativo |
+| `power.py` | Consumo de energia: GPU NVIDIA medida (`nvidia-smi`), CPU e resto estimados (`POWER_CPU_TDP_W`, `POWER_BASE_W`, `POWER_PSU_EFF`); `meter` integra kWh por dia em `config.power_daily` com custo pela `POWER_TARIFF_KWH`. Só conta com a TUI aberta |
 | `alerts.py` | `process_system_alert`: passa pelo `services/notify_filter`, fala/notifica, guarda no backlog ou pede confirmação para matar processo (`PROCESS_JUDGEMENT_CACHE`) |
 | `notifications.py` | Liga/desliga os toasts do Windows (HKCU) |
 | `window_utils.py` | Win32: monitores, janela em foco, tela cheia, detecção de apresentação |

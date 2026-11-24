@@ -164,6 +164,7 @@ Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub
 | `prompts.py` | `load_prompt("arquivo.md", var=…)` com cache e `string.Template` |
 | `skill_loader.py` | `manager`: descobre skills em `backend/skills/<categoria>/` (caminho absoluto) no 1º uso / etapa do boot; INTENT duplicado gera aviso e vale o primeiro |
 | `SystemInfo.py` | Telemetria (psutil/GPUtil), limites críticos e monitor proativo |
+| `power.py` | Consumo de energia: GPU NVIDIA medida (`nvidia-smi`), CPU e resto estimados (`POWER_CPU_TDP_W`, `POWER_BASE_W`, `POWER_PSU_EFF`); `meter` integra kWh por dia em `config.power_daily` com custo pela `POWER_TARIFF_KWH`. Só conta com a TUI aberta |
 | `alerts.py` | `process_system_alert`: passa pelo filtro, fala, notifica ou pede confirmação |
 | `health.py` | Saúde de Ollama, Obsidian, microfone e SQLite |
 | `hardware.py` | Scan WMI via PowerShell → tabela `hardware` |
@@ -219,6 +220,7 @@ Cada skill expõe `INTENT`, `PROMPT_TEXT`, `KEYWORDS` (opcional, pré-filtro), `
 | system | `SYSTEM_REPORT` | Relatório de status da máquina | não |
 | system | `SYSTEM_CLEANUP` | Lixeira, temporários, desinstalar app | não |
 | system | `SYSTEM_SECURITY` | Bloquear, suspender, desligar, modo sentinela | não |
+| system | `POWER_REPORT` | Watts agora, kWh e custo de hoje e do mês (estimativa; GPU medida) | não |
 | productivity | `CALENDAR` | Compromissos do Google Agenda | sim |
 | productivity | `DAILY_BRIEFING` | Briefing do dia | sim |
 | productivity | `EMAIL_MANAGEMENT` | Gmail: ler, responder/escrever com anexo, Lixeira e organizar (com confirmação) | sim |
