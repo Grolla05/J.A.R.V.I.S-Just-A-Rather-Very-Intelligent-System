@@ -366,6 +366,22 @@ class TestJarvisApp(unittest.IsolatedAsyncioTestCase):
             self.assertIn("CPU ▰▰▱▱▱ 41%", text)
             self.assertIn("RAM ▰▰▰▰▰ 100%", text)
             self.assertIn("GPU ▱▱▱▱▱ 0%", text)
+            self.assertNotIn("⚡", text)  # start_services=False: sem nvidia-smi nem banco
+
+    async def test_telemetry_shows_power_when_available(self):
+        app = self._app()
+        app._power_fn = lambda cpu: 120.0 + cpu
+        async with app.run_test() as pilot:
+            class Mon:
+                def get_cpu_detailed(self): return {"usage": 30}
+                def get_ram_usage(self): return {"percent": 10}
+                def get_gpu_info(self): return {"load": 0}
+            with patch.object(state, "sys_monitor", Mon()):
+                app._poll_telemetry()
+                await app.workers.wait_for_complete()
+                await pilot.pause()
+            self.assertIn("⚡ 150W", str(app.query_one("#status-left").render()))
+            self.assertEqual(list(app.telemetry_history["ENERGIA"]), [150.0])
 
     async def test_session_picker_focuses_current_slot_card(self):
         app = self._app()
@@ -391,7 +407,7 @@ class TestJarvisApp(unittest.IsolatedAsyncioTestCase):
         app = self._app()
         async with app.run_test(size=(140, 45)) as pilot:
             for v in (10, 50, 90):
-                app._set_telemetry("CPU", {"CPU": v, "RAM": 40, "GPU": 5, "REDE": 2048})
+                app._set_telemetry("CPU", {"CPU": v, "RAM": 40, "GPU": 5, "REDE": 2048, "ENERGIA": 100 + v})
             await self._send(pilot, "/status")
             await pilot.pause(0.3)
             self.assertIsInstance(app.screen, tui_app.StatusScreen)
@@ -400,6 +416,8 @@ class TestJarvisApp(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(cpu.has_class("-alta"))
             self.assertIn("█", str(cpu.query_one(".meter-chart").render()))
             self.assertEqual(str(app.screen.query_one("#status-level").render()), "ALTA")
+            power = app.screen.query_one("#meter-energia")
+            self.assertEqual(str(power.query_one(".meter-value").render()), "190 W")
             # atalhos da conversa somem dentro da tela cheia
             self.assertFalse(app.check_action("toggle_mode", ()))
             await pilot.press("escape")

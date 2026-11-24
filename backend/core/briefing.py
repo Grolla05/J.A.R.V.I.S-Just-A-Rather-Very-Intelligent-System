@@ -71,7 +71,7 @@ def _net_rate(sample_s=NET_SAMPLE_S):
 
 
 def _computer():
-    """{'cpu', 'ram', 'gpu', 'net', 'battery'} — item ausente = None."""
+    """{'cpu', 'ram', 'gpu', 'net', 'battery', 'power'} — item ausente = None."""
     import core.state as state
     monitor = state.sys_monitor
     info = {"cpu": f"{monitor.get_cpu_usage()}%", "ram": f"{monitor.get_ram_usage()['percent']}%",
@@ -89,7 +89,21 @@ def _computer():
     batt = monitor.get_battery_status()
     if batt and batt.get("percent") is not None and batt.get("time_left") != "Desktop":
         info["battery"] = f"{batt['percent']}%" + (" (na tomada)" if batt.get("plugged") else "")
+    info["power"] = _power_yesterday()
     return info
+
+
+def _power_yesterday():
+    """'ontem 2,10 kWh (R$ 1,79)' — só quando o JARVIS contou algo ontem."""
+    try:
+        from datetime import date, timedelta
+
+        from core import power
+        kwh = power.meter.day_kwh(date.today() - timedelta(days=1))
+        return f"ontem {power.kwh_text(kwh)} ({power.brl(power.cost(kwh))})" if kwh > 0 else None
+    except Exception as e:
+        log.debug(f"[BRIEFING] Energia indisponível: {e}")
+        return None
 
 
 def _news():
@@ -148,7 +162,8 @@ def _section(title, lines):
 def _computer_lines(info):
     if not info:
         return []
-    labels = (("cpu", "CPU"), ("ram", "RAM"), ("gpu", "GPU"), ("net", "INTERNET"), ("battery", "BATERIA"))
+    labels = (("cpu", "CPU"), ("ram", "RAM"), ("gpu", "GPU"), ("net", "INTERNET"), ("battery", "BATERIA"),
+              ("power", "ENERGIA"))
     return [f"{label} → {info[key]}" for key, label in labels if info.get(key)]
 
 

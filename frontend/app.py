@@ -177,6 +177,8 @@ class JarvisApp(App, inherit_bindings=False):
         # Registro de insights pós-turno: fn(mensagem, resposta, origem) -> título | None.
         # Só com serviços (testes injetam um fake aqui).
         self._insight_fn = self._default_insight if start_services else None
+        # Energia (core/power.py): nvidia-smi + kWh no banco; testes injetam um fake
+        self._power_fn = self._read_power if start_services else None
         self.session_id = sessions.new_session_id()
         self.session_title = sessions.DEFAULT_TITLE
         self.pending_image = None   # anexo aguardando a próxima mensagem
@@ -1505,10 +1507,25 @@ class JarvisApp(App, inherit_bindings=False):
                 values["REDE"] = sum(net_split)
             text = "   ".join(f"{name} {block_bar(value)} {value:.0f}%"
                               for name, value in (("CPU", cpu), ("RAM", ram), ("GPU", gpu)))
+            watts = self._power_fn(cpu) if self._power_fn else None
+            if watts is not None:
+                values["ENERGIA"] = watts
+                text += f"   ⚡ {watts:.0f}W"
         except Exception as e:
             log.debug(f"Telemetria indisponível: {e}")
             text = "telemetria indisponível"
         self.call_from_thread(self._set_telemetry, text, values, net_split)
+
+    def _read_power(self, cpu):
+        """Watts estimados (core/power.py) + kWh do dia. Roda no worker da telemetria."""
+        from core import power
+        try:
+            reading = power.estimate(cpu, power.gpu_watts())
+            power.meter.add(reading)
+            return reading["total"]
+        except Exception as e:
+            log.debug(f"Energia indisponível: {e}")
+            return None
 
     def _set_telemetry(self, text, values=None, net_split=None):
         self._telemetry = text
@@ -1628,6 +1645,9 @@ class JarvisApp(App, inherit_bindings=False):
             self._clip_monitor.stop()
         if self._net_watch is not None:
             self._net_watch.stop()
+        if self._power_fn is not None:
+            from core import power
+            power.meter.flush()  # kWh do dia até agora
         self._stop_focus()  # X do terminal/erro: notificações do Windows voltam
         self._unregister_presence()
 

@@ -2,6 +2,40 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+## Consumo Energético em tempo real
+
+**Data:** 2026-11-24
+**Escopo:** Item "Consumo Energético — monitoramento em tempo real" do Brainstorm de Melhorias. Watts na linha de status e no `/status`, kWh e custo por dia e por mês, dado real no Chat e no briefing, skill `POWER_REPORT`.
+
+### Como mede
+
+Desktop não tem sensor do consumo total, então é **estimativa com a GPU medida**:
+- **GPU NVIDIA:** watts reais do `nvidia-smi --query-gpu=power.draw` (lista, sem shell, sem janela, timeout 2 s, cache 3 s). Sem `nvidia-smi`, a GPU entra como 0 e o texto diz "sem leitura"
+- **CPU:** `TDP × (15 % + 85 % × carga)`
+- **Resto do PC:** base fixa `POWER_BASE_W`
+- **Tomada:** soma dividida pela eficiência da fonte `POWER_PSU_EFF`
+
+`power.meter` integra W × tempo em kWh por dia e grava em `config.power_daily` a cada 5 min e ao fechar a TUI (guarda 31 dias). Intervalo > 60 s entre amostras (PC suspenso, TUI travada) não conta. Atravessar a meia-noite divide o consumo entre os dois dias. Só conta com a TUI aberta.
+
+### Arquivos
+
+| Arquivo | Mudança |
+|---------|---------|
+| `backend/core/power.py` | **Novo**: `gpu_watts`, `estimate`, `PowerMeter` (thread-safe), `summary_text` |
+| `backend/core/config.py`, `env.example`, `docs/variaveis-ambiente.md` | `POWER_TARIFF_KWH` (0,85), `POWER_BASE_W` (45), `POWER_CPU_TDP_W` (65), `POWER_PSU_EFF` (0,85), todas com padrão |
+| `frontend/app.py` | Telemetria soma `⚡ 142W` e alimenta o medidor por `app._power_fn` (só com `start_services`; testes injetam fake); grava o dia ao sair |
+| `frontend/screens/status.py`, `frontend/jarvis.tcss` | Medidor **ENERGIA** na largura toda (grade 2×3), escala pelo pico (mín. 200 W), detalhe "hoje X kWh · R$ · mês R$" |
+| `backend/core/SystemInfo.py` | `get_realtime_context` ganha a linha `Consumo:` → o Chat responde watts com dado real |
+| `backend/core/briefing.py` | Seção Computador: `ENERGIA → ontem X kWh (R$ Y)` quando houve contagem |
+| `backend/skills/system/power_report.py`, `backend/prompts/skills/power_report.md` | **Nova skill** `POWER_REPORT` (Copilot/voz): agora, hoje e mês com custo, sem LLM |
+
+### Testes
+
+- `tests/test_power.py` (novo, 14 testes): estimativa e saneamento, parse do `nvidia-smi`, cache, ausência e erro, integração em kWh, intervalo grande ignorado, meia-noite, gravação periódica e poda, banco quebrado não levanta, resumo e contrato da skill
+- `tests/test_tui_app.py`: `⚡` só com o medidor injetado; medidor ENERGIA no `/status`
+- `tests/test_briefing.py`: linha ENERGIA no bloco Computador
+- Suíte: 1214 passaram. `test_enter_requests_install_and_exits` falhou uma vez na suíte completa em paralelo e passou sozinho e em 3 rodadas da TUI sob `-n auto`: instabilidade de tempo, não relacionada
+
 ## Documentação conferida contra o código
 
 **Data:** 2026-11-24

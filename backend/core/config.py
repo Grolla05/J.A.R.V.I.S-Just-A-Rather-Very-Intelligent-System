@@ -193,6 +193,12 @@ class Settings:
     INTENT_CACHE_TTL: int = 30   # Segundos de validade de cada entrada
     INTENT_CACHE_SIZE: int = 64  # Máximo de entradas antes da evicção LRU
 
+    # --- Consumo de energia (core/power.py): GPU medida pelo nvidia-smi + estimativa ---
+    POWER_TARIFF_KWH: float = _env_float("POWER_TARIFF_KWH", 0.85)  # R$/kWh da conta de luz
+    POWER_BASE_W: float = _env_float("POWER_BASE_W", 45.0)          # placa-mãe, RAM, discos, ventoinhas
+    POWER_CPU_TDP_W: float = _env_float("POWER_CPU_TDP_W", 65.0)    # TDP do processador (100 % de carga)
+    POWER_PSU_EFF: float = _env_float("POWER_PSU_EFF", 0.85)        # eficiência da fonte (0-1)
+
     # --- Telemetria da barra de status da TUI (polling leve) ---
     TELEMETRY_INTERVAL: float = 3.0   # Intervalo de atualização da StatusBar (s)
     # Saúde de Ollama/Obsidian/mic/SQLite na linha de status (core/health.py).

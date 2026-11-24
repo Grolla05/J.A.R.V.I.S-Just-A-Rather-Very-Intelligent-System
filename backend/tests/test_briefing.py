@@ -169,10 +169,14 @@ class TestComputer(unittest.TestCase):
         monitor.get_ram_usage.return_value = {"percent": 85.4}
         monitor.get_gpu_info.return_value = {"name": "RTX", "load": 7.0, "temp": 48}
         monitor.get_battery_status.return_value = {"percent": 90, "plugged": True, "time_left": "x"}
-        with patch.object(state, "sys_monitor", monitor), patch.object(briefing, "_net_rate", return_value="↓ 1 KB/s · ↑ 2 KB/s"):
+        with patch.object(state, "sys_monitor", monitor), \
+                patch.object(briefing, "_net_rate", return_value="↓ 1 KB/s · ↑ 2 KB/s"), \
+                patch.object(briefing, "_power_yesterday", return_value="ontem 2,10 kWh (R$ 1,79)"):
             info = briefing._computer()
         self.assertEqual(info, {"cpu": "31.0%", "ram": "85.4%", "gpu": "7.0% · 48°C",
-                                "net": "↓ 1 KB/s · ↑ 2 KB/s", "battery": "90% (na tomada)"})
+                                "net": "↓ 1 KB/s · ↑ 2 KB/s", "battery": "90% (na tomada)",
+                                "power": "ontem 2,10 kWh (R$ 1,79)"})
+        self.assertIn("ENERGIA → ontem 2,10 kWh", "\n".join(briefing._computer_lines(info)))
 
     def test_no_gpu_no_battery(self):
         import core.state as state
@@ -181,7 +185,8 @@ class TestComputer(unittest.TestCase):
         monitor.get_ram_usage.return_value = {"percent": 2}
         monitor.get_gpu_info.return_value = {"name": "Integrada/N/A", "load": 0, "temp": 0}
         monitor.get_battery_status.return_value = {"percent": 100, "time_left": "Desktop"}
-        with patch.object(state, "sys_monitor", monitor), patch.object(briefing, "_net_rate", side_effect=OSError("sem rede")):
+        with patch.object(state, "sys_monitor", monitor), patch.object(briefing, "_net_rate", side_effect=OSError("sem rede")), \
+                patch.object(briefing, "_power_yesterday", return_value=None):
             info = briefing._computer()
         self.assertIsNone(info["gpu"])
         self.assertIsNone(info["net"])

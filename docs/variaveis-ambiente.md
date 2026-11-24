@@ -101,6 +101,17 @@ O idioma do reconhecimento (`DEFAULT_LANGUAGE = "pt-BR"`) é fixo no `Settings`,
 | `POMODORO_LONG_BREAK_MIN` | `15` | Pausa longa |
 | `POMODORO_CYCLES` | `4` | Focos até a pausa longa |
 
+## Consumo de energia (`core/power.py`)
+
+Desktop não tem sensor do consumo total: a GPU NVIDIA é medida (`nvidia-smi`), CPU e resto são estimados.
+
+| Variável | Padrão | Para quê |
+|---|---|---|
+| `POWER_TARIFF_KWH` | `0.85` | R$/kWh da conta de luz (custo de hoje e do mês) |
+| `POWER_BASE_W` | `45` | Watts fixos de placa-mãe, RAM, discos e ventoinhas |
+| `POWER_CPU_TDP_W` | `65` | TDP do processador: consumo estimado a 100 % de carga (parado = 15 %) |
+| `POWER_PSU_EFF` | `0.85` | Eficiência da fonte (0–1); o total é dividido por ela = consumo na tomada |
+
 ## Fora do `.env`
 
 `JARVIS_DATA_DIR` é definida pelo `jarvis.cmd` do app instalado (`%APPDATA%\JARVIS`) e muda onde ficam `.env`, banco, logs e uploads. Em dev, sem ela, tudo fica em `backend/` e o `.env` na raiz.
