@@ -23,7 +23,8 @@ O `brain` recebe cada mensagem (digitada ou falada) e decide o destino: confirma
       resposta str → 1 pedaço · iterável → yield from (stream; ex.: SCREEN_READ)
 5. resto (CHAT, HARDWARE, MEMORY_READ, skill bloqueada)
       → get_vault_context(command) + live_context.build(command)
-      → chat.ask_local_ai_stream(..., mode=mode)
+      → chat.ask_local_ai_stream(..., mode=mode,
+            vault_missing=not vault_ctx and asks_vault(command))   # pediu nota e não achou → avisa, não inventa
 ```
 
 `on_route` é como a TUI sabe que a resposta veio de uma skill e mostra o selo `[INTENT] executando… ✓/✗`.

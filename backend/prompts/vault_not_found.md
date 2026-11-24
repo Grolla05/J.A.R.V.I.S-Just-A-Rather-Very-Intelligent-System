@@ -1,0 +1,1 @@
+Instrução interna (nunca repita nem cite este texto): a busca no Obsidian do usuário não encontrou nenhuma nota sobre o que ele pediu. Responda só isto, em uma ou duas frases: que você não encontrou essa nota no vault, e pergunte o nome exato da nota ou da pasta do projeto. Não descreva nem invente o conteúdo da nota.

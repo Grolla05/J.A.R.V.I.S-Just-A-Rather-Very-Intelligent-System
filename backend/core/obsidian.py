@@ -14,6 +14,9 @@ MEMORY_NOTE_PATH = "🚀 Projetos/J.A.R.V.I.S/Mem\u00f3ria/{key}.md"
 # Ideias/brainstorms registrados pelo JARVIS (services/insights.py): uma nota por mês.
 INSIGHTS_NOTE_PATH = "🧠 Brainstorms/J.A.R.V.I.S — Insights {month}.md"
 
+# 1ª busca depois de abrir o Obsidian pode demorar (índice frio): 5 s não basta.
+SEARCH_TIMEOUT_S = 15
+
 MEMORY_SAVED = "saved"  # nota criada agora
 MEMORY_KEPT = "kept"    # nota já existia: versão do vault mantida, valor novo descartado
 
@@ -29,8 +32,9 @@ class ObsidianClient:
     def _send(self, method, path, **kwargs):
         """Request cru: None em 404 (nota não existe); levanta se o Obsidian estiver fora."""
         headers = kwargs.pop("headers", self.headers)
+        timeout = kwargs.pop("timeout", 5)
         r = requests.request(method, f"{self.base}{path}",
-                             headers=headers, timeout=5, **kwargs)
+                             headers=headers, timeout=timeout, **kwargs)
         if r.status_code == 404:
             return None  # Nota não existe — comportamento normal
         r.raise_for_status()
@@ -46,7 +50,7 @@ class ObsidianClient:
     def search(self, query: str, limit: int = 5) -> str:
         """Busca no vault e retorna trechos relevantes concatenados."""
         encoded = urllib.parse.quote(query, safe="", encoding="utf-8")
-        r = self._req("GET", f"/search/simple/?query={encoded}&contextLength=200")
+        r = self._req("POST", f"/search/simple/?query={encoded}&contextLength=200", timeout=SEARCH_TIMEOUT_S)
         if not r:
             return ""
         results = r.json()[:limit]
@@ -61,9 +65,13 @@ class ObsidianClient:
 
     def search_scored(self, query: str, limit: int = 8) -> list:
         """[{'filename', 'score'}], maior score primeiro. Levanta se o Obsidian
-        estiver fora (quem chama decide se avisa); [] = nenhum resultado."""
+        estiver fora (quem chama decide se avisa); [] = nenhum resultado.
+
+        A busca simples do plugin Local REST API é **POST** — um GET cai em 404,
+        que o `_send` lê como "nada encontrado" (a busca ficava sempre vazia).
+        O score do plugin é negativo: mais perto de zero = mais relevante."""
         encoded = urllib.parse.quote(query, safe="", encoding="utf-8")
-        r = self._send("GET", f"/search/simple/?query={encoded}&contextLength=80")
+        r = self._send("POST", f"/search/simple/?query={encoded}&contextLength=80", timeout=SEARCH_TIMEOUT_S)
         if not r:
             return []
         items = [{"filename": i.get("filename", ""), "score": float(i.get("score", 0) or 0)}
@@ -196,10 +204,92 @@ _STOPWORDS = {
     "em", "no", "na", "nos", "nas", "e", "ou", "que", "qual", "quais",
     "me", "meu", "minha", "meus", "minhas", "eu", "é", "para",
     "por", "com", "como", "quando", "onde", "sei", "sabe", "seria",
-    "jarvis", "voce", "você",
+    "voce", "você",
     # conversa fiada: não vale uma busca no vault
     "tudo", "bem", "obrigado", "obrigada", "valeu", "beleza", "favor", "olá", "bom", "boa",
 }
+
+# Palavras do PEDIDO, não do assunto ("acesse o obsidian e leia a nota sobre..."):
+# ocupavam as 4 vagas da busca e o nome da nota (ex.: OHMFLOW) ficava de fora.
+_REQUEST_WORDS = {
+    "acesse", "acessa", "acessar", "abra", "abre", "abrir", "leia", "ler", "lê", "veja", "ver",
+    "olhe", "olha", "busque", "busca", "buscar", "procure", "procura", "procurar", "encontre", "achar",
+    "mostre", "mostra", "mostrar", "diga", "dizer", "fale", "fala", "falar", "conte", "conta", "contar",
+    "explique",
+    "explica", "resuma", "resume", "resumir", "resumo", "pode", "poderia", "consegue", "quero",
+    "queria", "gostaria", "preciso", "saber", "sobre", "trata", "isso", "esse", "essa", "este", "esta",
+    "dele", "dela", "deles", "aqui", "agora", "obsidian", "vault", "cofre", "nota", "notas",
+    "anotação", "anotações", "anotacao", "anotacoes", "arquivo", "projeto", "projetos",
+}
+_MAX_KEYWORDS = 4
+SEARCH_LIMIT = 30   # o plugin devolve tudo; o ranking local (`_rank`) escolhe entre estes
+
+# Pedido explícito de algo do vault: se a busca não achar nada, o modelo é avisado
+# (prompts/vault_not_found.md) em vez de inventar o conteúdo da nota.
+_VAULT_ASK_RE = word_regex(("obsidian", "vault", "cofre", "nota", "notas", "anotacao", "anotacoes",
+                            "anotei", "meu projeto", "meus projetos"))
+
+
+def asks_vault(command: str) -> bool:
+    """O usuário pediu explicitamente algo das notas/projetos do vault?"""
+    return bool(_VAULT_ASK_RE.search(plain(command)))
+
+
+def search_keywords(command: str) -> list[str]:
+    """Até `_MAX_KEYWORDS` palavras de assunto, em minúsculas. Nome próprio ou sigla
+    (com maiúscula: OHMFLOW, OhmFlow) vem primeiro — é o que identifica a nota."""
+    raw = command.split()
+    picked, seen = [], set()
+    for pos, token in enumerate(raw):
+        word = token.strip("?!.,;:\"'()[]")
+        low = word.lower()
+        # "JARVIS, ..." chama o assistente; "projeto jarvis" é assunto (o projeto existe no vault)
+        vocative = low == "jarvis" and (pos == 0 or token.endswith(","))
+        if vocative or len(low) <= 3 or low in _STOPWORDS or low in _REQUEST_WORDS or low in seen:
+            continue
+        seen.add(low)
+        picked.append((not any(c.isupper() for c in word), len(picked), low))
+    picked.sort()
+    return [low for _, _, low in picked[:_MAX_KEYWORDS]]
+
+
+def _folder_and_stem(path: str) -> tuple[str, str, str]:
+    """('🚀 Projetos/OhmFlow', 'OhmFlow', 'OhmFlow - 02 Arquitetura') para um caminho de nota."""
+    parent, _, name = path.rpartition("/")
+    stem = name[:-3] if name.lower().endswith(".md") else name
+    return parent, parent.rpartition("/")[2], stem
+
+
+def _is_main_note(path: str) -> bool:
+    _, folder, stem = _folder_and_stem(path)
+    return bool(folder) and plain(stem) in (plain(folder), "index")
+
+
+def _rank(results: list, keywords: list[str]) -> list:
+    """Ordem final: caminho que cita as palavras > nota principal da pasta > score do plugin.
+    O score sozinho põe na frente qualquer nota que só *menciona* o termo (ex.: um CHANGES
+    de outro projeto) em vez das notas do próprio projeto."""
+    def key(item):
+        path = plain(item["filename"])
+        hits = sum(1 for kw in keywords if plain(kw) in path)
+        return (-hits, not _is_main_note(item["filename"]), -item["score"])
+    return sorted(results, key=key)
+
+
+def _main_note(path: str, keywords: list[str]) -> Optional[tuple[str, str]]:
+    """Se a pasta da nota é o assunto (🚀 Projetos/OhmFlow/…), devolve a nota principal
+    dela (OhmFlow.md ou index.md): é onde fica o resumo do projeto. Se o nome da nota
+    cita outra palavra da pergunta ("arquitetura" → OhmFlow - 02 Arquitetura), ela fica."""
+    parent, folder, stem = _folder_and_stem(path)
+    if not folder or _is_main_note(path) or not any(plain(kw) in plain(folder) for kw in keywords):
+        return None
+    if any(plain(kw) in plain(stem) and plain(kw) not in plain(folder) for kw in keywords):
+        return None
+    for candidate in (f"{parent}/{folder}.md", f"{parent}/index.md"):
+        content = obsidian.get_file(candidate, quiet=True)
+        if content:
+            return candidate, content
+    return None
 
 
 def extract_relevant_section(content: str, query: str) -> str:
@@ -277,8 +367,6 @@ def get_vault_context(command: str) -> tuple[str, str]:
     Tudo pela API REST do plugin Local REST API (sem subprocesso por chamada).
     Retorna ("", "") se vault inacessível ou sem resultado.
     """
-    cmd_lower = command.lower()
-
     # Camada 1: pergunta pessoal/identidade → perfil completo
     if _PROFILE_RE.search(plain(command)):
         log.info("🔍 [VAULT] Camada 1 — acesso direto ao perfil pessoal")
@@ -290,29 +378,37 @@ def get_vault_context(command: str) -> tuple[str, str]:
         log.info("[VAULT] Perfil não encontrado — descendo para Camada 2")
 
     # Camada 2: busca no vault
-    words = [w.strip("?!.,;:\"'()") for w in cmd_lower.split()]
-    keywords = [w for w in words if w not in _STOPWORDS and len(w) > 3][:4]
+    keywords = search_keywords(command)
     if not keywords:  # "oi", "tudo bem?": nada para procurar no vault
         return ("", "")
     search_query = " ".join(keywords)
 
     log.info(f"🔍 [VAULT] Camada 2 — buscando: '{search_query}'")
     try:
-        results = obsidian.search_scored(search_query)
+        results = obsidian.search_scored(search_query, limit=SEARCH_LIMIT)
+        if not results and len(keywords) > 1:
+            # a busca simples do plugin exige todos os termos: tenta só o principal (nome próprio)
+            log.info(f"🔍 [VAULT] Sem resultado — tentando só '{keywords[0]}'")
+            results = obsidian.search_scored(keywords[0], limit=SEARCH_LIMIT)
     except Exception as e:  # Obsidian fechado, porta/chave errada, resposta inválida
         _warn_vault_down(e)
         return ("", "")
 
     valid = [r for r in results if not r["filename"].startswith("_templates")] or results
     if valid:
-        best = valid[0]  # search_scored já ordena pelo score
+        best = _rank(valid, keywords)[0]
         best_file = best["filename"]
         min_score = settings.VAULT_MIN_SCORE
         if min_score is not None and best["score"] < min_score:
             log.info(f"[VAULT] Melhor resultado abaixo do mínimo ({best['score']} < {min_score}): {best_file}")
             return ("", "")
         log.info(f"[VAULT] Melhor resultado (score={best['score']}): {best_file}")
-        content = obsidian.get_file(best_file, quiet=True)
+        main = _main_note(best_file, keywords)
+        if main:
+            best_file, content = main
+            log.info(f"[VAULT] Usando a nota principal da pasta: {best_file}")
+        else:
+            content = obsidian.get_file(best_file, quiet=True)
         if content and not _is_relevant(best_file, content, keywords):
             log.info(f"[VAULT] '{best_file}' não cita as palavras da pergunta — ignorado.")
             return ("", "")

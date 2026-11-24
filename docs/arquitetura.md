@@ -83,7 +83,7 @@ Nenhuma etapa trava a TUI. Depois do boot:
    - `classify_intent(texto, exclude_categories=("automation", "system"))`: mensagem trivial ("oi", "valeu") vira `CHAT` sem LLM; senão o pré-filtro por `KEYWORDS` escolhe as skills candidatas (nenhuma casou → todas) e o Ollama devolve um JSON `{intent, entity, confidence}`. As skills desligadas são lidas uma vez (cache em `services/skill_settings.disabled_sets`, invalidado no toggle). Resultado fica em cache (TTL 30 s, 64 entradas); prompt acima de 70% do `num_ctx` gera um aviso no log.
    - `MEMORY_WRITE` → `services/memory.extract_fact_to_memory` → nota nova no Obsidian.
    - Skill ligada e permitida no Chat (categorias `productivity` e `web`) → `on_route(intent)` (selo `[INTENT]` na bolha) → `skill.execute(entity, texto)`.
-   - Qualquer outra coisa (`CHAT`, `HARDWARE`, `MEMORY_READ`) → `services/chat.ask_local_ai_stream` com histórico da sessão, contexto do vault (`get_vault_context`) e dados reais (`services/live_context.build`).
+   - Qualquer outra coisa (`CHAT`, `HARDWARE`, `MEMORY_READ`) → `services/chat.ask_local_ai_stream` com histórico da sessão, contexto do vault (`get_vault_context`; pedido de nota sem resultado → `vault_not_found.md`, para não inventar) e dados reais (`services/live_context.build`).
 5. A TUI re-renderiza o Markdown a cada 50 ms (`STREAM_FLUSH_S`) e grava a resposta no fim.
 
 ### 3.2 Modo Copilot (voz)

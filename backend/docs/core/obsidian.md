@@ -1,48 +1,58 @@
-# 📓 obsidian.py (Integração de Conhecimento e MCP)
+# 📓 obsidian.py (vault do Obsidian e RAG)
 
-O arquivo `obsidian.py` atua como a ponte profunda de integração entre o Cérebro do J.A.R.V.I.S. (LLM) e a sua **Base de Conhecimento Pessoal (Vault)** do Obsidian. Diferente do SQLite (que age primariamente como memória de curto/médio prazo em formato de banco tabular), o Obsidian funciona como o "Cofre" semântico de longo prazo, guardando anotações textuais ricas, identidades corporais da máquina e os documentos do usuário.
+O `core/obsidian.py` liga o J.A.R.V.I.S ao **vault do Obsidian** do usuário, que funciona como memória de **longo prazo** (o SQLite guarda a de curto/médio prazo). Tudo passa pela API REST do plugin **Local REST API** (`OBSIDIAN_HOST` + `OBSIDIAN_API_KEY`). Não há MCP nem subprocesso: o `mcp-obsidian` (via `uvx`) foi removido em 19/11/2026 (#48).
 
-## 🎯 Responsabilidades Principais
+## 🎯 Responsabilidades
 
-1. **Cliente REST Simples (`ObsidianClient`)**: Classe pioneira que ataca a porta HTTP direta do plugin "Local REST API" do Obsidian. Usada para funções rápidas e leves como extração direta de metadados simples de notas específicas (Ex: Ler preferências numéricas e *flags*).
-2. **Cliente MCP Híbrido (`ObsidianMCPClient`)**: Implementação avançada do *Model Context Protocol* via canal `stdio`. Ele sobe um subprocesso chamando a ferramenta de terminal `uvx mcp-obsidian`, injetando as chaves de API secretas e permitindo ao Jarvis usar *Tools* externas (como `obsidian_simple_search`) como se fossem funções nativas do Python.
-3. **Mecanismo de RAG Nativo (Retrieval-Augmented Generation)**: Concentra a estrela de inteligência artificial do arquivo, a função `get_vault_context()`. Antes do cérebro dar qualquer resposta, esse método atua interceptando a pergunta e vasculhando as pastas do Obsidian para armar o LLM de contexto prévio.
-
----
-
-## ⚙️ Arquitetura Interna e Lógicas
-
-### 1. Sistema de Memória Dedicada (REST Client)
-
-A constante global `MEMORY_NOTE_PATH = "🚀 Projetos/J.A.R.V.I.S/Memória/{key}.md"` dita onde memórias efêmeras criadas pela IA são salvas. **Regra**: o caminho tem emoji e acento, então sempre passa por `urllib.parse.quote(..., encoding="utf-8")` antes de ir para a REST API — sem isso, 404. Notas existentes nunca são sobrescritas (preserva edições manuais).
-
-- O método `get_memory` ignora o bloco de "Frontmatter" (as propriedades com `---` no topo do arquivo Markdown) e pega estritamente a primeira linha de texto útil.
-- O método `save_memory` tem bloqueio de segurança: Se a nota `.md` já existe, a IA cruza os braços e diz *"nota já existe, mantendo versão do vault"*, abstendo-se de sobrescrevê-la. O sistema assume que se a nota existe, o "Senhor" pode ter editado ela na mão e inserido formatações preciosas que um simples re-salvamento em texto plano destruiria.
-
-### 2. Bypass Assíncrono do MCP (`ObsidianMCPClient._run`)
-
-O protocolo MCP é massivamente baseado na biblioteca `asyncio`, porém o J.A.R.V.I.S chama o vault de dentro de threads síncronas (workers da TUI e skills), que não podem misturar corrotinas.
-O método `_run(self, coro)` tenta usar `asyncio.run()`, mas possui um `except RuntimeError` vital. Se o Python reclamar que já existe um Event Loop rodando (como na tela do app), ele cria imediatamente um `concurrent.futures.ThreadPoolExecutor(max_workers=1)` para envelopar e rodar o MCP isoladamente de forma Síncrona, desengasgando o processo.
-
-### 3. O Pipeline de RAG (`get_vault_context`)
-
-Quando o usuário digita ou fala uma sentença, o método executa a varredura em "Duas Camadas":
-
-- **Camada 1: Identidade Pessoal Direta (Hardcoded)**
-  O sistema contém um gigantesco dicionário de atalhos em memória (`_PROFILE_KEYWORDS`), com palavras como: *nome, família, faculdade, stack, setup, objetivo, moro*.
-  Se a pergunta do usuário casar com pelo menos uma dessas palavras, o sistema entra na Camada 1: aborta procuras custosas, usa o MCP e extrai agressivamente o arquivo matriz `⚙️ Configurações/🧠 Sobre mim.md` na íntegra.
-
-- **Camada 2: Busca Semântica via MCP**
-  Se a frase for específica (Ex: *"Me lembre como resolvemos o bug do Docker"*):
-  1. A IA usa `_STOPWORDS` para limpar sujeira da frase ("o", "a", "como", "jarvis").
-  2. Manda a busca limpa (top 4 keywords) para o `obsidian_simple_search`.
-  3. **Filtro de Ruído**: Ele parseia o JSON de resposta e **exclui ativamente** arquivos que comecem com a pasta `_templates`, impedindo que a IA alucine tentando ler moldes vazios do Obsidian.
-  4. Pega o arquivo de maior `score` do JSON e puxa o conteúdo absoluto via `obsidian_get_file_contents` para empacotar e mandar ao Cérebro.
+1. **Cliente REST (`ObsidianClient`, instância `obsidian`)**: ler, buscar, listar e gravar notas.
+2. **Memórias e insights**: `save_memory`/`get_memory` em `🚀 Projetos/J.A.R.V.I.S/Memória/{key}.md` e `append_note` nos insights mensais de `🧠 Brainstorms`.
+3. **RAG (`get_vault_context`)**: antes de o Chat responder, procura a nota que responde à pergunta e devolve `(arquivo, trecho)` para o prompt.
 
 ---
 
-## 🛠️ Manutenção e Boas Práticas (Developer Guide)
+## ⚙️ Cliente REST
 
-- **Codificação de URL é Lei**: Jamais passe caminhos de arquivos diretamente para qualquer requisição dentro do `ObsidianClient`. É absolutamente obrigatório passar os textos pela conversão `urllib.parse.quote(..., safe="", encoding="utf-8")`. Sem isso, espaços em branco e acentos típicos de pastas (ex: "Configurações", "Memória") resultarão em Erro 404 instantâneo.
-- **Portas Dinâmicas do MCP**: Ao configurar a `StdioServerParameters`, perceba que o ambiente Python quebra explicitamente a string do HOST (ex: `http://127.0.0.1:27123`) em host e porta, e as repassa debaixo dos panos para as variáveis de ambiente `OBSIDIAN_HOST` e `OBSIDIAN_PORT`. Caso adicione conexões externas (ex: HTTPS), certifique-se que esse string-splitter não corromperá a chave de conexão.
-- **Ampliação do Perfil (Camada 1)**: Se você for colocar assuntos completamente novos sobre a sua vida pessoal no arquivo genérico `Sobre mim.md` (Ex: Comecei a colecionar relógios), lembre-se de vir manualmente no array de `_PROFILE_KEYWORDS` neste arquivo e acrescentar a palavra ("relógio", "relogios", "coleção"). Do contrário, a IA fará buscas na "Camada 2" (Busca Larga) e pode trazer anotações erradas perdidas pelo vault.
+| Método | O que faz |
+|---|---|
+| `search_scored(query, limit)` | **POST** `/search/simple/` (timeout `SEARCH_TIMEOUT_S` = 15 s). `[{filename, score}]`, maior score primeiro. **Levanta** se o Obsidian estiver fora |
+| `search(query)` | Mesma rota (POST); devolve trechos `[arquivo]: contexto` |
+| `search_results(query)` | Igual ao `search_scored`, mas `[]` em erro (tela `/vault`) |
+| `get_file(path, quiet=False)` | Conteúdo da nota ou `None` |
+| `list_dir(path)` | Itens de uma pasta (pastas terminam em `/`) |
+| `get_memory` / `save_memory` | Memória da IA; **nunca sobrescreve** nota existente |
+| `note_exists` / `append_note` | Distingue 404 de Obsidian fora; POST = append |
+
+> [!warning] A busca simples é POST
+> No plugin, `/search/simple/` só aceita **POST**. Um GET devolve 404, que o `_send` lê como "nada encontrado" — foi assim que a busca do RAG ficou vazia sem erro nenhum até 23/11/2026. O score do plugin é **negativo**: mais perto de zero = mais relevante (`VAULT_MIN_SCORE` segue essa escala).
+
+---
+
+## 🔍 RAG em 2 camadas (`get_vault_context`)
+
+### Camada 1 — perfil pessoal
+`_PROFILE_KEYWORDS` (palavra inteira, sem acento) → lê `⚙️ Configurações/🧠 Sobre mim.md` e `extract_relevant_section` corta a seção pedida (família, trabalho, setup…).
+
+### Camada 2 — busca no vault
+
+1. **Palavras do assunto (`search_keywords`)**: tira stopwords, conversa fiada e **palavras do pedido** (`_REQUEST_WORDS`: acesse, leia, nota, obsidian, diga, sobre, projeto…); só palavras com mais de 3 letras, até `_MAX_KEYWORDS` (4). Nome próprio ou sigla (com maiúscula) vai primeiro. "jarvis" só é descartado quando chama o assistente ("JARVIS, …" ou primeira palavra) — "projeto jarvis" é assunto.
+   - *"JARVIS acesse meu obsidian e leia a nota sobre o meu projeto OHMFLOW"* → `ohmflow`.
+2. **Busca**: `search_scored(palavras, limit=SEARCH_LIMIT)`. Vazia com vários termos (a busca simples exige todos) → tenta só o primeiro.
+3. **Ranking local (`_rank`)**: caminho que cita as palavras > nota principal da pasta (`Pasta/Pasta.md` ou `index.md`) > score do plugin. Sem isso, uma nota que só *menciona* o termo (ex.: o CHANGES de outro projeto) ganhava das notas do próprio projeto. `_templates/` fica de fora.
+4. **Nota principal (`_main_note`)**: se a pasta é o assunto (`🚀 Projetos/OhmFlow/…`), lê `OhmFlow.md`/`index.md` — é onde fica o resumo. Exceção: o nome da nota cita outra palavra da pergunta ("arquitetura do OhmFlow" → `OhmFlow - 02 Arquitetura.md`).
+5. **Filtros**: score abaixo de `VAULT_MIN_SCORE` (opcional) ou nota que não cita ao menos metade das palavras (`_is_relevant`) → `("", "")`.
+
+### Nota pedida e não encontrada
+`asks_vault(texto)` detecta pedido explícito ("obsidian", "vault", "nota", "anotação", "meu projeto"…). Se o vault não trouxe nada, o `brain` passa `vault_missing=True` e o `chat` injeta `prompts/vault_not_found.md`: o JARVIS diz que não achou e pergunta o nome exato, em vez de inventar. O aviso é uma instrução simples, sem tag — modelos pequenos (gemma2:2b) copiavam blocos com tag palavra por palavra.
+
+A nota encontrada entra como `prompts/vault_memory.md` (`[MEMÓRIA DO VAULT — arquivo]`, a mesma tag que o `system_prompt.md` cita) e a resposta usa temperatura 0,1.
+
+Obsidian fora do ar: aviso **uma vez** por sessão (`_warn_vault_down`), depois só no log; o chat segue sem contexto.
+
+---
+
+## 🛠️ Manutenção
+
+- **Caminhos com acento/emoji** sempre por `urllib.parse.quote(..., encoding="utf-8")` — sem isso, 404.
+- **Assunto pessoal novo no "Sobre mim"**: acrescente um termo sem ambiguidade em `_PROFILE_KEYWORDS` e um caso em `tests/test_vault_keywords.py`.
+- **Palavra de pedido nova** pegando vaga da busca (ex.: "verifique"): acrescente em `_REQUEST_WORDS` e um caso em `tests/test_vault_search.py`.
+- Testes: `test_obsidian_endpoint.py`, `test_vault_keywords.py`, `test_vault_search.py`.
