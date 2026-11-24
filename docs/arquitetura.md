@@ -131,7 +131,7 @@ Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub
 |---|---|
 | `brain.py` | Roteador. `execute_command_stream` (TUI, por modo) e `execute_command` (voz standalone); `confirm_pending_action` |
 | `intent.py` | `classify_intent` (atalho trivial, pré-filtro `KEYWORDS`, Ollama em JSON, cache TTL), `is_skill_enabled`, `CHAT_ALLOWED_CATEGORIES` |
-| `chat.py` | Monta o prompt (system + live data + vault + live_context + histórico de 8 mensagens) e chama o Ollama |
+| `chat.py` | Monta o prompt (system + live data + vault + live_context + histórico dos últimos `CHAT_HISTORY_TURNS` turnos, padrão 10) e chama o Ollama |
 | `live_context.py` | Detecta perguntas sobre a agenda e injeta os eventos reais com "não invente" |
 | `memory.py` | Extrai um fato (chave/valor) e grava no Obsidian |
 | `sessions.py` | Sessões e histórico do chat (SQLite); `to_local()` converte UTC |
@@ -143,6 +143,13 @@ Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub
 | `presentation.py` | Modo Apresentação: manual (`/silent`) ou automático (slides/PDF em tela cheia) |
 | `notify_filter.py` | Decide se um alerta fala agora, espera ou some: prioridade × contexto |
 | `integrations.py` | Registro dos cards de INTEGRAÇÕES (`status`/`connect`/`disconnect`) |
+| `reminders.py` | Avisos antes dos eventos da agenda (com tempo de trajeto) e lembretes por pedido (tabela `reminders`) |
+| `insights.py` | Ideias da conversa → nota mensal em 🧠 Brainstorms; fila `insights_pending` com o Obsidian fora |
+| `clip_history.py` | Histórico do clipboard (tabela `clipboard_history`), busca, reuso, filtro de segredos |
+| `net_guard.py` / `net_trust.py` | Guarda de rede (juiz LLM, alerta, encerrar/bloquear com confirmação) e softwares mantidos (`net_trusted_apps`) |
+| `mailbox.py`, `email_triage.py`, `email_compose.py`, `email_contacts.py`, `email_organize.py`, `email_trash.py`, `local_files.py` | Gmail: caixa priorizada, rascunho com confirmação, contatos, organizar, Lixeira, anexos (ver 5.7) |
+| `software.py` | Download inteligente pelo winget com confirmação (ver 5.8) |
+| `remote_chat.py` | Núcleo da ponte Telegram/Discord (ver 5.9) |
 
 ### 4.3 Infraestrutura — `backend/core/`
 
@@ -199,6 +206,7 @@ Cada skill expõe `INTENT`, `PROMPT_TEXT`, `KEYWORDS` (opcional, pré-filtro), `
 | automation | `APP_CONTROL` | Abre, foca e fecha apps | não |
 | automation | `AUDIO_CONTROL` | Volume e mudo (pycaw) | não |
 | automation | `CLIPBOARD` | Explica/traduz/resume o clipboard | não |
+| automation | `SOFTWARE_INSTALL` | Procura no winget e instala/baixa (com confirmação) | não |
 | productivity | `REMINDER` | Cria, lista e cancela lembretes com horário | sim |
 | productivity | `INSIGHT_SAVE` | Anota uma ideia em 🧠 Brainstorms no Obsidian | sim |
 | system | `NETWORK_SCAN` | Varredura da rede: aparelhos, portas expostas, programas na internet | não |
@@ -213,6 +221,7 @@ Cada skill expõe `INTENT`, `PROMPT_TEXT`, `KEYWORDS` (opcional, pré-filtro), `
 | system | `SYSTEM_SECURITY` | Bloquear, suspender, desligar, modo sentinela | não |
 | productivity | `CALENDAR` | Compromissos do Google Agenda | sim |
 | productivity | `DAILY_BRIEFING` | Briefing do dia | sim |
+| productivity | `EMAIL_MANAGEMENT` | Gmail: ler, responder/escrever com anexo, Lixeira e organizar (com confirmação) | sim |
 | productivity | `FOCUS_MODE` | Pomodoro e Não Perturbe | sim |
 | productivity | `GITHUB` | PRs, issues, commit, CI, criar issue (com confirmação) | sim |
 | productivity | `PRESENTATION_MODE` | Liga/desliga o Modo Apresentação | sim |
@@ -329,6 +338,7 @@ ponte confere os canais ligados (`messenger_ctl.active_channels`) e liga/desliga
 | `/mode [chat\|copilot]` (`Shift+Tab`), `/voice` (`Ctrl+T`) | Modo e voz |
 | `/skills`, `/status`, `/log`, `/vault`, `/config` | Telas cheias |
 | `/web`, `/gh`, `/briefing`, `/rota`, `/clip` | Ferramentas (`/clip` também busca e reusa o histórico do clipboard) |
+| `/email`, `/instalar`, `/baixar` | Gmail e download inteligente pelo winget |
 | `/ideia <texto>`, `/lembrete`, `/rede` | Anotar ideia no vault, lembretes com horário, perímetro de rede |
 | `/focus`, `/dnd`, `/silent` | Foco, Não Perturbe e Apresentação |
 | `/clear` (`Ctrl+L`), `/quit` (`Esc`) | Limpar tela, sair |
@@ -339,10 +349,10 @@ Atalhos globais (agente): `Win+J` abre/foca a TUI no Copilot (em foco, volta ao 
 
 | Onde | O quê |
 |---|---|
-| `database/jarvis_memory.db` | Tabelas `config` (prefs, skills desligadas, fontes, locais, data do briefing), `history` (mensagens + anexo + modo), `sessions` (título, fixada), `hardware` (specs WMI). Veja [`backend/database/README.md`](../backend/database/README.md) |
+| `database/jarvis_memory.db` | Tabelas `config` (prefs, skills desligadas, fontes, locais, data do briefing), `history` (mensagens + anexo + modo), `sessions` (título, fixada), `hardware` (specs WMI), `clipboard_history`, `reminders`, `net_trusted_apps` e `email_contacts`. Veja [`backend/database/README.md`](../backend/database/README.md) |
 | `logs/` | `jarvis-AAAA-MM-DD.log` e `crash.log` |
 | `uploads/` | Anexos do `/attach` |
-| Cofre do Windows (serviço "JARVIS") | Refresh tokens do Google e do Spotify |
+| Cofre do Windows (serviço "JARVIS") | Refresh tokens do Google (Agenda e Gmail, um por card) e do Spotify |
 | Vault do Obsidian | `⚙️ Configurações/🧠 Sobre mim.md` (perfil) e `🚀 Projetos/J.A.R.V.I.S/Memória/{chave}.md` (memórias novas; nunca sobrescreve) |
 
 Em dev tudo fica em `backend/`. Instalado, `JARVIS_DATA_DIR=%APPDATA%\JARVIS` concentra `.env`, banco, logs e uploads.
@@ -359,6 +369,6 @@ Em dev tudo fica em `backend/`. Instalado, `JARVIS_DATA_DIR=%APPDATA%\JARVIS` co
 
 ```bash
 cd backend
-python -m pytest tests -q
+python -m pytest tests -q -n auto
 ruff check . && ruff check ../frontend
 ```

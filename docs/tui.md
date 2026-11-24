@@ -30,6 +30,45 @@ O modo vai para `execute_command_stream(..., mode=)` e escolhe o prompt `mode_ch
 - Logo na aba: `core/wt_profile.py` grava o fragment do perfil `JARVIS` do Windows Terminal; launcher e `jarvis.cmd` abrem com `-p JARVIS`
 - Paleta: entradas e busca fuzzy são lógica pura em `frontend/commands.py` (`palette_entries`, `filter_entries`); comandos que exigem argumento (`NEEDS_ARG`) só preenchem o input
 
+## Comandos `/`
+
+Lista tirada de `COMMANDS` em `frontend/commands.py` (a fonte única; a paleta `Ctrl+K` mostra a mesma). `//texto` envia uma mensagem que começa com `/`.
+
+| Comando | Faz |
+|---|---|
+| `/menu` | paleta de comandos, skills e foco (Ctrl+K) |
+| `/new` | nova sessão (Ctrl+N) |
+| `/sessions` | trocar de sessão (Ctrl+O) |
+| `/rename <título>` | renomeia a sessão atual |
+| `/pin` | fixa/desafixa a sessão atual |
+| `/regen` | regenera a última resposta (Ctrl+R) |
+| `/edit` | edita a última mensagem e reenvia (↑ com input vazio) |
+| `/attach <caminho>` | imagem → modelo de visão; áudio → transcreve no input |
+| `/detach` | remove o anexo pendente |
+| `/mode [chat\|copilot]` | troca o modo (Shift+Tab) |
+| `/voice` | liga/desliga wake word + voz (Ctrl+T) |
+| `/skills [on\|off <skill\|categoria>]` | cartuchos das skills (ou alterna direto) |
+| `/status` | dashboard do sistema: CPU, RAM, GPU, rede e processos |
+| `/log` | log de atividade com filtros e o último turno do Copilot |
+| `/vault [termo]` | memória no Obsidian: árvore, busca e nota no chat |
+| `/web <pergunta>` | pesquisa na internet e resume com fontes |
+| `/gh [prs\|issues\|commit\|ci] [dono/repo]` | GitHub: PRs, issues, último commit e CI |
+| `/briefing` | briefing do dia: clima, agenda, trânsito, máquina e GitHub |
+| `/rota [<local> <endereço>]` | cadastra um local fixo (casa, trabalho, faculdade…); sem argumento lista |
+| `/clip [explicar\|traduzir\|resumir] [n] · hist · buscar <termo> · usar <n> · limpar` | age sobre o que você copiou ou sobre o histórico (monitor no /config) |
+| `/email [ler <n> \| responder <n> <texto> \| novo <para> <texto> \| apagar <n…\|promoções> \| organizar \| vip <e-mail> \| contato <apelido> <e-mail> \| assinatura <texto>]` | Gmail: e-mails por prioridade, ler, responder, escrever e organizar (envio sempre confirmado) |
+| `/instalar <programa>` | procura no winget e instala (pede confirmação) |
+| `/baixar <programa>` | baixa o instalador pelo winget para Downloads (pede confirmação) |
+| `/ideia <texto>` | anota uma ideia em 🧠 Brainstorms no Obsidian (a conversa também registra sozinha) |
+| `/lembrete [<quando> <assunto> \| rm <n>]` | lembrete com horário (em 30 min…, às 18h…); sem argumento lista os pendentes |
+| `/rede [confiar <n> \| bloquear <ip> \| mantidos \| esquecer <n> \| reset]` | perímetro de rede: aparelhos, portas expostas e programas na internet (vigia no /config) |
+| `/focus [min\|stop\|skip\|status]` | pomodoro 25/5 (liga o Não Perturbe no foco) |
+| `/dnd [on\|off\|min]` | Não Perturbe: silencia notificações do Windows e alertas |
+| `/silent [on\|off]` | Modo Apresentação: mic fechado, voz muda e alertas guardados |
+| `/config` | ajustes de voz, microfone e rotinas (menu estilo RPG) |
+| `/clear` | limpa a tela (não apaga o histórico) |
+| `/quit` | encerra o J.A.R.V.I.S (Esc) |
+
 ## Visual
 
 - **Cores só no `frontend/jarvis.tcss`**, como variáveis `$j-*` (prefixo evita sobrescrever variáveis do tema do Textual, como `$panel`)

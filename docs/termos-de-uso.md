@@ -56,7 +56,7 @@ Recursos online (voz, clima, trânsito, busca, notícias, Google, Spotify, GitHu
 
 ## 8. Atualizações
 
-Na versão instalada, o JARVIS **verifica** se há versão nova nos Releases do GitHub (opção ligada por padrão, que você desliga em `/config` → SISTEMA). A instalação só começa **depois da sua confirmação**, e o instalador baixado tem o SHA-256 conferido. A atualização substitui a versão anterior do programa; seus dados não são o alvo dela.
+Na versão instalada, o JARVIS **verifica** se há versão nova nos Releases do GitHub (opção ligada por padrão, que você desliga em `/config` → SISTEMA). A instalação só começa **depois da sua confirmação**, e o instalador baixado tem o SHA-256 e a assinatura (Minisign) conferidos — sem assinatura válida ele não roda. A atualização substitui a versão anterior do programa; seus dados não são o alvo dela.
 
 ## 9. Suas chaves e a sua conta do Windows
 

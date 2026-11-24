@@ -1,6 +1,6 @@
 # Banco de dados (SQLite)
 
-O JARVIS guarda o estado local num SQLite (`jarvis_memory.db`), gerenciado por `core/database.py` (`from core.database import db`). A memória de longo prazo fica no Obsidian; o SQLite guarda histórico, sessões, preferências e specs da máquina.
+O JARVIS guarda o estado local num SQLite (`jarvis_memory.db`), gerenciado por `core/database.py` (`from core.database import db`). A memória de longo prazo fica no Obsidian; o SQLite guarda histórico, sessões, preferências, specs da máquina, clipboard, lembretes, softwares mantidos no Vigia de rede e contatos de e-mail (8 tabelas).
 
 **Local do arquivo:** `settings.DB_PATH`
 - Dev: `backend/database/jarvis_memory.db`
@@ -27,6 +27,12 @@ Chaves em uso:
 | `commute_home`, `commute_work`, `place_<local>`, `places_index` | `core/traffic.py` | locais cadastrados com `/rota` |
 | `commute_alert_last` | `core/traffic.py` | último aviso de saída (evita repetir) |
 | `dnd_restore` | `services/focus.py` | estado dos toasts do Windows a restaurar ao sair do Não Perturbe |
+| `insights_pending`, `insights_seen` | `services/insights.py` | ideias na fila (Obsidian fora do ar) e as já gravadas |
+| `reminders_fired`, `reminders_geo_cache` | `services/reminders.py` | avisos de evento já dados e cache de geocodificação |
+| `net_baseline` | `services/net_guard.py` | linha de base do Vigia de rede |
+| `email_vip` | `services/mailbox.py` | remetentes VIP (`/email vip`) |
+| `email_signature` | `services/email_compose.py` | assinatura dos e-mails (`/email assinatura`) |
+| `remote_session:<canal>:<id>` | `services/remote_chat.py` | sessão atual de cada usuário da ponte Telegram/Discord |
 
 ### `history` — mensagens
 
@@ -61,6 +67,50 @@ Chaves em uso:
 | `detected_at` | TIMESTAMP | último scan (a cada boot, em thread) |
 
 Usada para responder perguntas de hardware sem o LLM inventar (`db.get_system_specs()`).
+
+### `clipboard_history` — histórico do clipboard (`services/clip_history.py`)
+
+| Coluna | Tipo | |
+|---|---|---|
+| `id` | INTEGER PK | autoincremento |
+| `kind` | TEXT | tipo do conteúdo (link, erro, código, texto…) |
+| `content` | TEXT | o que foi copiado (nunca o que tem cara de senha/token) |
+| `digest` | TEXT UNIQUE | recopiar o mesmo texto só atualiza `copied_at` |
+| `copied_at` | TIMESTAMP | UTC |
+
+Só enche com o **Monitor de clipboard** ligado.
+
+### `reminders` — lembretes por pedido (`services/reminders.py`)
+
+| Coluna | Tipo | |
+|---|---|---|
+| `id` | INTEGER PK | autoincremento |
+| `text` | TEXT | assunto ("tirar a roupa da máquina") |
+| `due_at` | TEXT | hora **local** ISO |
+| `created_at` | TIMESTAMP | UTC |
+| `fired_at` | TEXT | quando foi avisado (nullable) |
+
+### `net_trusted_apps` — softwares mantidos no Vigia de rede (`services/net_trust.py`)
+
+| Coluna | Tipo | |
+|---|---|---|
+| `id` | INTEGER PK | autoincremento |
+| `name` / `name_key` | TEXT | nome do processo e a forma normalizada |
+| `exe` / `exe_key` | TEXT | caminho do executável e a forma normalizada (`UNIQUE(name_key, exe_key)`) |
+| `kind`, `reason` | TEXT | tipo do achado e motivo |
+| `decided_at` | TIMESTAMP | UTC |
+
+Sobrevive ao `/rede reset`; `/rede mantidos` lista e `/rede esquecer <n>` remove.
+
+### `email_contacts` — apelidos de contato (`services/email_contacts.py`)
+
+| Coluna | Tipo | |
+|---|---|---|
+| `alias` | TEXT PK | apelido ("guilherme") |
+| `address` | TEXT | e-mail confirmado |
+| `last_used` | TIMESTAMP | UTC |
+
+Gravado por `/email contato <apelido> <e-mail>` ou quando o usuário escolhe um contato.
 
 ## Regras
 

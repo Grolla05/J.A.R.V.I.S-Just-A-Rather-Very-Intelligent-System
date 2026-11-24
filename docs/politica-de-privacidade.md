@@ -99,7 +99,7 @@ Avise as pessoas no ambiente quando o microfone ou a tela estiverem em uso.
 - Senhas e tokens mascarados na leitura de tela e filtrados do histórico do clipboard.
 - Ponte remota só para IDs liberados (lista vazia = ninguém) e com a confirmação presa a quem pediu.
 - Anexos de e-mail bloqueiam arquivos sensíveis (`.env`, chaves, `.ssh`), pastas fora do seu perfil e arquivos maiores que 25 MB.
-- O instalador de atualização tem o SHA-256 conferido.
+- O instalador de atualização tem o SHA-256 e a assinatura (Minisign) conferidos; sem assinatura válida ele não roda.
 
 **Limites:** o `.env` e o JSON de reserva dos tokens são texto; quem acessa a sua conta do Windows acessa o JARVIS. Considere criptografar o disco (BitLocker). Vulnerabilidades: [`SECURITY.md`](../SECURITY.md).
 

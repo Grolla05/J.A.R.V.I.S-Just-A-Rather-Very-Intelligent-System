@@ -48,11 +48,13 @@ O Chat usa a lista branca `CHAT_ALLOWED_CATEGORIES = ("productivity", "web")` em
 |---|---|---|
 | automation | `APP_CONTROL` | Abre, foca e fecha apps (busca fuzzy nos instalados) |
 | automation | `AUDIO_CONTROL` | Volume relativo/absoluto e mudo (pycaw) |
+| automation | `BROWSER_TABS` | Abas do navegador Chromium (abrir, fechar, ir para, listar, reabrir) pela UI Automation; fechar várias pede confirmação |
 | automation | `CLIPBOARD` | Explica, traduz ou resume o que está copiado |
 | automation | `KEYBOARD_CONTROL` | Digita, atalhos e teclas na janela em foco |
 | automation | `SCREEN_CONTROL` | Brilho, protocolo "retina" (gamma) e mover janelas entre monitores |
 | automation | `SOFTWARE_INSTALL` | Busca no winget e instala/baixa o instalador (sempre com confirmação) |
 | automation | `SPOTIFY_CONTROL` | Play/pause/próxima sem LLM; busca de faixa com LLM (Premium para o player) |
+| automation | `YOUTUBE_CONTROL` | "Toca X no YouTube" abre o vídeo direto; player por teclas oficiais (pausar, avançar, legenda, tela cheia, velocidade, próximo) |
 | automation | `WORK_MACRO` | Cenas (trabalho, estudo…): abre apps, organiza janelas, silencia notificações |
 | system | `SYSTEM_REPORT` | Relatório da máquina (também usado na saudação) |
 | system | `SYSTEM_CLEANUP` | Esvazia a Lixeira, limpa temporários, desinstala app |
@@ -66,6 +68,7 @@ O Chat usa a lista branca `CHAT_ALLOWED_CATEGORIES = ("productivity", "web")` em
 | system | `NETWORK_SCAN` | "Tem alguém na minha rede?" — varredura sob demanda |
 | productivity | `GITHUB` | PRs, issues, último commit, CI; criar issue pede confirmação |
 | productivity | `PRESENTATION_MODE` | Liga/desliga o Modo Apresentação |
+| productivity | `SCREEN_READ` | Lê a janela/monitor pelo OCR do Windows (ou a página pela URL da aba) e explica, resume, traduz ou resolve |
 | productivity | `TRAFFIC` | Tempo entre locais cadastrados com `/rota` |
 | web | `WEB_SEARCH` | Pesquisa na web e resume com fontes |
 

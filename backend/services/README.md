@@ -40,6 +40,16 @@ texto (TUI ou voz)
 | `speak.py` | TTS: edge-tts (voz da pref, padrão `pt-BR-AntonioNeural`) com fallback pyttsx3; `speech_lock`; limpa Markdown e símbolos e expande gírias (`SLANG_MAP`); no-op com a voz desligada ou em apresentação |
 | `focus.py` | `FocusManager`: Pomodoro (25/5, longa 15 a cada 4) e Não Perturbe (toasts do Windows off + backlog de alertas com resumo no fim) |
 | `presentation.py` | Modo Apresentação manual (`/silent`, skill) ou automático (PowerPoint, Canva, Google Slides, PDF em tela cheia) |
+| `mailbox.py` | Caixa de entrada para TUI/voz/briefing/ponte: lista priorizada (o cache é a numeração que o usuário viu), resumo do corpo como **dado**, VIP, `/email` |
+| `email_triage.py` | Prioridade (ALTA/MÉDIA/BAIXA) e categoria (urgente/financeiro/promoções/social) — regras puras |
+| `email_compose.py` | Rascunho pelo LLM (só assunto e corpo); `confirm_send` arma a pendência (180 s): sim envia · não salva rascunho no Gmail · outra frase refaz (`on_other`); assinatura em `email_signature` |
+| `email_contacts.py` | "Guilherme" → endereço (tabela `email_contacts` + histórico do Gmail; vários = pergunta) |
+| `email_organize.py` | Plano (arquivar promoções/social, marcadores `JARVIS/Financeiro` e `JARVIS/Urgente`) → "sim" → `batch_modify`; nunca apaga |
+| `email_trash.py` | "Apaga o e-mail 3" / "as promoções" → lista → "sim" → Lixeira do Gmail (o que apagar vem só da fala) |
+| `local_files.py` | Acha arquivo do usuário para anexar (Área de Trabalho, Documentos, Downloads, OneDrive); bloqueia sensíveis, fora do perfil e >25 MB |
+| `software.py` | Download inteligente: winget → confirmação → instala/baixa numa thread e anuncia |
+| `remote_chat.py` | Núcleo da ponte Telegram/Discord: allowlist (`*_ALLOWED_IDS`), sessão por usuário (`remote_session:<canal>:<id>`), `brain` em modo Chat com `owner` `canal:usuário`, divide a resposta no limite da plataforma (Telegram 4000, Discord 1900) |
+| `net_trust.py` | Softwares mantidos no Vigia de rede (tabela `net_trusted_apps`: nome + executável); conferido antes do juiz e sobrevive ao `/rede reset` |
 | `notify_filter.py` | Prioridade do alerta (`critical`/`high`/`normal`) × contexto (apresentação, DND, reunião, tela cheia) → falar, guardar ou descartar; selo da linha de status |
 
 ## Regras

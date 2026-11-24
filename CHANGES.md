@@ -2,6 +2,40 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+## Documentação conferida contra o código
+
+**Data:** 2026-11-24
+**Escopo:** Revisão de toda a documentação do repositório (e do vault do Obsidian) contra o código atual da `DEV`. Nenhum código mudou.
+
+### O que estava desatualizado e foi corrigido
+
+| Arquivo | Correção |
+|---------|----------|
+| `docs/variaveis-ambiente.md` | Reescrito: agora lista **todas** as variáveis que o `Settings` lê, por área e com o padrão (faltavam 29, entre elas `TIMEOUT_LLM`, `TIMEOUT_API`, `GITHUB_*`, `SPOTIFY_*`, `*_ALLOWED_IDS`, Whisper, visão, Pomodoro). `DEFAULT_LANGUAGE` saiu da lista: é fixo no `Settings`, não vem do `.env` |
+| `env.example` | Ganhou as variáveis que faltavam (`OLLAMA_NUM_CTX`/`NUM_GPU`, visão, Whisper, `MAX_UPLOAD_SIZE_MB`, `GLOBAL_HOTKEY`, `TRANSLATE_HOTKEY`); atalhos globais numa seção própria (estavam no meio do Pomodoro); atualização descreve a assinatura Minisign |
+| `docs/tui.md` | Tabela com todos os comandos `/`, gerada de `COMMANDS` (faltavam `/rename`, `/pin`, `/regen`, `/detach`, `/gh`, `/focus`, `/silent`, `/clear`, `/quit`) |
+| `docs/estrutura.md` | `core/minisign.py` e `installer/sign_release.py`; updater confere SHA-256 **e** assinatura; CI roda também o pytest; regra do `requirements.lock` |
+| `docs/arquitetura.md` | Serviços que faltavam (lembretes, insights, clipboard, rede, Gmail, winget, ponte), skills `SOFTWARE_INSTALL` e `EMAIL_MANAGEMENT`, `/email`/`/instalar`/`/baixar`, 8 tabelas, histórico de `CHAT_HISTORY_TURNS` (não 8 mensagens) |
+| `backend/core/README.md` | `gmail`, `google_auth`, `winget`, `telegram_bot`, `discord_bot`, `messenger_ctl`, `minisign`; `database` com 8 tabelas; evento `EXPLAIN` |
+| `backend/services/README.md` | `mailbox`, `email_*`, `local_files`, `software`, `remote_chat`, `net_trust` |
+| `backend/database/README.md` | Tabelas `clipboard_history`, `reminders`, `net_trusted_apps`, `email_contacts` e as chaves da `config` que faltavam |
+| `backend/skills/README.md` | `BROWSER_TABS`, `YOUTUBE_CONTROL` e `SCREEN_READ` na tabela |
+| `frontend/README.md` | `/email`, `/instalar`, `/baixar`; `/rede mantidos` e `esquecer` |
+| `README.md` | Gmail, ponte Telegram/Discord, download pelo winget, clipboard/lembretes/ideias, vigia de rede, `Ctrl+Alt+E`, assinatura do setup; integrações completas; tirado o link para o `CLAUDE.md` (fora do git); testes com `-n auto` |
+| `AGENTS.md` | Modo Chat descrito pela lista branca (`productivity` e `web`) |
+| `docs/politica-de-privacidade.md`, `docs/termos-de-uso.md` | Atualização confere SHA-256 **e** assinatura Minisign |
+
+### Vault do Obsidian
+
+- Notas novas: `E-mail — Gmail (EMAIL_MANAGEMENT)` e `Ponte Remota e Download Inteligente`.
+- Atualizadas: Intent, Brain, Database, Skills — Produtividade e Web, TUI — Comandos, Integrações, Agente Residente, Updater, Vigia de Rede, Config, Arquitetura Ponta a Ponta e a nota do projeto (funcionalidades, progresso pelos PRs #63–#82, estrutura).
+- Notas de entrega de 19 a 24/11 marcadas como concluídas, com o PR de cada uma.
+- `🧠 Brainstorms/J.A.R.V.I.S — Brainstorm de Melhorias.md`: pendências do classificador e do teste do `/clip` fechadas (PR #82), erros que sobraram, próximos passos (ponte ponta a ponta, PR `DEV` → `main`) e o andamento do consumo de energia.
+
+### Validação
+
+- `pytest tests/test_agents_doc.py tests/test_oauth_connect.py`: 27 passaram.
+
 ## Correção: classificador estourando o tempo + cartucho único de e-mail
 
 **Data:** 2026-11-24

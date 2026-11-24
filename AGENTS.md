@@ -5,7 +5,7 @@
 O **J.A.R.V.I.S.** é um assistente virtual 100% autônomo inspirado no JARVIS do Iron Man. É um **app de terminal (TUI) para Windows**, 100% Python: a interface é feita em [Textual](https://textual.textualize.io) e roda no próprio terminal, sem browser, sem WebView e sem Node.js. A TUI consome o backend (o cérebro cognitivo) por chamadas Python diretas — não existe IPC, REST nem HTTP.
 
 - **Cérebro:** LLM local via Ollama, memória em SQLite e no vault do Obsidian
-- **Dois modos:** `chat` (texto, só skills de consulta) e `copilot` (voz, todas as skills)
+- **Dois modos:** `chat` (texto, só as skills ativas de `productivity` e `web`) e `copilot` (voz, todas as skills)
 - **Repositório:** `github.com/Jarvis-Project-2026/J.A.R.V.I.S`
 - **Dev:** Felipe Grolla Freitas
 

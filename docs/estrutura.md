@@ -30,7 +30,8 @@ J.A.R.V.I.S/
 │   │   ├── hotkey.py        ← Atalho global (RegisterHotKey) do agente
 │   │   ├── presence.py      ← Ponte TUI⇄agente: tui.json + eventos nomeados (SUMMON/TO_CHAT/EXPLAIN) + explain.json (trecho a explicar)
 │   │   ├── autostart.py     ← Valor JARVIS em HKCU Run (com --logon) + detecção/início do agente
-│   │   ├── updater.py       ← Auto-update: Release do GitHub mais novo → tela ATUALIZAÇÃO DISPONÍVEL → tecla → setup silencioso (SHA-256 conferido)
+│   │   ├── updater.py       ← Auto-update: Release do GitHub mais novo → tela ATUALIZAÇÃO DISPONÍVEL → tecla → setup silencioso (SHA-256 + assinatura Minisign conferidos)
+│   │   ├── minisign.py      ← Ed25519 no formato Minisign: gerar chave, assinar (CI) e verificar (updater) contra a PUBLIC_KEY embutida
 │   │   ├── launcher.py      ← Abre a TUI numa janela nova (wt ou console)
 │   │   ├── prompts.py       ← load_prompt() com cache e string.Template
 │   │   ├── uploads.py       ← load_local_file() + save_base64_upload() (/attach)
@@ -113,9 +114,10 @@ J.A.R.V.I.S/
 │   ├── build_runtime.ps1    ← dist/runtime (Python 3.11 NuGet + libs) e dist/app (código sem testes/dados)
 │   ├── jarvis.iss           ← Setup: páginas "Ollama necessário" (espera instalar) e "Modelo de IA" (dropdown + ollama pull)
 │   ├── jarvis.cmd           ← Launcher instalado (Windows Terminal, JARVIS_DATA_DIR=%APPDATA%\JARVIS)
+│   ├── sign_release.py      ← Assina o JARVIS-Setup.exe no release.yml (secret MINISIGN_SECRET_KEY) e confere contra a PUBLIC_KEY
 │   └── test_setup.ps1       ← Instala em silêncio (/SKIPOLLAMA), confere e desinstala
 ├── docs/                    ← Documentação do projeto (índice no AGENTS.md): arquitetura, estrutura, regras do backend, TUI, skills, banco, alertas, agente residente, fluxos, variáveis de ambiente, personalidade, decisões e integrações OAuth
-├── .github/workflows/       ← main.yml (CI: ruff + compileall em PR/push na main e DEV) e release.yml (push na main → testes → setup → Release vX.Y.Z só com JARVIS-Setup.exe)
+├── .github/workflows/       ← main.yml (CI: ruff + compileall + pytest em PR/push na main e DEV) e release.yml (push na main → testes → setup → Release vX.Y.Z só com JARVIS-Setup.exe)
 ├── env.example              ← Modelo do .env com todas as variáveis comentadas
 └── VERSION                  ← versão publicada: o release calcula o patch pela última tag e o CI grava de volta na main e na DEV (dê `git pull` na DEV depois de cada release). Subir minor/major = editar para X.Y.0 no PR
 ```
@@ -124,6 +126,6 @@ J.A.R.V.I.S/
 
 - O `jarvis.cmd` define `JARVIS_DATA_DIR=%APPDATA%\JARVIS`; com ela, `core/config.py` põe `.env`, logs, banco, uploads, áudio do TTS e token do Spotify lá (a pasta do programa pode ser só leitura). Sem ela (dev) tudo fica em `backend/` e o `.env` na raiz
 - Todo caminho gravável **deve** sair de `settings.DIR_*` / `settings.DB_PATH` — nunca de `Path(__file__)`
-- Nova lib no `requirements.txt` entra no setup automaticamente; se for importante, inclua no smoke de `build_runtime.ps1`
+- Nova lib: faixa no `requirements.txt` **e** regenere o `requirements.lock` (comando no cabeçalho do arquivo; CI e setup instalam do lock com `--require-hashes`); se for importante, inclua no smoke de `build_runtime.ps1`. Ferramentas de dev em `requirements-dev.txt` / `.lock`
 - Integrações de conta (Google Agenda, Spotify) usam chaves **pessoais**: cada usuário cria o próprio app e preenche `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`SPOTIFY_CLIENT_ID` no `.env` (guia em [`integracoes-oauth.md`](integracoes-oauth.md)). Nunca versionar chaves. Tokens dos usuários só no Cofre do Windows (`core/secrets_store.py`); testes usam cofre em memória
 - Variável nova do `.env` precisa de **default** no `Settings` (o setup copia o `env.example`, mas `.env` antigos não ganham a chave). Lista das variáveis em [`variaveis-ambiente.md`](variaveis-ambiente.md)
