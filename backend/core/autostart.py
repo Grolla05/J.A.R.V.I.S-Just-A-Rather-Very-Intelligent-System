@@ -3,6 +3,10 @@
 O valor sobe o agente residente (agent.py) via pythonw — sem janela — no logon.
 O instalador marca isso numa checkbox; /config e a bandeja ligam/desligam.
 O valor leva `--logon`: só nessa subida o agente procura atualização (core/updater.py).
+
+Com o JARVIS como administrador (`core/elevation.py`), quem sobe o agente no logon
+é a tarefa `\\JARVIS\\Agente` (elevada) e o valor do Run sai: ligar/desligar aqui
+passa a habilitar/desabilitar a tarefa.
 """
 import sys
 from pathlib import Path
@@ -58,10 +62,22 @@ def ensure_logon_flag():
     value = _current_value()
     if value is None or LOGON_FLAG in value.split():
         return False
-    return enable()
+    return write_run_value()
+
+
+def _task_state():
+    from . import elevation
+    return elevation.task_state(elevation.AGENT_TASK)
 
 
 def is_enabled():
+    state = _task_state()
+    if state is not None:
+        return state
+    return _run_value_exists()
+
+
+def _run_value_exists():
     reg = _winreg()
     if reg is None:
         return False
@@ -74,6 +90,13 @@ def is_enabled():
 
 
 def enable():
+    if _task_state() is not None:
+        from . import elevation
+        return elevation.set_task_enabled(elevation.AGENT_TASK, True)
+    return write_run_value()
+
+
+def write_run_value():
     reg = _winreg()
     if reg is None:
         return False
@@ -88,6 +111,13 @@ def enable():
 
 
 def disable():
+    if _task_state() is not None:
+        from . import elevation
+        return elevation.set_task_enabled(elevation.AGENT_TASK, False)
+    return delete_run_value()
+
+
+def delete_run_value():
     reg = _winreg()
     if reg is None:
         return False

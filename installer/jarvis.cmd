@@ -22,6 +22,16 @@ set "PYTHONUTF8=1"
 set "JARVIS_PY=%JARVIS_HOME%runtime\python.exe"
 
 if /i "%~1"=="--here" goto run
+:: Administrador sem UAC (backend\core\elevation.py): com a tarefa \JARVIS\TUI,
+:: um jarvis.cmd nao elevado pede ao Agendador para abrir a TUI ja elevada.
+net session >nul 2>&1
+if not errorlevel 1 goto launch
+schtasks /Query /TN "\JARVIS\TUI" >nul 2>&1
+if errorlevel 1 goto launch
+schtasks /Run /TN "\JARVIS\TUI" >nul 2>&1
+if not errorlevel 1 exit /b 0
+
+:launch
 if defined WT_SESSION goto run
 where wt.exe >nul 2>&1
 if errorlevel 1 goto run

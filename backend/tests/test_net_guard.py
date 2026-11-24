@@ -216,6 +216,116 @@ class TestHandle(GuardCase):
         self.assertEqual(len(self.said), 1)
 
 
+
+class TestDevices(GuardCase):
+    def test_mac_rotation_is_trusted_silently(self):
+        rotated = {"kind": "MAC_ROTATED", "key": "rotated:6a", "mac": "6a-00-00-00-00-02", "ip": "192.168.0.41",
+                   "old_mac": "da-00-00-00-00-01", "text": "Galaxy trocou o MAC privado.",
+                   "device": {"ip": "192.168.0.41", "vendor": None, "name": "Galaxy", "private": True}}
+        self.db.data[net_guard.BASELINE_KEY] = {"devices": {"da-00-00-00-00-01": {"ip": "192.168.0.40",
+                                                                                  "name": "Galaxy",
+                                                                                  "private": True}}}
+        self.assertTrue(self._handle(rotated))
+        self.assertEqual(self.said, [])
+        self.assertEqual(net_guard.recent(), [])
+        devices = self.db.data[net_guard.BASELINE_KEY]["devices"]
+        self.assertEqual(list(devices), ["6a-00-00-00-00-02"])
+
+    def test_private_new_device_has_normal_priority(self):
+        from services import notify_filter
+        private = {**DEVICE, "device": {"ip": "192.168.0.77", "vendor": None, "name": "", "private": True}}
+        self.assertEqual(net_guard._priority(private, notify_filter), notify_filter.NORMAL)
+        self.assertEqual(net_guard._priority(DEVICE, notify_filter), notify_filter.HIGH)
+        self.assertEqual(net_guard._priority(GATEWAY, notify_filter), notify_filter.CRITICAL)
+
+
+class TestAutoBlock(GuardCase):
+    EXE = r"C:\Users\x\AppData\Local\Temp\svch0st.exe"
+
+    def _danger(self, finding, admin=True, autoblock=True, run=None):
+        self.run = run or MagicMock(return_value=MagicMock(returncode=0, stdout="Ok."))
+        return net_guard.handle(finding, judge_fn=lambda f: net_guard.DANGER, announce=self.said.append,
+                                admin=lambda: admin, run=self.run, autoblock=lambda: autoblock)
+
+    def setUp(self):
+        super().setUp()
+        net_guard._warned["admin"] = False
+
+    def test_judge_reads_dangerous(self):
+        self.assertEqual(net_guard.judge(TALKER, query=lambda m, temperature: "PERIGOSO"), net_guard.DANGER)
+        net_guard._judge_cache.clear()
+        self.assertEqual(net_guard.judge(TALKER, query=lambda m, temperature: "SUSPEITO, não PERIGOSO"),
+                         net_guard.SUSPECT)
+
+    def test_dangerous_talker_is_blocked_in_and_out_then_asks_to_kill(self):
+        self.assertTrue(self._danger(TALKER))
+        dirs = [c.args[0][6] for c in self.run.call_args_list]
+        self.assertEqual(dirs, ["dir=in", "dir=out"])
+        self.assertIn("bloqueadas", self.said[0])
+        self.assertIn("/rede desbloquear 1", self.said[0])
+        self.assertEqual(state.pending_critical_action["type"], "NET_KILL_PROCESS")  # encerrar segue confirmado
+        (block,) = self.db.data[net_guard.BLOCKS_KEY]
+        self.assertEqual((block["target"], block["auto"]), ("185.10.10.10", True))
+
+    def test_dangerous_listener_blocks_the_exe_inbound(self):
+        self.assertTrue(self._danger({**LISTENER, "exe": self.EXE}))
+        (call,) = self.run.call_args_list
+        self.assertIn(f"program={self.EXE}", call.args[0])
+        self.assertIn("dir=in", call.args[0])
+
+    def test_without_admin_never_blocks_and_warns_once(self):
+        self._danger(TALKER, admin=False)
+        self.run.assert_not_called()
+        self.assertIn("não estou elevado", self.said[0])
+        state.pending_critical_action = None
+        net_guard._judge_cache.clear()
+        self._danger({**TALKER, "key": "talker:outro", "proc": "outro.exe"}, admin=False)
+        self.assertNotIn("não estou elevado", self.said[1])
+
+    def test_pref_off_never_blocks(self):
+        self._danger(TALKER, autoblock=False)
+        self.run.assert_not_called()
+        self.assertNotIn(net_guard.BLOCKS_KEY, self.db.data)
+
+    def test_suspect_never_autoblocks(self):
+        run = MagicMock()
+        net_guard.handle(TALKER, judge_fn=lambda f: net_guard.SUSPECT, announce=self.said.append,
+                         admin=lambda: True, run=run, autoblock=lambda: True)
+        run.assert_not_called()
+
+
+class TestBlocksList(GuardCase):
+    def test_list_and_unblock_by_number_or_ip(self):
+        run = MagicMock(return_value=MagicMock(returncode=0, stdout="Ok."))
+        self.assertIn("Nenhum bloqueio", net_guard.blocks_text())
+        net_guard.block_ip("185.10.10.10", admin=lambda: True, run=run)
+        net_guard.block_ip("185.20.20.20", admin=lambda: True, run=run)
+        text = net_guard.blocks_text()
+        self.assertIn("1. `185.10.10.10` (entrada e saída) · manual", text)
+        run.reset_mock()
+        self.assertIn("removido", net_guard.unblock("2", admin=lambda: True, run=run))
+        deleted = [c.args[0][-1] for c in run.call_args_list]
+        self.assertEqual(deleted, ["name=JARVIS bloqueio 185.20.20.20 (entrada)",
+                                   "name=JARVIS bloqueio 185.20.20.20 (saida)"])
+        self.assertIn("removido", net_guard.unblock("185.10.10.10", admin=lambda: True, run=run))
+        self.assertEqual(net_guard.load_blocks(), [])
+
+    def test_unblock_errors(self):
+        self.assertIn("Não há bloqueio", net_guard.unblock("9"))
+        net_guard.block_ip("185.10.10.10", admin=lambda: True,
+                           run=MagicMock(return_value=MagicMock(returncode=0, stdout="")))
+        self.assertIn("exige administrador", net_guard.unblock("1", admin=lambda: False))
+        refuse = MagicMock(return_value=MagicMock(returncode=1, stdout="Acesso negado", stderr=""))
+        self.assertIn("recusou", net_guard.unblock("1", admin=lambda: True, run=refuse))
+        self.assertEqual(len(net_guard.load_blocks()), 1)
+
+    def test_manual_block_creates_both_directions(self):
+        run = MagicMock(return_value=MagicMock(returncode=0, stdout="Ok."))
+        reply = net_guard.block_ip("185.10.10.10", admin=lambda: True, run=run)
+        self.assertIn("Entrada e saída", reply)
+        self.assertEqual(run.call_count, 2)
+        self.assertIn("/config", net_guard.block_ip("185.10.10.10", admin=lambda: False, run=run))
+
 class TestActions(unittest.TestCase):
     def _proc(self, name="svch0st.exe", created=300.0):
         proc = MagicMock()
@@ -287,7 +397,7 @@ class TestTexts(GuardCase):
                                                 "gateway": {"ip": "192.168.0.1", "mac": "a4-91-b1-00-11-22"},
                                                 "learn_until": "2020-01-01T00:00:00"}
         text = net_guard.scan_text(snapshot_fn=lambda with_arp=True: self.SNAP)
-        self.assertIn("192.168.0.77 · `de-ad-be-ef-00-02` · **novo**", text)
+        self.assertIn("192.168.0.77 · MAC privado · `de-ad-be-ef-00-02` · **novo**", text)
         self.assertIn("Fora da linha de base agora", text)
         self.assertIn("python.exe abriu a porta 8099", text)
         short = net_guard.scan_text(snapshot_fn=lambda with_arp=True: self.SNAP, short=True)

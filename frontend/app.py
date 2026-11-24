@@ -985,10 +985,10 @@ class JarvisApp(App, inherit_bindings=False):
         from services import user_prefs
         if user_prefs.get("net_monitor"):
             if self._net_watch is None:
-                from core.netwatch import NetworkWatch
+                from core.netwatch import NetworkWatch, identify_device
                 from services import net_guard
                 self._net_watch = NetworkWatch(net_guard.handle, net_guard.load_baseline, net_guard.save_baseline,
-                                               on_snapshot=net_guard.remember_snapshot)
+                                               on_snapshot=net_guard.remember_snapshot, identify=identify_device)
             self._net_watch.start()
         elif self._net_watch is not None:
             self._net_watch.stop()
@@ -997,8 +997,10 @@ class JarvisApp(App, inherit_bindings=False):
     _REDE_BLOCK = ("bloquear", "bloqueia", "block")
     _REDE_KEPT = ("mantidos", "mantido", "kept")
     _REDE_FORGET = ("esquecer", "esquece", "forget")
-    REDE_USAGE = ("Uso: /rede · /rede confiar <n> · /rede bloquear <ip> · /rede mantidos · "
-                  "/rede esquecer <n> · /rede reset")
+    _REDE_BLOCKS = ("bloqueios", "bloqueados", "blocks")
+    _REDE_UNBLOCK = ("desbloquear", "desbloqueia", "unblock")
+    REDE_USAGE = ("Uso: /rede · /rede confiar <n> · /rede bloquear <ip> · /rede bloqueios · "
+                  "/rede desbloquear <n|ip> · /rede mantidos · /rede esquecer <n> · /rede reset")
 
     def _rede(self, arg):
         """/rede — varredura agora; `confiar <n>` aceita um achado; `bloquear <ip>` e `reset` pedem confirmação."""
@@ -1025,8 +1027,16 @@ class JarvisApp(App, inherit_bindings=False):
             def answer(confirmed, ip=rest):
                 if confirmed:
                     self.tool_reply(f"rede · bloquear {ip}", net_guard.block_ip, ip)
-            self.push_screen(ConfirmScreen(f"Bloquear toda saída desta máquina para {rest} no Firewall do Windows?",
-                                           title="FIREWALL", yes="Bloquear", no="Cancelar"), answer)
+            self.push_screen(ConfirmScreen(f"Bloquear entrada e saída entre esta máquina e {rest} no Firewall "
+                                           "do Windows?", title="FIREWALL", yes="Bloquear", no="Cancelar"), answer)
+        elif word in self._REDE_BLOCKS and not rest:
+            self.tool_reply("rede · bloqueios", net_guard.blocks_text)
+        elif word in self._REDE_UNBLOCK and rest:
+            def answer(confirmed, target=rest):
+                if confirmed:
+                    self.tool_reply(f"rede · desbloquear {target}", net_guard.unblock, target)
+            self.push_screen(ConfirmScreen(f"Apagar o bloqueio {rest} do Firewall do Windows?",
+                                           title="FIREWALL", yes="Desbloquear", no="Manter"), answer)
         elif word == "reset" and not rest:
             def answer(confirmed):
                 if confirmed:

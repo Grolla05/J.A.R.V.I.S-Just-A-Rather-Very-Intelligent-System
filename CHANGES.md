@@ -2,6 +2,61 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+## Vigilância Cibernética: JARVIS como administrador, bloqueio de entrada e saída e automático
+
+**Data:** 2026-11-24
+**Escopo:** Item "Vigilância Cibernética — bloqueio de acessos suspeitos" do Brainstorm. Antes, `/rede bloquear <ip>` criava só regra de **saída** e só funcionava com o JARVIS elevado (que nunca estava).
+
+### JARVIS sempre como administrador, sem UAC a cada abertura
+
+- **`backend/core/elevation.py`** (novo): cria por XML duas tarefas agendadas com "privilégios mais altos": `\JARVIS\Agente` (no logon **só deste usuário**, sessão interativa, sem o limite de 72 h do Agendador) e `\JARVIS\TUI` (sob demanda, só instalado). O agente elevado abre a TUI e a ponte já elevadas. Com a tarefa, o valor `JARVIS` do `HKCU\…\Run` sai (senão subiriam dois agentes); remover devolve o Run
+- **Um UAC só**: checkbox nova no instalador ("Executar como administrador") ou `/config` → SISTEMA → **Executar como administrador** (pede o UAC via `ShellExecute runas`). As duas passam por `agent.py --elevation-install|--elevation-remove`, que prepara o ambiente antes de importar o `core`. Instalar também troca o agente não elevado que estiver rodando pelo da tarefa
+- **`core/autostart.py`**: com a tarefa, "Iniciar com o Windows" (bandeja e `/config`) habilita/desabilita a tarefa em vez do Run
+- **`installer/jarvis.cmd`**: não elevado e com a tarefa `\JARVIS\TUI` → `schtasks /Run` (TUI elevada, sem UAC)
+- **`installer/jarvis.iss`**: tarefa `admin`; Run e início do agente só sem ela; desinstalar apaga as tarefas (pede UAC só se existirem). Compila com o ISCC (`Successful compile`); o setup completo não foi rodado
+
+> ⚠️ **Trade-off de segurança:** com isso, tudo que o JARVIS faz roda como administrador (skills de teclado/mouse, apps, e qualquer conteúdo da web, clipboard ou e-mail que convença o modelo). Mitigações mantidas: firewall só com argv fixo, encerrar/apagar/enviar continuam pedindo confirmação, nunca texto do LLM em `shell=True`. Efeito colateral do Windows (UIPI): **arrastar arquivo do Explorer para o terminal elevado não funciona** — use `/attach <caminho>`
+
+### Firewall: entrada e saída, lista e desbloqueio
+
+- **`backend/core/firewall.py`** (novo): `validate_ip` (nunca LAN, loopback, multicast ou reservado), `block_ip_commands` (duas regras: `dir=in` e `dir=out`), `block_program_inbound_command` (entrada de um `.exe` com caminho absoluto), `delete_rule_command` (só apaga regras com o prefixo `JARVIS bloqueio`), `run_commands` (lista, sem shell, sem janela)
+- **`services/net_guard.py`**: `block_ip` cria entrada **e** saída; bloqueios ficam em `config.net_blocks`; `blocks_text` e `unblock` (`/rede bloqueios`, `/rede desbloquear <n|ip>`, com `ConfirmScreen`). Sem admin, a resposta aponta o `/config`
+- `/status` → PERÍMETRO mostra `firewall admin ✓ · N bloqueios`
+
+### Bloqueio automático
+
+- O juiz (`prompts/judge_connection.md`, agora com o caminho do executável) responde **SEGURO | SUSPEITO | PERIGOSO**. PERIGOSO = sinal forte de malware (nome que imita processo do Windows, executável em pasta temporária, ferramenta conhecida de RAT/mineração). Na dúvida, SUSPEITO
+- PERIGOSO + pref nova **`net_autoblock`** (ROTINAS → SEGURANÇA, ligada por padrão) + JARVIS elevado → bloqueia na hora (talker: IP em entrada e saída; listener: entrada do executável) e avisa com `/rede desbloquear <n>`. **Encerrar o processo continua pedindo confirmação**
+- Sem admin nunca bloqueia sozinho; avisa uma vez por sessão que falta o admin. SUSPEITO segue o fluxo antigo
+
+### Testes
+
+- `tests/test_firewall.py` (novo, 12): validação de IP, entrada+saída, programa só com caminho absoluto, só apaga regra do JARVIS, para no 1º erro, XML da tarefa (usuário, nível mais alto, sem prazo), estado da tarefa (pt-BR), instalar/remover, recusa sem admin, autostart pela tarefa
+- `tests/test_net_guard.py`: PERIGOSO bloqueia entrada e saída e ainda pede para encerrar; listener bloqueia o exe; sem admin nunca bloqueia e avisa uma vez; pref desligada; SUSPEITO nunca bloqueia; lista e desbloqueio por número/IP; erros
+- `tests/test_hotkey_agent.py`: autostart pelo Run sem tarefa
+
+## Perímetro de Rede: fabricante, nome e MAC privado de celular
+
+**Data:** 2026-11-24
+**Escopo:** Item "Perímetro de Rede — detecção de dispositivos estranhos" do Brainstorm. O vigia já avisava de aparelho novo e troca do MAC do roteador, mas só guardava `{mac: ip}` e todo celular com MAC privado virava "aparelho novo" a cada troca.
+
+### O que mudou
+
+- **`backend/core/oui.py`** (novo) + **`backend/core/data/oui.tsv.gz`** (40.554 fabricantes da IEEE, 385 KB, versionado): `vendor(mac)` com nome curto ("Intel Corporate" → "Intel"), `is_private(mac)` (bit 0x02). Nada sai do PC. Atualizar: `python tools/update_oui.py` (`backend/tools/update_oui.py`, novo; Wireshark ou IEEE)
+- **`backend/core/netwatch.py`**:
+  - Aparelho na base vira `{mac: {"ip", "vendor", "name", "private"}}`; base antiga `{mac: ip}` continua valendo (sem migração)
+  - `identify_device` (só para aparelho novo, cache por MAC): fabricante + nome por DNS reverso (prazo de 2 s) e, sem ele, `nbtstat -A` (pt/en)
+  - **MAC privado**: aparelho novo com bit 0x02 que bate com um privado da base — mesmo nome ou, sem nome dos dois lados, mesmo IP — vira `MAC_ROTATED` e só atualiza a base. MAC de fábrica nunca conta como rotação. Privado novo de verdade avisa com dica para fixar o MAC no Wi-Fi do aparelho
+  - Alerta: `Aparelho novo na rede: 192.168.0.23 — Samsung Electronics (Galaxy-S23) (mac).`; troca do roteador mostra fabricante antigo → novo e reforça a suspeita se o fabricante mudou
+- **`services/net_guard.py`**: `MAC_ROTATED` entra em silêncio; privado novo com prioridade normal (o resto segue alta; roteador, crítica); `/rede` lista IP · fabricante (nome) · MAC
+- **`frontend/app.py`**: o vigia da TUI passa `identify=identify_device` (os testes ficam sem rede)
+
+### Verificação
+
+- Na rede real, o roteador aparece como "TELLESCOM INDUSTRIA E COMERCIO EM TELECOMUNICACAO (menuvivofibra.br)"
+- Os `26.x.x.x` do ARP são pares da VPN Radmin (adaptador virtual, MAC privado) — já entravam antes; agora aparecem como "MAC privado"
+- `tests/test_oui.py` (novo, 6) e 11 testes novos em `tests/test_netwatch.py` (base antiga, nome e fabricante no alerta, rotação por nome e por IP, MAC fixo nunca é rotação, roteador com fabricante, `nbtstat` pt/en, resolução que nunca levanta, cache por MAC, vigia repassa o `identify`) + 2 em `tests/test_net_guard.py`
+
 ## Consumo Energético em tempo real
 
 **Data:** 2026-11-24
@@ -58,6 +113,10 @@ Desktop não tem sensor do consumo total, então é **estimativa com a GPU medid
 | `README.md` | Gmail, ponte Telegram/Discord, download pelo winget, clipboard/lembretes/ideias, vigia de rede, `Ctrl+Alt+E`, assinatura do setup; integrações completas; tirado o link para o `CLAUDE.md` (fora do git); testes com `-n auto` |
 | `AGENTS.md` | Modo Chat descrito pela lista branca (`productivity` e `web`) |
 | `docs/politica-de-privacidade.md`, `docs/termos-de-uso.md` | Atualização confere SHA-256 **e** assinatura Minisign |
+
+### Depois da feature de energia (`2d16201`)
+
+`POWER_REPORT` e `core/power.py` entraram em `docs/estrutura.md`, `docs/arquitetura.md`, `backend/core/README.md`, `backend/skills/README.md` (26 skills), `backend/database/README.md` (chave `power_daily`), `docs/tui.md` e `frontend/README.md` (watts na linha de status, medidor ENERGIA no `/status`) e `README.md`.
 
 ### Vault do Obsidian
 

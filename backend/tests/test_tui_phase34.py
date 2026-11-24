@@ -262,7 +262,7 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
                              ["BRIEFING", "ASSISTENTE", "SEGURANÇA", "AGENDA", "SILÊNCIO & PALCO"])
             self.assertTrue(screen.query_one("#cfg-col-1").display)       # 2 colunas
             self.assertRegex(str(cards[0].border_subtitle), r"^\d/4$")          # + e-mails no briefing
-            self.assertRegex(str(screen.query_one("#cfg-summary-n").render()), r"\d+/17")  # + pontes
+            self.assertRegex(str(screen.query_one("#cfg-summary-n").render()), r"\d+/18")  # + pontes + bloqueio automático
             self.assertIn("ROTINAS ·", str(screen.query_one("#topbar-info").render()))
             await pilot.press("enter")                                     # menu → 1ª linha
             first = screen.query_one("#pref-briefing_auto")
@@ -297,8 +297,9 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
             self.assertFalse(screen.query_one("#cfg-news").display)  # só em SISTEMA
 
     async def test_config_system_saves_news_sources(self):
-        from core import autostart, news, updater
+        from core import autostart, elevation, news, updater
         with patch.object(news, "_db", return_value=self.db), \
+             patch.object(elevation, "is_installed", return_value=False), \
              patch.object(autostart, "is_enabled", return_value=True), \
              patch.object(autostart, "is_agent_running", return_value=True), \
              patch.object(updater, "is_enabled", return_value=False):
@@ -307,9 +308,9 @@ class TestScreens(_DbCase, unittest.IsolatedAsyncioTestCase):
                 await self._open_config(app, pilot)
                 screen = app.screen
                 screen.query_one("#cfg-menu").highlighted = 4  # SISTEMA
-                # as seções montam em async: espera o campo e as 3 linhas aparecerem
+                # as seções montam em async: espera o campo e as 4 linhas aparecerem (+ administrador)
                 await self._wait(pilot, lambda: screen.query_one("#cfg-news").display
-                                 and len(screen.query("PrefRow")) == 3)
+                                 and len(screen.query("PrefRow")) == 4)
                 self.assertEqual(screen.group, "SISTEMA")
                 field = screen.query_one("#cfg-news-input")
                 self.assertTrue(screen.query_one("#cfg-news").display)

@@ -47,6 +47,7 @@ PREFS = {
     "reminder_final": ("Aviso final", (0, 5, 10, 15, 30), 15,
                        lambda v: "desligado" if not v else f"{v} min antes"),
     "net_monitor": ("Vigia de rede", _ONOFF, True, _onoff_label),
+    "net_autoblock": ("Bloqueio automático", _ONOFF, True, _onoff_label),
     "dnd_auto_meeting": ("Silenciar em reunião", _ONOFF, True, _onoff_label),
     "dnd_auto_fullscreen": ("Silenciar em tela cheia", _ONOFF, True, _onoff_label),
     "presentation_auto": ("Modo apresentação auto", _ONOFF, True, _onoff_label),
@@ -58,7 +59,7 @@ GROUPS = {
     "VOZ": ("tts_voice", "tts_rate", "tts_volume"),
     "MICROFONE": ("mic_threshold", "attention_window"),
     "ROTINAS": ("briefing_auto", "briefing_news", "news_ai", "briefing_email", "clipboard_monitor", "auto_insights", "remote_telegram", "remote_discord", "commute_alert",
-                "event_reminders", "reminder_lead", "reminder_final", "net_monitor",
+                "event_reminders", "reminder_lead", "reminder_final", "net_monitor", "net_autoblock",
                 "dnd_auto_meeting", "dnd_auto_fullscreen", "presentation_auto", "presentation_open"),
 }
 

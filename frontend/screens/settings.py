@@ -43,7 +43,7 @@ MENU = ("VOZ", "MICROFONE", "ROTINAS", INTEGRATIONS, "SISTEMA", "MODELO", "SOBRE
 CARD_REVEAL_S = 0.06  # troca de grupo: 1 card por quadro (5 cards ≈ 0,25 s)
 
 # SISTEMA não mora no user_prefs: o estado vive no registro (Run, AutoUpdate) e no mutex do agente.
-SYSTEM_KEYS = ("autostart", "agent", "autoupdate")
+SYSTEM_KEYS = ("autostart", "agent", "autoupdate", "admin")
 
 # Fala do JARVIS ao mexer em cada preferência (texto de UI, não prompt do LLM)
 QUIPS = {
@@ -65,6 +65,7 @@ QUIPS = {
     "reminder_lead": "Antecedência ajustada. Tempo de sobra para inventar uma desculpa melhor.",
     "reminder_final": "Aviso final ajustado. Com local e rota conhecidos, vira aviso de saída.",
     "net_monitor": "De guarda no perímetro: porta nova, programa estranho, aparelho intruso. Eu aviso; o senhor decide.",
+    "net_autoblock": "Coisa claramente maliciosa eu tranco no firewall na hora. Encerrar continua sendo com o senhor.",
     "dnd_auto_meeting": "Em reunião eu seguro os alertas. Os críticos passam, claro.",
     "dnd_auto_fullscreen": "Tela cheia é sagrada. Guardo os alertas para depois.",
     "presentation_auto": "Slides em tela cheia — PowerPoint, PDF, Canva: fecho o mic, calo a voz e mostro [SILENT].",
@@ -72,6 +73,9 @@ QUIPS = {
     "autostart": "Anotado. Eu acordo junto com o Windows — café por sua conta.",
     "agent": "Agente em 2º plano. Win+J me chama de qualquer lugar.",
     "autoupdate": "Toda vez que o Windows me acordar, confiro o GitHub. Versão nova, eu mesmo instalo.",
+    "admin": "Confirme o UAC. Uma vez só — depois eu subo com a chave do cofre sem incomodar.",
+    "admin_off": "Confirme o UAC para eu devolver a chave. O firewall volta a ser com o senhor.",
+    "admin_denied": "O Windows não abriu o UAC. Sem admin, o firewall segue fora do meu alcance.",
     "agent_running":"Já estou de plantão. Para me dispensar, use o ícone da bandeja.",
     "int_wait": "Abri o navegador, Senhor. Autorize o acesso e eu cuido do resto.",
     "int_idle": "Enter conecta, Del desconecta. Tokens ficam no Cofre do Windows, Senhor.",
@@ -185,6 +189,11 @@ class SettingsScreen(JarvisScreen):
             from core import updater
             on = updater.is_enabled()
             return "Atualização automática", "ligado" if on else "desligado", on
+        if key == "admin":
+            from core import elevation
+            on = elevation.is_installed()
+            now = "elevado agora" if elevation.is_admin() else "reabra para valer"
+            return "Executar como administrador", (now if on else "desligado"), on
         on = autostart.is_agent_running()
         return "Agente em 2º plano", "rodando" if on else "parado", on
 
@@ -457,6 +466,13 @@ class SettingsScreen(JarvisScreen):
         elif key == "autoupdate":
             from core import updater
             updater.set_enabled(not updater.is_enabled())
+        elif key == "admin":
+            from core import elevation
+            turning_on = not elevation.is_installed()
+            if not elevation.request("install" if turning_on else "remove"):
+                quip = "admin_denied"
+            elif not turning_on:
+                quip = "admin_off"
         elif autostart.is_agent_running():
             quip = "agent_running"
         else:

@@ -155,6 +155,111 @@ class TestBaselineAndDiff(unittest.TestCase):
         self.assertEqual(self.base["gateway"]["mac"], "a4-91-b1-00-11-22")  # gateway aprendido não muda no absorb
 
 
+
+class TestDeviceIdentity(unittest.TestCase):
+    """Fabricante/nome do aparelho e MAC privado de celular."""
+
+    def setUp(self):
+        self.base = netwatch.new_baseline(snap(), NOW)
+
+    def test_baseline_stores_vendor_and_private_flag(self):
+        entry = self.base["devices"]["3c-22-fb-aa-bb-cc"]
+        self.assertEqual(entry["ip"], "192.168.0.23")
+        self.assertFalse(entry["private"])
+        self.assertIn("vendor", entry)
+
+    def test_old_baseline_format_still_works(self):
+        old = {"listeners": [], "talkers": [], "devices": {"3c-22-fb-aa-bb-cc": "192.168.0.23",
+                                                           "a4-91-b1-00-11-22": "192.168.0.1"},
+               "gateway": {"ip": "192.168.0.1", "mac": "a4-91-b1-00-11-22"}}
+        self.assertEqual([f for f in netwatch.diff(old, snap()) if f["kind"] == "NEW_DEVICE"], [])
+        netwatch.absorb(old, snap())
+        self.assertIsInstance(old["devices"]["3c-22-fb-aa-bb-cc"], dict)
+
+    def test_identified_name_and_vendor_go_into_the_alert(self):
+        table = {**netwatch.parse_arp(ARP_PT), "b8-27-eb-11-22-33": "192.168.0.50"}
+        ident = lambda mac, ip: {"vendor": "Raspberry Pi Foundation", "name": "pihole", "private": False}  # noqa: E731
+        (finding,) = netwatch.diff(self.base, snap(arp=table), identify=ident)
+        self.assertEqual(finding["kind"], "NEW_DEVICE")
+        self.assertIn("Raspberry Pi Foundation (pihole)", finding["text"])
+        netwatch.trust(self.base, finding)
+        self.assertEqual(self.base["devices"]["b8-27-eb-11-22-33"]["name"], "pihole")
+
+    def test_private_mac_rotation_with_same_name_is_silent_kind(self):
+        ident = lambda mac, ip: {"vendor": None, "name": "Galaxy-S23", "private": True}  # noqa: E731
+        first = {**netwatch.parse_arp(ARP_PT), "da-00-00-00-00-01": "192.168.0.40"}
+        (new,) = netwatch.diff(self.base, snap(arp=first), identify=ident)
+        self.assertEqual(new["kind"], "NEW_DEVICE")
+        self.assertIn("fixe o MAC", new["text"])
+        netwatch.trust(self.base, new)
+        rotated = {**netwatch.parse_arp(ARP_PT), "6a-00-00-00-00-02": "192.168.0.41"}  # outro IP, mesmo nome
+        (rot,) = netwatch.diff(self.base, snap(arp=rotated), identify=ident)
+        self.assertEqual((rot["kind"], rot["old_mac"]), ("MAC_ROTATED", "da-00-00-00-00-01"))
+        netwatch.trust(self.base, rot)
+        self.assertNotIn("da-00-00-00-00-01", self.base["devices"])
+        self.assertEqual(netwatch.diff(self.base, snap(arp=rotated), identify=ident), [])
+
+    def test_private_without_name_matches_by_ip_only(self):
+        first = {**netwatch.parse_arp(ARP_PT), "da-00-00-00-00-01": "192.168.0.40"}
+        netwatch.trust(self.base, netwatch.diff(self.base, snap(arp=first))[0])
+        same_ip = {**netwatch.parse_arp(ARP_PT), "6a-00-00-00-00-02": "192.168.0.40"}
+        self.assertEqual([f["kind"] for f in netwatch.diff(self.base, snap(arp=same_ip))], ["MAC_ROTATED"])
+        other_ip = {**netwatch.parse_arp(ARP_PT), "6a-00-00-00-00-03": "192.168.0.99"}
+        self.assertEqual([f["kind"] for f in netwatch.diff(self.base, snap(arp=other_ip))], ["NEW_DEVICE"])
+
+    def test_fixed_mac_never_counts_as_rotation(self):
+        first = {**netwatch.parse_arp(ARP_PT), "da-00-00-00-00-01": "192.168.0.40"}
+        netwatch.trust(self.base, netwatch.diff(self.base, snap(arp=first))[0])
+        fixed = {**netwatch.parse_arp(ARP_PT), "00-11-22-33-44-55": "192.168.0.40"}  # MAC de fábrica
+        self.assertEqual([f["kind"] for f in netwatch.diff(self.base, snap(arp=fixed))], ["NEW_DEVICE"])
+
+    def test_gateway_change_shows_vendors(self):
+        table = {"00-0c-29-66-66-66": "192.168.0.1", "3c-22-fb-aa-bb-cc": "192.168.0.23"}
+        gw = next(f for f in netwatch.diff(self.base, snap(arp=table)) if f["kind"] == "GATEWAY_CHANGED")
+        self.assertIn("→", gw["text"])
+        self.assertIn("vendor", gw)
+
+    def test_parse_nbtstat(self):
+        out = """
+    Tabela de nomes NetBIOS de máquinas remotas
+
+       Nome               Tipo         Status
+    ---------------------------------------------
+    DESKTOP-ABC    <00>  ÚNICO       Registrado
+    WORKGROUP      <00>  GRUPO       Registrado
+"""
+        self.assertEqual(netwatch.parse_nbtstat(out), "DESKTOP-ABC")
+        self.assertEqual(netwatch.parse_nbtstat("    NOTE-1 <00>  UNIQUE  Registered"), "NOTE-1")
+        self.assertEqual(netwatch.parse_nbtstat("Host não encontrado."), "")
+
+    def test_resolve_name_falls_back_and_never_raises(self):
+        def boom(ip):
+            raise OSError("sem DNS")
+        self.assertEqual(netwatch.resolve_name("1.2.3.4", rdns=lambda ip: "", nbtstat=lambda ip: "PC-SALA"), "PC-SALA")
+        self.assertEqual(netwatch.resolve_name("1.2.3.4", rdns=boom, nbtstat=boom), "")
+        self.assertEqual(netwatch.resolve_name("1.2.3.4", rdns=lambda ip: "tv", nbtstat=boom), "tv")
+
+    def test_identify_device_caches_name_per_mac(self):
+        calls = []
+        netwatch._name_cache.pop("b8-27-eb-99-99-99", None)
+        resolver = lambda ip: calls.append(ip) or "pi"  # noqa: E731
+        for _ in range(2):
+            info = netwatch.identify_device("b8-27-eb-99-99-99", "192.168.0.9", resolver=resolver)
+        self.assertEqual(calls, ["192.168.0.9"])
+        self.assertEqual(info["name"], "pi")
+        self.assertFalse(info["private"])
+
+    def test_watch_passes_identify_to_diff(self):
+        store = {"base": netwatch.new_baseline(snap(), NOW - timedelta(hours=1))}
+        table = {**netwatch.parse_arp(ARP_PT), "b8-27-eb-11-22-33": "192.168.0.50"}
+        got = []
+        watch = netwatch.NetworkWatch(lambda f: got.append(f) or True, lambda: store["base"],
+                                      lambda b: store.update(base=b),
+                                      snapshot_fn=lambda with_arp: snap(arp=table), clock=lambda: NOW,
+                                      identify=lambda mac, ip: {"vendor": "X", "name": "sala", "private": False})
+        watch.check_once()
+        self.assertIn("X (sala)", got[0]["text"])
+
 class TestWatch(unittest.TestCase):
     def setUp(self):
         self.store = {"base": None}

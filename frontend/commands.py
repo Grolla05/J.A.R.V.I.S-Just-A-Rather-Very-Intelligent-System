@@ -33,7 +33,7 @@ COMMANDS = {
     "ideia":    ("/ideia <texto>", "anota uma ideia em 🧠 Brainstorms no Obsidian (a conversa também registra sozinha)"),
     "lembrete": ("/lembrete [<quando> <assunto> | rm <n>]",
                  "lembrete com horário (em 30 min…, às 18h…); sem argumento lista os pendentes"),
-    "rede":     ("/rede [confiar <n> | bloquear <ip> | mantidos | esquecer <n> | reset]",
+    "rede":     ("/rede [confiar <n> | bloquear <ip> | bloqueios | desbloquear <n> | mantidos | esquecer <n> | reset]",
                  "perímetro de rede: aparelhos, portas expostas e programas na internet (vigia no /config)"),
     "focus":    ("/focus [min|stop|skip|status]", "pomodoro 25/5 (liga o Não Perturbe no foco)"),
     "dnd":      ("/dnd [on|off|min]", "Não Perturbe: silencia notificações do Windows e alertas"),
