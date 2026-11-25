@@ -73,9 +73,9 @@ QUIPS = {
     "autostart": "Anotado. Eu acordo junto com o Windows — café por sua conta.",
     "agent": "Agente em 2º plano. Win+J me chama de qualquer lugar.",
     "autoupdate": "Toda vez que o Windows me acordar, confiro o GitHub. Versão nova, eu mesmo instalo.",
-    "admin": "Confirme o UAC. Uma vez só — depois eu subo com a chave do cofre sem incomodar.",
-    "admin_off": "Confirme o UAC para eu devolver a chave. O firewall volta a ser com o senhor.",
-    "admin_denied": "O Windows não abriu o UAC. Sem admin, o firewall segue fora do meu alcance.",
+    "admin": "Confirme o UAC. Uma vez só — o firewall ganha a chave; eu continuo sem admin.",
+    "admin_off": "Confirme o UAC para eu devolver a chave do firewall.",
+    "admin_denied": "O Windows não abriu o UAC. Sem a chave, o firewall segue fora do meu alcance.",
     "agent_running":"Já estou de plantão. Para me dispensar, use o ícone da bandeja.",
     "int_wait": "Abri o navegador, Senhor. Autorize o acesso e eu cuido do resto.",
     "int_idle": "Enter conecta, Del desconecta. Tokens ficam no Cofre do Windows, Senhor.",
@@ -192,8 +192,7 @@ class SettingsScreen(JarvisScreen):
         if key == "admin":
             from core import elevation
             on = elevation.is_installed()
-            now = "elevado agora" if elevation.is_admin() else "reabra para valer"
-            return "Executar como administrador", (now if on else "desligado"), on
+            return "Firewall do JARVIS", "ligado" if on else "desligado", on
         on = autostart.is_agent_running()
         return "Agente em 2º plano", "rodando" if on else "parado", on
 

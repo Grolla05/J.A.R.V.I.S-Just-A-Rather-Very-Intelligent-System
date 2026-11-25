@@ -91,7 +91,7 @@ HELP = {
     "reminder_lead": "Quanto antes de cada evento do Google Agenda eu aviso.",
     "reminder_final": "Último aviso; com rota conhecida vira aviso de saída.",
     "net_monitor": "Avisa porta nova, programa estranho ou aparelho intruso.",
-    "net_autoblock": "Programa julgado perigoso: bloqueio no firewall na hora (precisa de admin).",
+    "net_autoblock": "Programa julgado perigoso: bloqueio no firewall na hora (Firewall do JARVIS em SISTEMA).",
     "dnd_auto_meeting": "Reunião na agenda: alertas comuns ficam para depois.",
     "dnd_auto_fullscreen": "App em tela cheia: alertas comuns ficam para depois.",
     "presentation_auto": "Slides em tela cheia fecham o mic e calam a voz.",
@@ -99,7 +99,7 @@ HELP = {
     "autostart": "Sobe o agente junto com o Windows.",
     "agent": "Agente da bandeja: o atalho global abre o JARVIS de qualquer lugar.",
     "autoupdate": "No logon confere os Releases do GitHub e instala sozinho.",
-    "admin": "Roda como administrador (tarefa agendada, 1 UAC só) para o firewall funcionar.",
+    "admin": "Só o firewall roda como admin (tarefa agendada, 1 UAC só); o JARVIS segue sem admin.",
 }
 
 VALUE_W = 11   # coluna do valor ("limiar 1200", "○ PARADO")

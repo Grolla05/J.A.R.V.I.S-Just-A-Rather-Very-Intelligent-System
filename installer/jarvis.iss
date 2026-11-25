@@ -61,7 +61,7 @@ Name: "ptbr"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
 ptbr.TarefaPath=Adicionar o JARVIS ao PATH (rodar "jarvis" em qualquer terminal)
 ptbr.GrupoOutras=Outras opções:
 ptbr.TarefaAutostart=Iniciar o J.A.R.V.I.S com o Windows (agente na bandeja, Win+J abre)
-ptbr.TarefaAdmin=Executar como administrador (firewall do Vigia de rede; pede o UAC uma vez)
+ptbr.TarefaAdmin=Firewall do JARVIS (bloqueios do Vigia de rede; pede o UAC uma vez)
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
@@ -100,20 +100,20 @@ Name: "{group}\{cm:UninstallProgram,J.A.R.V.I.S}"; Filename: "{uninstallexe}"
 ; Agente residente (pythonw, sem janela) no logon: segura o Win+J e reabre a TUI.
 ; O /config e o ícone da bandeja ligam/desligam este mesmo valor depois.
 ; --logon: só nessa subida o agente procura versão nova (backend\core\updater.py).
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "JARVIS"; ValueData: """{app}\runtime\pythonw.exe"" ""{app}\app\backend\agent.py"" --logon"; Tasks: autostart and not admin; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "JARVIS"; ValueData: """{app}\runtime\pythonw.exe"" ""{app}\app\backend\agent.py"" --logon"; Tasks: autostart; Flags: uninsdeletevalue
 
 [Run]
-; Administrador sem UAC a cada abertura (backend\core\elevation.py): um UAC agora cria as tarefas
-; \JARVIS\Agente (logon, elevada) e \JARVIS\TUI e ja sobe o agente elevado. Na atualizacao nao repete.
-Filename: "{app}\runtime\pythonw.exe"; Parameters: """{app}\app\backend\agent.py"" --elevation-install{code:SemAutostart}"; WorkingDir: "{app}\app\backend"; Verb: runas; Tasks: admin; Check: not EhAtualizacao; Flags: shellexec waituntilterminated skipifsilent
-Filename: "{app}\runtime\pythonw.exe"; Parameters: """{app}\app\backend\agent.py"""; WorkingDir: "{app}\app\backend"; Tasks: autostart and not admin; Flags: nowait skipifsilent
+; Firewall do JARVIS (backend\core\elevation.py): um UAC agora cria a tarefa elevada \JARVIS\Firewall,
+; que o JARVIS (sem admin) dispara para aplicar os bloqueios. Na atualizacao nao repete.
+Filename: "{app}\runtime\pythonw.exe"; Parameters: """{app}\app\backend\agent.py"" --elevation-install"; WorkingDir: "{app}\app\backend"; Verb: runas; Tasks: admin; Check: not EhAtualizacao; Flags: shellexec waituntilterminated skipifsilent
+Filename: "{app}\runtime\pythonw.exe"; Parameters: """{app}\app\backend\agent.py"""; WorkingDir: "{app}\app\backend"; Tasks: autostart; Flags: nowait skipifsilent
 ; Atualização automática (/UPDATE, aberta pelo agente depois da tecla na tela de
 ; atualização): o agente se fechou para liberar o runtime; reabre ele sem --logon
 Filename: "{app}\runtime\pythonw.exe"; Parameters: """{app}\app\backend\agent.py"""; WorkingDir: "{app}\app\backend"; Check: EhAtualizacao; Flags: nowait runasoriginaluser
 Filename: "{app}\jarvis.cmd"; Description: "{cm:LaunchProgram,J.A.R.V.I.S}"; WorkingDir: "{app}"; Flags: postinstall nowait skipifsilent shellexec
 
 [UninstallRun]
-; Tarefas elevadas (se existirem): apagar exige admin, entao pede o UAC
+; Tarefa elevada do firewall (se existir): apagar exige admin, entao pede o UAC
 Filename: "{app}\runtime\pythonw.exe"; Parameters: """{app}\app\backend\agent.py"" --elevation-remove"; WorkingDir: "{app}\app\backend"; Verb: runas; Flags: shellexec waituntilterminated; RunOnceId: "RemoveTarefasAdmin"; Check: TemTarefaAdmin
 ; Fecha agente e TUI antes de apagar os arquivos (pythonw/python travam o runtime)
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""Get-Process python,pythonw -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '{app}\runtime\*' } | Stop-Process -Force"""; Flags: runhidden waituntilterminated; RunOnceId: "FechaAgente"
@@ -168,19 +168,11 @@ begin
   Result := TemParam('UPDATE');
 end;
 
-function SemAutostart(Param: String): String;
-begin
-  if WizardIsTaskSelected('autostart') then
-    Result := ''
-  else
-    Result := ' --no-autostart';
-end;
-
 function TemTarefaAdmin: Boolean;
 var
   Codigo: Integer;
 begin
-  Result := Exec(ExpandConstant('{sys}\schtasks.exe'), '/Query /TN "\JARVIS\Agente"', '', SW_HIDE,
+  Result := Exec(ExpandConstant('{sys}\schtasks.exe'), '/Query /TN "\JARVIS\Firewall"', '', SW_HIDE,
                  ewWaitUntilTerminated, Codigo) and (Codigo = 0);
 end;
 

@@ -6,8 +6,8 @@
   processo** (ConfirmScreen; "Manter" = grava o software em `net_trusted_apps`,
   via `services/net_trust.py`). "PERIGOSO" faz o mesmo, mas antes **bloqueia no
   firewall** (IP público em entrada+saída; porta exposta = entrada do executável)
-  quando a pref `net_autoblock` está ligada e o JARVIS está elevado; `/rede
-  desbloquear <n>` desfaz. Sem resposta do modelo nada é decidido — o achado
+  quando a pref `net_autoblock` está ligada e o firewall do JARVIS está disponível;
+  `/rede desbloquear <n>` desfaz. Sem resposta do modelo nada é decidido — o achado
   volta na próxima rodada.
 - Software mantido é conferido **antes** do juiz: entra na linha de base em silêncio,
   mesmo depois de `/rede reset` (o reset apaga só a base, nunca a tabela).
@@ -15,12 +15,12 @@
 - Tudo passa pelo filtro de interrupções; troca de gateway é prioridade crítica.
 
 Encerrar fica sempre atrás de confirmação e confere nome e hora de criação do PID
-(não mata um PID reciclado). Firewall (`core/firewall.py`) só roda com o JARVIS
-elevado; sem isso `/rede bloquear` devolve o comando para rodar como admin. As
-regras criadas ficam em `config.net_blocks` (lista do `/rede bloqueios`).
+(não mata um PID reciclado). Firewall (`core/firewall.py`): direto se o processo
+já é admin, senão pela tarefa elevada `\\JARVIS\\Firewall` (o JARVIS em si nunca é
+elevado). Sem nenhum dos dois, `/rede bloquear` devolve o comando para rodar como
+admin. As regras criadas ficam em `config.net_blocks` (lista do `/rede bloqueios`).
 """
 import ipaddress
-import subprocess
 import threading
 import time
 from collections import deque
@@ -126,7 +126,8 @@ def kill_process(pid, name, created):
 
 
 def is_admin():
-    return firewall.is_admin()
+    """Firewall disponível: processo admin ou tarefa elevada `\\JARVIS\\Firewall` criada."""
+    return firewall.available()
 
 
 def block_command(ip):
@@ -148,7 +149,7 @@ def _record_block(target, kind, rules, reason, auto):
         db.save_config(BLOCKS_KEY, blocks)
 
 
-def block_ip(ip, admin=is_admin, run=subprocess.run, reason="pedido do usuário", auto=False):
+def block_ip(ip, admin=is_admin, run=None, reason="pedido do usuário", auto=False):
     """Regras de entrada e saída no Firewall do Windows para um IP público. Devolve a fala.
     Manual: só depois da confirmação (/rede bloquear <ip>). Automático: veredito PERIGOSO."""
     try:
@@ -158,8 +159,8 @@ def block_ip(ip, admin=is_admin, run=subprocess.run, reason="pedido do usuário"
     commands = firewall.block_ip_commands(ip)
     if not admin():
         listed = "\n".join(firewall.shown(c) for c in commands)
-        return ("O Firewall do Windows exige administrador e eu não estou elevado, Senhor. "
-                "Ligue **Executar como administrador** no `/config` → SISTEMA, ou rode num terminal como "
+        return ("O Firewall do Windows exige administrador e o firewall do JARVIS está desligado, Senhor. "
+                "Ligue **Firewall do JARVIS** no `/config` → SISTEMA (um UAC só), ou rode num terminal como "
                 f"administrador:\n\n```\n{listed}\n```")
     ok, error = firewall.run_commands(commands, run=run)
     if not ok:
@@ -169,7 +170,7 @@ def block_ip(ip, admin=is_admin, run=subprocess.run, reason="pedido do usuário"
     return f"Entrada e saída para {ip} bloqueadas no Firewall do Windows (regras \"{RULE_PREFIX} {ip}\"), Senhor."
 
 
-def block_program_inbound(exe, admin=is_admin, run=subprocess.run, reason="", auto=False):
+def block_program_inbound(exe, admin=is_admin, run=None, reason="", auto=False):
     """Bloqueia a entrada de rede de um executável (processo com porta exposta). Devolve a fala ou None."""
     try:
         command = firewall.block_program_inbound_command(exe)
@@ -198,7 +199,7 @@ def blocks_text():
     return "\n".join(lines)
 
 
-def unblock(arg, admin=is_admin, run=subprocess.run):
+def unblock(arg, admin=is_admin, run=None):
     """/rede desbloquear <n|ip> — apaga as regras do JARVIS daquele alvo. Devolve a fala."""
     arg = (arg or "").strip()
     blocks = load_blocks()
@@ -209,7 +210,7 @@ def unblock(arg, admin=is_admin, run=subprocess.run):
         return f"Não há bloqueio `{arg}`, Senhor. `/rede bloqueios` lista os números."
     block = blocks[index]
     if not admin():
-        return "Desbloquear exige administrador e eu não estou elevado, Senhor."
+        return "Desbloquear exige o firewall do JARVIS (`/config` → SISTEMA), Senhor."
     for name in block.get("rules", []):
         ok, error = firewall.run_commands([firewall.delete_rule_command(name)], run=run)
         if not ok and "No rules match" not in error and "Nenhuma regra" not in error:
@@ -245,7 +246,7 @@ def _announce(text):
     announce(text)
 
 
-def handle(finding, judge_fn=judge, announce=_announce, clock=time.time, admin=is_admin, run=subprocess.run,
+def handle(finding, judge_fn=judge, announce=_announce, clock=time.time, admin=is_admin, run=None,
            autoblock=_autoblock_enabled):
     """Chamado pelo NetworkWatch (thread dele). True = tratado; False = tente depois."""
     from services import notify_filter
@@ -286,8 +287,8 @@ def handle(finding, judge_fn=judge, announce=_announce, clock=time.time, admin=i
                 blocked = _autoblock(finding, admin, run)
             elif not _warned["admin"]:
                 _warned["admin"] = True
-                blocked = ("Eu bloquearia isso no firewall, mas não estou elevado: ligue **Executar como "
-                           "administrador** no `/config` → SISTEMA.")
+                blocked = ("Eu bloquearia isso no firewall, mas o firewall do JARVIS está desligado: ligue "
+                           "**Firewall do JARVIS** no `/config` → SISTEMA.")
         if blocked and "bloqueada" in blocked:
             blocked += f" (`/rede desbloquear {len(load_blocks())}` desfaz.)"
         alarm = "Parece malicioso." if verdict == DANGER else "Não reconheço esse processo."
@@ -419,7 +420,7 @@ def perimeter_text():
              f"na internet      {len(snap['talkers'])} programas",
              f"aparelhos na LAN {len(devices) if devices else '—'}",
              f"alertas          {len(_recent)}",
-             f"firewall         {'admin ✓' if is_admin() else 'sem admin'} · {len(load_blocks())} bloqueios"]
+             f"firewall         {'ligado ✓' if is_admin() else 'desligado'} · {len(load_blocks())} bloqueios"]
     if _recent:
         lines.append(_recent[0]["finding"]["text"][:60])
     return "\n".join(lines)

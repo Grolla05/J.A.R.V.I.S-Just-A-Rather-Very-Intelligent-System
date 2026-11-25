@@ -114,8 +114,7 @@ class FakeWinreg:
 class TestAutostart(unittest.TestCase):
     def test_enable_disable(self):
         reg = FakeWinreg()
-        with patch.object(autostart, "_winreg", return_value=reg), \
-                patch.object(autostart, "_task_state", return_value=None):  # sem tarefa elevada: usa o Run
+        with patch.object(autostart, "_winreg", return_value=reg):
             self.assertFalse(autostart.is_enabled())
             self.assertTrue(autostart.enable())
             self.assertTrue(autostart.is_enabled())

@@ -276,11 +276,11 @@ class TestAutoBlock(GuardCase):
     def test_without_admin_never_blocks_and_warns_once(self):
         self._danger(TALKER, admin=False)
         self.run.assert_not_called()
-        self.assertIn("não estou elevado", self.said[0])
+        self.assertIn("firewall do JARVIS está desligado", self.said[0])
         state.pending_critical_action = None
         net_guard._judge_cache.clear()
         self._danger({**TALKER, "key": "talker:outro", "proc": "outro.exe"}, admin=False)
-        self.assertNotIn("não estou elevado", self.said[1])
+        self.assertNotIn("firewall do JARVIS está desligado", self.said[1])
 
     def test_pref_off_never_blocks(self):
         self._danger(TALKER, autoblock=False)
@@ -314,7 +314,7 @@ class TestBlocksList(GuardCase):
         self.assertIn("Não há bloqueio", net_guard.unblock("9"))
         net_guard.block_ip("185.10.10.10", admin=lambda: True,
                            run=MagicMock(return_value=MagicMock(returncode=0, stdout="")))
-        self.assertIn("exige administrador", net_guard.unblock("1", admin=lambda: False))
+        self.assertIn("exige o firewall", net_guard.unblock("1", admin=lambda: False))
         refuse = MagicMock(return_value=MagicMock(returncode=1, stdout="Acesso negado", stderr=""))
         self.assertIn("recusou", net_guard.unblock("1", admin=lambda: True, run=refuse))
         self.assertEqual(len(net_guard.load_blocks()), 1)
@@ -360,7 +360,7 @@ class TestActions(unittest.TestCase):
         run = MagicMock()
         reply = net_guard.block_ip("185.10.10.10", admin=lambda: False, run=run)
         run.assert_not_called()
-        self.assertIn("não estou elevado", reply)
+        self.assertIn("firewall do JARVIS está desligado", reply)
         self.assertIn("remoteip=185.10.10.10", reply)
 
     def test_block_ip_as_admin_runs_netsh_without_shell(self):

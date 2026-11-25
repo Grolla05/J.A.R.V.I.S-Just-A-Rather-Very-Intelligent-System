@@ -1,25 +1,19 @@
-"""JARVIS sempre como administrador — sem UAC a cada abertura.
+"""Firewall elevado sem elevar o JARVIS — tarefa agendada `\\JARVIS\\Firewall`.
 
 O Firewall do Windows (bloquear IP/programa no Vigia de rede) exige um processo
-elevado. Em vez de rodar tudo pedindo UAC, criamos **uma vez** (um UAC só, pelo
-instalador ou pelo `/config` → SISTEMA) duas tarefas agendadas com "executar com
-privilégios mais altos":
+elevado, mas a TUI elevada perde o arrastar arquivo do Explorer (UIPI) e dar
+admin ao JARVIS inteiro (skills, modelo) é poder demais. Então só **uma tarefa**
+roda como administrador:
 
-- `\\JARVIS\\Agente` — no logon **deste usuário**, sobe o agente residente
-  (`agent.py --logon`). A TUI e a ponte que ele abre herdam a elevação.
-- `\\JARVIS\\TUI` — sob demanda; o `jarvis.cmd` não elevado a dispara
-  (`schtasks /Run`) para abrir a TUI já elevada. Só no layout instalado.
+- `\\JARVIS\\Firewall` — sem gatilho, "privilégios mais altos", criada **uma vez**
+  com um UAC (instalador ou `/config` → SISTEMA). O próprio usuário a dispara
+  sem UAC (`schtasks /Run`); ela roda `agent.py --firewall-queue`, que atende os
+  pedidos de `core/firewall.py` (revalidados: só regras "JARVIS bloqueio") e sai.
 
-Com a tarefa do agente, o valor `JARVIS` do `HKCU\\…\\Run` sai (senão subiriam
-dois agentes, e o não elevado poderia ganhar o mutex). `core/autostart.py` passa
-a ligar/desligar a tarefa. Remover devolve o valor do Run.
+TUI, agente e ponte continuam sem admin. Leve de propósito (só `config` e
+`logger`): o agente importa.
 
-Trade-off: tudo que o JARVIS faz passa a ter poder de admin. Por isso o firewall
-só roda com argv fixo (`core/firewall.py`) e ações destrutivas seguem pedindo
-confirmação. Leve de propósito (só `config` e `logger`): o agente importa via
-`core/autostart.py`.
-
-    pythonw agent.py --elevation-install [--no-autostart]   (precisa estar elevado)
+    pythonw agent.py --elevation-install   (precisa estar elevado)
     pythonw agent.py --elevation-remove
 
 Passa pelo agent.py porque ele prepara o ambiente (JARVIS_DATA_DIR no layout
@@ -40,9 +34,11 @@ if sys.stderr is None:
 from .config import settings  # noqa: E402
 from .logger import log  # noqa: E402
 
-AGENT_TASK = "\\JARVIS\\Agente"
-TUI_TASK = "\\JARVIS\\TUI"
+FIREWALL_TASK = "\\JARVIS\\Firewall"
+QUEUE_FLAG = "--firewall-queue"   # mesmo valor do agent.py
+LEGACY_TASKS = ("\\JARVIS\\Agente", "\\JARVIS\\TUI")  # versão que elevava tudo (nunca publicada)
 RUN_TIMEOUT_S = 15
+TASK_TIME_LIMIT = "PT2M"  # a fila termina em segundos; o limite só evita processo preso
 SW_HIDE = 0
 CREATE_NO_WINDOW = 0x08000000
 
@@ -61,15 +57,12 @@ def current_user():
     return f"{domain}\\{user}" if domain and user else user
 
 
-def task_xml(command, arguments, workdir, user, on_logon, description):
-    """XML do Agendador: logon só de `user`, nível mais alto, sessão interativa, sem prazo
-    (o padrão do Agendador mata a tarefa em 72 h — o agente vive o dia inteiro)."""
-    trigger = (f"<Triggers><LogonTrigger><Enabled>true</Enabled><UserId>{escape(user)}</UserId>"
-               "</LogonTrigger></Triggers>") if on_logon else "<Triggers />"
+def task_xml(command, arguments, workdir, user, description):
+    """XML do Agendador: sem gatilho (sob demanda), nível mais alto, só deste usuário."""
     return f"""<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo><Author>J.A.R.V.I.S</Author><Description>{escape(description)}</Description></RegistrationInfo>
-  {trigger}
+  <Triggers />
   <Principals>
     <Principal id="Author">
       <UserId>{escape(user)}</UserId>
@@ -78,7 +71,7 @@ def task_xml(command, arguments, workdir, user, on_logon, description):
     </Principal>
   </Principals>
   <Settings>
-    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <MultipleInstancesPolicy>Queue</MultipleInstancesPolicy>
     <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
     <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
     <AllowHardTerminate>true</AllowHardTerminate>
@@ -87,9 +80,9 @@ def task_xml(command, arguments, workdir, user, on_logon, description):
     <IdleSettings><StopOnIdleEnd>false</StopOnIdleEnd><RestartOnIdle>false</RestartOnIdle></IdleSettings>
     <AllowStartOnDemand>true</AllowStartOnDemand>
     <Enabled>true</Enabled>
-    <Hidden>false</Hidden>
+    <Hidden>true</Hidden>
     <RunOnlyIfIdle>false</RunOnlyIfIdle>
-    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <ExecutionTimeLimit>{TASK_TIME_LIMIT}</ExecutionTimeLimit>
     <Priority>7</Priority>
   </Settings>
   <Actions Context="Author">
@@ -112,23 +105,16 @@ def _run(args, run=subprocess.run):
         return 1, str(e)
 
 
-def task_state(name, run=subprocess.run):
-    """None (não existe) | True (habilitada) | False (desabilitada)."""
-    code, out = _run(["schtasks", "/Query", "/TN", name, "/FO", "CSV", "/NH"], run)
-    if code != 0 or not out.strip():
-        return None
-    low = out.lower()
-    return not ("disabled" in low or "desabilitad" in low)
+def task_exists(name=FIREWALL_TASK, run=subprocess.run):
+    code, out = _run(["schtasks", "/Query", "/TN", name], run)
+    return code == 0 and bool(out.strip())
 
 
-def set_task_enabled(name, enabled, run=subprocess.run):
-    code, out = _run(["schtasks", "/Change", "/TN", name, "/ENABLE" if enabled else "/DISABLE"], run)
-    if code != 0:
-        log.warning(f"[ADMIN] Não consegui {'ligar' if enabled else 'desligar'} a tarefa {name}: {out.strip()[:120]}")
-    return code == 0
+def is_installed(run=subprocess.run):
+    return task_exists(FIREWALL_TASK, run)
 
 
-def run_task(name, run=subprocess.run):
+def run_task(name=FIREWALL_TASK, run=subprocess.run):
     return _run(["schtasks", "/Run", "/TN", name], run)[0] == 0
 
 
@@ -147,71 +133,33 @@ def _create(name, xml, run=subprocess.run):
         raise RuntimeError(f"schtasks recusou {name}: {out.strip()[:160]}")
 
 
-def _tui_launcher():
-    launcher = settings.DIR_ROOT.parent / "jarvis.cmd"
-    return launcher if (settings.DIR_ROOT.parent / "runtime").is_dir() and launcher.exists() else None
-
-
-def is_installed(run=subprocess.run):
-    return task_state(AGENT_TASK, run) is not None
-
-
-def install(autostart=True, run=subprocess.run, user=None):
-    """Cria as tarefas (precisa estar elevado). Devolve a frase do resultado; levanta RuntimeError."""
-    from . import autostart as auto
-    user = user or current_user()
-    _create(AGENT_TASK, task_xml(auto.pythonw_path(), f'"{auto.agent_script()}" {auto.LOGON_FLAG}',
-                                 settings.DIR_BACKEND, user, True,
-                                 "Agente residente do J.A.R.V.I.S (elevado: firewall do Vigia de rede)."), run)
-    launcher = _tui_launcher()
-    if launcher:
-        _create(TUI_TASK, task_xml(os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "cmd.exe"),
-                                   f'/c "{launcher}"', launcher.parent, user, False,
-                                   "Abre a TUI do J.A.R.V.I.S elevada (sem UAC)."), run)
-    if not autostart:
-        set_task_enabled(AGENT_TASK, False, run)
-    auto.delete_run_value()  # a tarefa substitui o Run (senão sobem dois agentes)
-    log.info("[ADMIN] Tarefas elevadas criadas.")
-    return "JARVIS passa a rodar como administrador (tarefa agendada, sem UAC a cada abertura)."
+def install(run=subprocess.run, user=None):
+    """Cria a tarefa do firewall (precisa estar elevado). Levanta RuntimeError se o Agendador recusar."""
+    from . import autostart
+    _create(FIREWALL_TASK, task_xml(autostart.pythonw_path(), f'"{autostart.agent_script()}" {QUEUE_FLAG}',
+                                    settings.DIR_BACKEND, user or current_user(),
+                                    "Firewall do J.A.R.V.I.S: aplica só regras \"JARVIS bloqueio\" pedidas "
+                                    "pelo Vigia de rede."), run)
+    log.info("[ADMIN] Tarefa elevada do firewall criada.")
+    return "Firewall do JARVIS ligado (tarefa elevada; o resto do JARVIS segue sem admin)."
 
 
 def remove(run=subprocess.run):
-    """Apaga as tarefas e devolve o início com o Windows ao valor do Run, se estava ligado."""
-    from . import autostart as auto
-    was_on = task_state(AGENT_TASK, run)
-    for name in (AGENT_TASK, TUI_TASK):
+    for name in (FIREWALL_TASK, *LEGACY_TASKS):
         _run(["schtasks", "/Delete", "/TN", name, "/F"], run)
-    if was_on:
-        auto.write_run_value()
-    log.info("[ADMIN] Tarefas elevadas removidas.")
-    return "JARVIS volta a rodar sem administrador."
-
-
-def restart_agent_elevated(run=subprocess.run):
-    """Troca um agente não elevado pelo da tarefa (vale já, sem esperar o próximo logon)."""
-    from . import autostart as auto
-    script = str(auto.agent_script()).lower()
-    try:
-        import psutil
-        for proc in psutil.process_iter(["pid", "name", "cmdline"]):
-            cmd = " ".join(proc.info.get("cmdline") or []).lower()
-            if proc.pid != os.getpid() and script in cmd and "elevation" not in cmd:
-                proc.terminate()
-                proc.wait(timeout=5)
-    except Exception as e:
-        log.debug(f"[ADMIN] Não consegui fechar o agente antigo: {e}")
-    return run_task(AGENT_TASK, run)
+    log.info("[ADMIN] Tarefa elevada do firewall removida.")
+    return "Firewall do JARVIS desligado."
 
 
 def request(action):
-    """Pede o UAC (uma vez) para instalar/remover as tarefas. True se o Windows aceitou abrir."""
+    """Pede o UAC (uma vez) para criar/apagar a tarefa. True se o Windows aceitou abrir."""
     if action not in ("install", "remove"):
         raise ValueError(action)
-    from . import autostart as auto
+    from . import autostart
     try:
         import ctypes
-        code = ctypes.windll.shell32.ShellExecuteW(None, "runas", str(auto.pythonw_path()),
-                                                   f'"{auto.agent_script()}" --elevation-{action}',
+        code = ctypes.windll.shell32.ShellExecuteW(None, "runas", str(autostart.pythonw_path()),
+                                                   f'"{autostart.agent_script()}" --elevation-{action}',
                                                    str(settings.DIR_BACKEND), SW_HIDE)
     except Exception as e:
         log.warning(f"[ADMIN] UAC indisponível: {e}")
@@ -222,17 +170,18 @@ def request(action):
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if not is_admin():
-        log.error("[ADMIN] core.elevation precisa rodar elevado.")
+        log.error("[ADMIN] precisa rodar elevado.")
         return 1
     try:
         if "--remove" in argv:
             remove()
         elif "--install" in argv:
-            install(autostart="--no-autostart" not in argv)
-            if "--no-restart" not in argv and task_state(AGENT_TASK):
-                restart_agent_elevated()
+            install()
+        elif "--queue" in argv:
+            from . import firewall
+            firewall.process_queue()
         else:
-            log.error("Uso: agent.py --elevation-install [--no-autostart] | --elevation-remove")
+            log.error("Uso: agent.py --elevation-install | --elevation-remove | --firewall-queue")
             return 2
     except RuntimeError as e:
         log.error(f"[ADMIN] {e}")

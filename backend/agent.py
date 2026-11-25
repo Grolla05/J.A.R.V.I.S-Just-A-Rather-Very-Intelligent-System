@@ -173,14 +173,15 @@ def _tray_image():
     return img
 
 
-ELEVATION_FLAGS = {"--elevation-install": "--install", "--elevation-remove": "--remove"}  # core/elevation.py
+ELEVATION_FLAGS = {"--elevation-install": "--install", "--elevation-remove": "--remove",
+                   "--firewall-queue": "--queue"}  # core/elevation.py (tarefa \JARVIS\Firewall)
 
 
 def main():
     _prepare_environment()
     args = sys.argv[1:]
     action = next((ELEVATION_FLAGS[a] for a in args if a in ELEVATION_FLAGS), None)
-    if action:  # UAC do instalador ou do /config: cria/apaga as tarefas elevadas e sai
+    if action:  # UAC (instalador ou /config) cria/apaga a tarefa; a tarefa elevada atende a fila do firewall
         from core import elevation
         return elevation.main([action, *(a for a in args if a not in ELEVATION_FLAGS)])
     if _single_instance() is None:
