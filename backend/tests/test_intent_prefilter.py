@@ -197,6 +197,9 @@ class TestRealSkillsKeywords(unittest.TestCase):
             "me avisa quando o preço dessa página baixar": "WEB_WATCH",
             "isso é verdade: a Muralha da China é visível do espaço": "FACT_CHECK",
             "é fake que vão mudar a bandeira?": "FACT_CHECK",
+            "entra no site da kabum e vê o preço da rtx 5060": "HEADLESS_TASK",
+            "em segundo plano, abre a wikipedia e me traz a data de nascimento do Tesla": "HEADLESS_TASK",
+            "acessa a página da receita e me diz o prazo do imposto de renda": "HEADLESS_TASK",
         }
         all_skills = list(intent.manager.skills)
         for text, expected in cases.items():

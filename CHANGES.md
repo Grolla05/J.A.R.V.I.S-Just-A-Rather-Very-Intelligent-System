@@ -2,6 +2,37 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+## Navegação Headless: tarefas web em segundo plano no Edge
+
+**Data:** 2026-11-25
+**Escopo:** Item "Navegação Headless — tarefas web em segundo plano" do brainstorm (The Shadow Operator), fase F4 do plano. O JARVIS abre um site sem janela, busca, clica e traz a informação pedida, avisando quando termina.
+
+### Como ficou
+
+- **Skill `HEADLESS_TASK`** (`skills/web/headless_task.py`, Chat e Copilot): "entra no site da kabum e vê o preço da rtx 5060", "em segundo plano, abre a wikipedia e me traz…". Resposta imediata ("Executando em segundo plano: abrir … → …") e o resultado chega depois como aviso, com a página de origem
+- **`core/headless.py`** (motor): Playwright dirigindo o **Edge do Windows** (`channel="msedge"`, sem `playwright install`), perfil próprio em `headless_profile/` na pasta de dados (nunca o perfil do usuário, nunca login)
+  - Passos tipados e limitados: `goto`, `fill`, `press`, `click`, `wait`, `extract` — no máximo 8, o 1º sempre `goto`; nada de JavaScript vindo do modelo
+  - Rotas vigiadas: navegação principal só para URL pública (`browser.is_fetch_safe`); imagens/scripts/XHR só para host público (localhost e rede local abortados); redirecionamento para endereço não permitido interrompe
+  - **Nunca preenche** senha, cartão, CVV, CPF/CNPJ/RG, passaporte, agência/conta, PIX ou token: pelo rótulo, pelo valor (cara de CPF/cartão), por `type=password` e por `autocomplete=cc-*`
+  - Download desligado, service workers bloqueados, uma tarefa por vez
+  - Texto devolvido = texto **visível** do `<main>`/`<body>` (o `extract_text` só pegava parágrafos longos e perdia preço em `<span>`); "R$" sozinho numa linha junta com o valor
+- **`services/headless_tasks.py`**: o modelo planeja (`prompts/headless_plan.md`, JSON) → validação → passo que **envia algo** (clicar em Comprar/Enviar/Cadastrar/Entrar, Enter depois de um campo que não é busca) arma confirmação por `core/pending.py` com a lista de passos marcada ⚠️ → thread daemon → o modelo responde o objetivo só com o texto da página (`prompts/headless_answer.md`, conteúdo da página é dado) → `state.announce`. Sem plano e com link na frase: abre o link e resume
+- **Web Watch**: preço que só aparece com JavaScript — `check_price` tenta o HTML renderizado pelo Edge (`headless.render_html`) antes de perguntar ao modelo
+- **Config**: `HEADLESS_TIMEOUT` (30 s por página) e `HEADLESS_VISIBLE` (depuração: abre a janela). `playwright` no `requirements.txt` e no lock (+ `greenlet`), smoke do instalador importa `playwright.sync_api`. O runtime cresce ~117 MB (driver do Playwright; o setup comprime)
+- `.gitignore`: `backend/headless_profile/`
+
+### Testado de verdade
+
+- Edge sem janela: Wikipédia com busca + Enter → página do Nikola Tesla (9 s); `example.com` renderizado (4 s)
+- Plano do gemma2:2b: KaBuM → `goto /busca/rtx-5060` + `extract` (7 s); fluxo completo KaBuM ~70 s com preços reais da página (R$ 4.199,99, R$ 3.599,99…)
+- Limites vistos: os nomes dos produtos vêm genéricos e o gemma2 já trocou "Tesla" por "Elon Musk" no plano (frase ambígua) — regra "mantenha os nomes" no prompt
+
+### Testes
+
+- `tests/test_headless.py` (novo, 21): validação (tipos, limites, URL local/arquivo, campo e valor sensíveis, tecla), passos que enviam algo, rotas, execução com página falsa, recusa de campo de senha, redirecionamento, elemento ausente, uma tarefa por vez, texto visível com moeda, render para o Web Watch, plano com fallback, confirmação, recusa, aviso, Edge ausente, skill — sem Edge e sem Ollama
+- `tests/test_intent_prefilter.py`: frases da navegação headless no golden set das KEYWORDS
+- Suíte completa: 1339 passaram; `ruff check .` limpo em `backend/` e `frontend/`
+
 ## Fact-Checking: verificação cruzada com fontes independentes
 
 **Data:** 2026-11-25

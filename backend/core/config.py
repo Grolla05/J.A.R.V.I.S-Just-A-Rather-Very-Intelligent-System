@@ -197,6 +197,10 @@ class Settings:
     WEBWATCH_INTERVAL_MIN: int = _env_int("WEBWATCH_INTERVAL_MIN", 60)  # min entre checagens de cada item
     WEBWATCH_MAX: int = _env_int("WEBWATCH_MAX", 20)                    # máximo de itens vigiados
 
+    # --- Navegação headless (core/headless.py): Playwright no Edge do Windows ---
+    HEADLESS_TIMEOUT: int = _env_int("HEADLESS_TIMEOUT", 30)  # s para carregar cada página
+    HEADLESS_VISIBLE: bool = os.getenv("HEADLESS_VISIBLE", "False").strip().lower() == "true"  # debug: abre a janela
+
     # --- Consumo de energia (core/power.py): GPU medida pelo nvidia-smi + estimativa ---
     POWER_TARIFF_KWH: float = _env_float("POWER_TARIFF_KWH", 0.85)  # R$/kWh da conta de luz
     POWER_BASE_W: float = _env_float("POWER_BASE_W", 45.0)          # placa-mãe, RAM, discos, ventoinhas

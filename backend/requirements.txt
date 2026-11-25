@@ -62,6 +62,7 @@ PyGithub>=2.10,<3           # API do GitHub (skill GITHUB / /gh) — token no .e
 keyring>=25.7,<26           # Cofre de Credenciais do Windows (tokens OAuth das integrações)
 pystray>=0.19.5,<0.20       # Ícone na bandeja do agente residente (agent.py, Win+J)
 discord.py>=2.4,<3          # Ponte do Discord (messenger.py) — Telegram usa só requests
+playwright>=1.50,<2         # Navegação headless no Edge do Windows (core/headless.py, channel="msedge" — sem playwright install)
 
 # --- SEGURANÇA ---
 cryptography>=50.0.2,<51        # Ed25519: confere a assinatura Minisign do setup na atualização (core/minisign.py)

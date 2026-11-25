@@ -14,7 +14,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from urllib.parse import urlsplit
 
-from core import webwatch
+from core import headless, webwatch
 from core.config import settings
 from core.database import db
 from core.logger import log
@@ -139,7 +139,7 @@ def remove(index):
 def _default_checkers():
     return {
         PAGE: webwatch.check_page,
-        PRICE: lambda url: webwatch.check_price(url, ask_llm=webwatch.ask_price_llm),
+        PRICE: lambda url: webwatch.check_price(url, ask_llm=webwatch.ask_price_llm, rendered=headless.render_html),
         REPO: webwatch.check_repo,
     }
 

@@ -159,12 +159,16 @@ def check_page(url, fetch=fetch_html):
     return {"hash": fingerprint(text), "text": text}
 
 
-def check_price(url, fetch=fetch_html, ask_llm=None):
-    """{'price'} ou {'error'}. `ask_llm(texto) -> float|None` só quando o HTML não diz."""
+def check_price(url, fetch=fetch_html, ask_llm=None, rendered=None):
+    """{'price'} ou {'error'}. Sem preço no HTML cru: `rendered(url) -> html` (página
+    depois do JavaScript, core/headless) e, por último, `ask_llm(texto) -> float|None`."""
     html, error = fetch(url)
     if error:
         return {"error": error}
     price = parse_price(html)
+    if price is None and rendered:
+        html = rendered(url) or html
+        price = parse_price(html)
     if price is None and ask_llm:
         price = ask_llm(extract_text(html, max_chars=3000))
     if price is None:

@@ -150,6 +150,7 @@ Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub
 | `net_guard.py` / `net_trust.py` | Guarda de rede (juiz LLM, alerta, encerrar/bloquear com confirmação) e softwares mantidos (`net_trusted_apps`) |
 | `mailbox.py`, `email_triage.py`, `email_compose.py`, `email_contacts.py`, `email_organize.py`, `email_trash.py`, `local_files.py` | Gmail: caixa priorizada, rascunho com confirmação, contatos, organizar, Lixeira, anexos (ver 5.7) |
 | `software.py` | Download inteligente pelo winget com confirmação (ver 5.8) |
+| `headless_tasks.py` | Tarefa web em segundo plano: modelo planeja os passos → passo que envia algo pede confirmação → Edge sem janela → resposta só com o texto da página → aviso |
 | `remote_chat.py` | Núcleo da ponte Telegram/Discord (ver 5.9) |
 
 ### 4.3 Infraestrutura — `backend/core/`
@@ -182,6 +183,7 @@ Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub
 | `secrets_store.py` | Tokens no Cofre de Credenciais do Windows (`keyring`); fallback JSON |
 | `web.py` | Busca DuckDuckGo + leitura das páginas + resumo no Ollama |
 | `factcheck.py` | Fact-Checking: 2 buscas, 1 fonte por domínio, veredito do Ollama com regras duras (≥2 fontes do mesmo lado) |
+| `headless.py` | Navegação headless: Playwright no Edge do Windows (`channel="msedge"`), perfil próprio, passos tipados (≤ 8), rotas vigiadas por `is_fetch_safe`, nunca preenche senha/cartão/CPF |
 | `clipboard.py` | Monitor de clipboard, classificação (link, erro, código, inglês) e ações (explicar, traduzir, resumir) |
 | `netwatch.py` | Vigia de rede: foto das portas expostas, processos na internet e tabela ARP; linha de base e diff |
 | `selection.py` | Copia a seleção de qualquer app (devolvendo o clipboard anterior, se pedido) e lê/escreve o clipboard (Win32) |

@@ -206,6 +206,9 @@ CLAUDE.md
 # Uploads do usuário (chat multimodal)
 backend/uploads/
 
+# Perfil do Edge da navegação headless (core/headless.py): cookies dos sites visitados
+backend/headless_profile/
+
 # Presença TUI⇄agente (pid/hwnd em runtime) — nunca versionar
 backend/tui.json
 

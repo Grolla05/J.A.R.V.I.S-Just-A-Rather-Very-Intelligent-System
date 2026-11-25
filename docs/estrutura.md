@@ -58,6 +58,7 @@ J.A.R.V.I.S/
 │   │   ├── spotify.py       ← Spotify: OAuth PKCE, Web API e player
 │   │   ├── web.py           ← Pesquisa DuckDuckGo + leitura das páginas (read_pages) + resumo no Ollama
 │   │   ├── factcheck.py     ← Fact-Checking: afirmação → 2 buscas → 1 fonte por domínio → veredito JSON do Ollama + regras duras (≥2 fontes; senão INCONCLUSIVO/IMPRECISO)
+│   │   ├── headless.py      ← Navegação headless: Playwright no Edge do Windows (channel="msedge", sem playwright install), perfil próprio, passos goto/click/fill/press/wait/extract (≤ 8), is_fetch_safe na navegação, nunca senha/cartão/CPF; render_html p/ o Web Watch
 │   │   ├── clipboard.py     ← Monitor de clipboard, classificação (url/erro/código/inglês) e ações (/clip, skill CLIPBOARD)
 │   │   ├── netwatch.py      ← Vigia de rede: foto (portas expostas, processos na internet, ARP), linha de base e diff
 │   │   ├── window_utils.py  ← Win32: monitores, janela em foco, tela cheia, detecção de apresentação
@@ -95,6 +96,7 @@ J.A.R.V.I.S/
 │   │   ├── email_trash.py   ← "Apaga o e-mail 3" / "as promoções" → lista → "sim" → Lixeira do Gmail (o que apagar vem só da fala: números ou categoria)
 │   │   ├── local_files.py   ← Acha arquivo do usuário p/ anexar (Desktop/Documentos/Downloads/OneDrive); bloqueia sensíveis, fora do perfil e >25 MB
 │   │   ├── software.py      ← Download inteligente: winget → confirmação → instala/baixa numa thread e anuncia
+│   │   ├── headless_tasks.py← Tarefa web em segundo plano (skill HEADLESS_TASK): plano do modelo → validação → confirmação se envia algo → thread → resposta só com o texto da página → announce
 │   │   ├── remote_chat.py   ← Núcleo da ponte: allowlist, sessão por usuário, brain em modo chat com owner canal:usuário, split por limite
 │   │   ├── presentation.py  ← Modo Apresentação: /silent, skill PRESENTATION_MODE ou slides em tela cheia (PowerPoint, PDF, Canva, Google Slides no navegador) / PowerPoint aberto (pref) → mic fechado, TTS mudo, selo [SILENT]
 │   │   ├── notify_filter.py ← Filtro de interrupções: prioridade × contexto (DND, reunião, tela cheia)
@@ -109,7 +111,7 @@ J.A.R.V.I.S/
 │   │   ├── system/          ← network_guard, power_report, status_report, system_clear, system_security (só Copilot/voz)
 │   │   ├── productivity/    ← calendar_agenda, daily_briefing, email_management, focus_mode,
 │   │   │                       github_control, insight_note, presentation_mode, reminder, screen_read, traffic_commute, web_watch (Chat e Copilot)
-│   │   └── web/             ← web_search, fact_check                              (Chat e Copilot)
+│   │   └── web/             ← web_search, fact_check, headless_task               (Chat e Copilot)
 │   ├── prompts/             ← Arquivos .md de prompt (system_prompt, classify_intent, mode_chat, mode_copilot, briefing...; skills/ p/ PROMPT_TEXT)
 │   ├── tests/               ← pytest (backend + TUI)
 │   └── docs/                ← Documentação por módulo
