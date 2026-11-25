@@ -46,6 +46,14 @@ instalar ou contribuir:
   outro processo ganha controle do navegador. A `Skill — Screen Read` baixa de
   novo a página da aba ativa só quando a URL é pública e sem parâmetro com cara
   de credencial (`token`, `code`, `key`, `session`…)
+- Navegação em segundo plano (`Skill — Headless Task`): dirige o Microsoft Edge
+  sem janela pelo Playwright, com perfil próprio (nunca o do usuário) e passos
+  tipados — nada de JavaScript vindo do modelo; só URL pública, recursos de
+  rede local abortados, sem download; passo que envia algo pede confirmação
+- Preenchimento de formulários (`Skill — Form Fill`): preenche, numa janela do
+  Edge, dados do perfil (nota do Obsidian, e-mail da conta Google, endereço do
+  `/rota`) e só envia com "sim"; senha, cartão, CPF/RG e dados bancários nunca
+  são preenchidos
 - Shutdown, suspend e "sentry mode" da máquina (`Skill — System Security`)
 - Sistema de skills plugável (`skill_loader.py`) que **importa e executa
   qualquer arquivo `.py` dentro de `backend/skills/` via `importlib`, sem

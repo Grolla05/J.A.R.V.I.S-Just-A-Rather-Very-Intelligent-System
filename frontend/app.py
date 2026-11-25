@@ -29,6 +29,7 @@ from core import db, log, settings
 from core.llm import LLMError
 from frontend.commands import (
     Command,
+    confirm_labels,
     dropped_paths,
     is_image_path,
     palette_entries,
@@ -37,6 +38,7 @@ from frontend.commands import (
     parse_focus_arg,
     parse_rota_arg,
     parse_silent_arg,
+    plain_confirm_text,
     unescape,
 )
 from frontend.screens import (
@@ -68,8 +70,10 @@ MODES = ("chat", "copilot")
 STREAM_FLUSH_S = 0.05  # re-render do Markdown no máx. a cada 50 ms durante o stream
 NO_REPLY_TEXT = "_Sem resposta do modelo. O Ollama está rodando?_"
 LLM_FAILED_SPEECH = "O modelo não respondeu, Senhor. Verifique o Ollama."  # voz: nunca o parcial
+MAX_DOCS = 3  # documentos (texto/código/PDF) por mensagem — cada um até core.uploads.DOC_TEXT_MAX
 TELEMETRY_HISTORY = 40  # amostras guardadas p/ os sparklines (40 × 3 s = 2 min)
 NOTE_CONTEXT_MAX = 4000  # caracteres da nota do /vault que vão ao modelo
+WEBWATCH_TICK = 300     # s entre olhadas no Web Watch (cada item tem o próprio WEBWATCH_INTERVAL_MIN)
 REMINDER_INTERVAL = 30  # s entre checagens de lembretes (agenda + pedidos); a agenda tem cache próprio
 EXPLAIN_SNIPPET_MAX = 6000  # caracteres do trecho a explicar (cabe no contexto do modelo local)
 MIC_KHZ = 16  # taxa padrão do sr.Microphone (services/listen.py) — mostrada no topo do Copilot
@@ -177,10 +181,13 @@ class JarvisApp(App, inherit_bindings=False):
         # Registro de insights pós-turno: fn(mensagem, resposta, origem) -> título | None.
         # Só com serviços (testes injetam um fake aqui).
         self._insight_fn = self._default_insight if start_services else None
+        # Energia (core/power.py): nvidia-smi + kWh no banco; testes injetam um fake
+        self._power_fn = self._read_power if start_services else None
         self.session_id = sessions.new_session_id()
         self.session_title = sessions.DEFAULT_TITLE
         self.pending_image = None   # anexo aguardando a próxima mensagem
         self.pending_note = None    # nota do /vault aguardando a próxima mensagem
+        self.pending_docs = []      # documentos (texto/código/PDF) aguardando a próxima mensagem
         self.edit_message_id = None  # id da msg sendo editada (↑ / /edit)
         self._voice_thread = None
         self._voice_stop = threading.Event()  # encerra o loop de voz junto com o app
@@ -232,6 +239,7 @@ class JarvisApp(App, inherit_bindings=False):
                 self._poll_health()
             self._boot_greeting()
             self.set_interval(REMINDER_INTERVAL, self._poll_reminders)
+            self.set_interval(WEBWATCH_TICK, self._poll_webwatch)
             self._sync_clipboard_monitor()
             self._sync_net_watch()
             self._register_presence()
@@ -701,6 +709,7 @@ class JarvisApp(App, inherit_bindings=False):
             self._attach(arg)
         elif name == "detach":
             self.pending_note = None
+            self.pending_docs = []
             self._set_pending_image(None)
         elif name == "mode":
             if arg in MODES:
@@ -721,6 +730,10 @@ class JarvisApp(App, inherit_bindings=False):
             self.push_screen(VaultScreen(arg), self._use_note)
         elif name == "web":
             self._web(arg)
+        elif name == "checar":
+            self._checar(arg)
+        elif name == "formulario":
+            self._formulario(arg)
         elif name == "gh":
             self._gh(arg)
         elif name == "briefing":
@@ -733,8 +746,19 @@ class JarvisApp(App, inherit_bindings=False):
             self._idea(arg)
         elif name == "lembrete":
             self._lembrete(arg)
+        elif name == "vigiar":
+            self._vigiar(arg)
         elif name == "rede":
             self._rede(arg)
+        elif name == "email":
+            self._email(arg)
+        elif name in ("instalar", "baixar"):
+            from services import software
+            if not arg.strip():
+                self.notify(f"Uso: /{name} <programa>", severity="warning")
+            else:
+                action = software.INSTALL if name == "instalar" else software.DOWNLOAD
+                self.tool_reply(f"{name} · {arg.strip()}", software.request, arg.strip(), action)
         elif name == "focus":
             self._focus_action(parse_focus_arg(arg), "Uso: /focus [minutos|stop|skip|status]")
         elif name == "dnd":
@@ -758,11 +782,18 @@ class JarvisApp(App, inherit_bindings=False):
     @work(thread=True, group="tools")
     def _tool_worker(self, view, fn, args, speak):
         try:
-            text = fn(*args) or "Nada a relatar, Senhor."
+            text = fn(*args)
+            if text is not None and not isinstance(text, str):   # stream (ex.: resumo de e-mail)
+                text = "".join(chunk for chunk in text if chunk)
+            text = text or "Nada a relatar, Senhor."
         except Exception as e:
             log.error(f"Ferramenta '{getattr(fn, '__name__', fn)}' falhou: {e}")
             text = f"**Erro:** `{e}`"
         self.call_from_thread(view.set_text, text)
+        pending_action = state.pending_critical_action
+        if pending_action and pending_action.get("on_confirm") and pending_action.get("owner", "local") == "local":
+            # A ferramenta armou uma confirmação (ex.: enviar e-mail): abre o ConfirmScreen.
+            self.call_from_thread(self._ask_pending_confirmation, pending_action.get("question", text))
         if speak:
             self._speak_always(text)
 
@@ -907,7 +938,7 @@ class JarvisApp(App, inherit_bindings=False):
         for item in reminders.collect(now):
             self._deliver_reminder(item)
 
-    def _deliver_reminder(self, item):
+    def _deliver_reminder(self, item, meta="lembrete"):
         """Thread de lembretes: mostra o aviso na conversa e fala. Aviso comum (LEAD)
         respeita o silêncio — vai para o backlog do Não Perturbe; os urgentes (hora de
         sair, início iminente, lembrete pedido) sempre aparecem, só sem voz no silêncio."""
@@ -919,7 +950,7 @@ class JarvisApp(App, inherit_bindings=False):
         if notify_filter.decide(prio, ctx) == notify_filter.DEFER:
             remember_alert(text)
             return
-        self.call_from_thread(self.add_message, "assistant", text, f"lembrete · {_now_hhmm()}")
+        self.call_from_thread(self.add_message, "assistant", text, f"{meta} · {_now_hhmm()}")
         if not notify_filter.quiet_reason(ctx):
             self._speak_always(text)
 
@@ -939,6 +970,46 @@ class JarvisApp(App, inherit_bindings=False):
         else:
             self.tool_reply("lembrete", reminders.create_from_text, arg.strip())
 
+    # ---------------------------------------------------------------- fact-checking
+    def _checar(self, arg):
+        """/checar <afirmação> — veredito com fontes (core.factcheck) numa bolha de ferramenta."""
+        from core import factcheck
+        if not arg.strip():
+            self.notify("Uso: /checar <afirmação>", severity="warning")
+            return
+        self.tool_reply(f"checagem · {arg.strip()[:30]}", factcheck.check, arg.strip())
+
+    # ---------------------------------------------------------------- formulários
+    def _formulario(self, arg):
+        """/formulario [link] — preenche com o perfil numa janela do Edge e pergunta antes de enviar."""
+        from services import form_fill
+        self.tool_reply("formulário", form_fill.request, arg.strip())
+
+    # ---------------------------------------------------------------- web watch
+    def _poll_webwatch(self):
+        """Tick do Web Watch (WEBWATCH_TICK): HTTP/GitHub em worker; cada item checa no seu intervalo."""
+        if not self._shutting_down:
+            self.run_worker(self._check_webwatch, thread=True, group="webwatch", exclusive=True)
+
+    def _check_webwatch(self, now=None):
+        from services import web_watch
+        for item in web_watch.collect(now):
+            self._deliver_reminder(item, meta="vigia")
+
+    def _vigiar(self, arg):
+        """/vigiar — sem argumento lista; `rm <n>` remove; link ou dono/repo começa a vigiar."""
+        from services import web_watch
+        word, _, rest = arg.strip().partition(" ")
+        if not arg.strip() or word.lower() in ("lista", "list", "ls"):
+            self.tool_reply("vigia", web_watch.list_text)
+        elif word.lower() in self._LEMBRETE_RM:
+            if not rest.strip().isdigit():
+                self.notify("Uso: /vigiar rm <n> (número do /vigiar)", severity="warning")
+            else:
+                self.tool_reply("vigia · remover", web_watch.remove_text, int(rest))
+        else:
+            self.tool_reply("vigia", web_watch.create_from_text, arg.strip())
+
     def _maybe_daily_briefing(self):
         """1º boot do dia (pref `briefing_auto`): briefing sozinho, sempre falado (qualquer modo)."""
         from core import briefing
@@ -955,6 +1026,11 @@ class JarvisApp(App, inherit_bindings=False):
             self._sync_clipboard_monitor()
         elif key == "net_monitor":
             self._sync_net_watch()
+        elif key in ("remote_telegram", "remote_discord"):
+            from core import messenger_ctl
+            from services import user_prefs
+            if user_prefs.get(key):
+                messenger_ctl.start()   # desligar: a ponte percebe sozinha em até 30 s
 
     # ------------------------------------------------------------ vigia de rede
     def _sync_net_watch(self):
@@ -962,17 +1038,22 @@ class JarvisApp(App, inherit_bindings=False):
         from services import user_prefs
         if user_prefs.get("net_monitor"):
             if self._net_watch is None:
-                from core.netwatch import NetworkWatch
+                from core.netwatch import NetworkWatch, identify_device
                 from services import net_guard
                 self._net_watch = NetworkWatch(net_guard.handle, net_guard.load_baseline, net_guard.save_baseline,
-                                               on_snapshot=net_guard.remember_snapshot)
+                                               on_snapshot=net_guard.remember_snapshot, identify=identify_device)
             self._net_watch.start()
         elif self._net_watch is not None:
             self._net_watch.stop()
 
     _REDE_TRUST = ("confiar", "confia", "trust", "ok")
     _REDE_BLOCK = ("bloquear", "bloqueia", "block")
-    REDE_USAGE = "Uso: /rede · /rede confiar <n> · /rede bloquear <ip> · /rede reset"
+    _REDE_KEPT = ("mantidos", "mantido", "kept")
+    _REDE_FORGET = ("esquecer", "esquece", "forget")
+    _REDE_BLOCKS = ("bloqueios", "bloqueados", "blocks")
+    _REDE_UNBLOCK = ("desbloquear", "desbloqueia", "unblock")
+    REDE_USAGE = ("Uso: /rede · /rede confiar <n> · /rede bloquear <ip> · /rede bloqueios · "
+                  "/rede desbloquear <n|ip> · /rede mantidos · /rede esquecer <n> · /rede reset")
 
     def _rede(self, arg):
         """/rede — varredura agora; `confiar <n>` aceita um achado; `bloquear <ip>` e `reset` pedem confirmação."""
@@ -983,12 +1064,32 @@ class JarvisApp(App, inherit_bindings=False):
             self.tool_reply("rede · varredura", net_guard.scan_text)
         elif word in self._REDE_TRUST and rest.isdigit():
             self.tool_reply("rede · confiar", net_guard.trust_text, int(rest))
+        elif word in self._REDE_KEPT and not rest:
+            from services import net_trust
+            self.tool_reply("rede · mantidos", net_trust.list_text)
+        elif word in self._REDE_FORGET and rest.isdigit():
+            from services import net_trust
+
+            def answer(confirmed, n=int(rest)):
+                if confirmed:
+                    self.tool_reply("rede · esquecer", net_trust.forget, n)
+            self.push_screen(ConfirmScreen(f"Tirar o software {rest} da lista de mantidos? O próximo acesso dele "
+                                           "volta a ser julgado.", title="VIGIA DE REDE", yes="Esquecer",
+                                           no="Manter"), answer)
         elif word in self._REDE_BLOCK and rest:
             def answer(confirmed, ip=rest):
                 if confirmed:
                     self.tool_reply(f"rede · bloquear {ip}", net_guard.block_ip, ip)
-            self.push_screen(ConfirmScreen(f"Bloquear toda saída desta máquina para {rest} no Firewall do Windows?",
-                                           title="FIREWALL", yes="Bloquear", no="Cancelar"), answer)
+            self.push_screen(ConfirmScreen(f"Bloquear entrada e saída entre esta máquina e {rest} no Firewall "
+                                           "do Windows?", title="FIREWALL", yes="Bloquear", no="Cancelar"), answer)
+        elif word in self._REDE_BLOCKS and not rest:
+            self.tool_reply("rede · bloqueios", net_guard.blocks_text)
+        elif word in self._REDE_UNBLOCK and rest:
+            def answer(confirmed, target=rest):
+                if confirmed:
+                    self.tool_reply(f"rede · desbloquear {target}", net_guard.unblock, target)
+            self.push_screen(ConfirmScreen(f"Apagar o bloqueio {rest} do Firewall do Windows?",
+                                           title="FIREWALL", yes="Desbloquear", no="Manter"), answer)
         elif word == "reset" and not rest:
             def answer(confirmed):
                 if confirmed:
@@ -997,6 +1098,39 @@ class JarvisApp(App, inherit_bindings=False):
                                            title="VIGIA DE REDE", yes="Reaprender", no="Manter"), answer)
         else:
             self.notify(self.REDE_USAGE, severity="warning")
+
+    # ------------------------------------------------------------------ e-mail
+    EMAIL_USAGE = ("Uso: /email · /email ler <n> · /email responder <n> <texto> · /email novo <para> <texto> · "
+                   "/email apagar <n…|promoções> · /email organizar · /email vip <e-mail> · /email contato <apelido> <e-mail> · "
+                   "/email assinatura <texto>")
+
+    def _email(self, arg):
+        """/email — Gmail por prioridade; ler/responder/novo/organizar; envio e organização pedem confirmação."""
+        from services import email_compose, email_organize, mailbox
+        word, _, rest = arg.strip().partition(" ")
+        word, rest = word.lower(), rest.strip()
+        n_text, _, tail = rest.partition(" ")
+        if not word:
+            self.tool_reply("email · prioridades", mailbox.priority_text)
+        elif word in ("ler", "leia", "abrir") and rest.isdigit():
+            self.tool_reply(f"email · ler {rest}", mailbox.read_text, int(rest))
+        elif word in ("responder", "responde", "reply") and n_text.isdigit() and tail.strip():
+            self.tool_reply(f"email · responder {n_text}", mailbox.reply_text, int(n_text), tail.strip())
+        elif word in ("novo", "escrever", "new") and n_text and tail.strip():
+            self.tool_reply(f"email · novo {n_text}", mailbox.new_text, n_text, tail.strip())
+        elif word in ("apagar", "apaga", "excluir", "lixeira") and rest:
+            from services import email_trash
+            self.tool_reply("email · lixeira", email_trash.request, rest)
+        elif word in ("organizar", "organiza", "organize") and not rest:
+            self.tool_reply("email · organizar", email_organize.organize)
+        elif word == "vip" and rest:
+            self.tool_reply("email · vip", mailbox.add_vip, rest)
+        elif word == "contato" and n_text and tail.strip():
+            self.tool_reply("email · contato", mailbox.contact_text, n_text, tail.strip())
+        elif word == "assinatura":
+            self.tool_reply("email · assinatura", email_compose.set_signature, rest)
+        else:
+            self.notify(self.EMAIL_USAGE, severity="warning")
 
     def _sync_clipboard_monitor(self):
         from services import user_prefs
@@ -1018,7 +1152,7 @@ class JarvisApp(App, inherit_bindings=False):
         self._clip_last_suggest = now
         self._call_ui(self.add_system, SUGGESTION[kind])
 
-    CLIP_USAGE = "Uso: /clip [explicar|traduzir|resumir] [n] · hist · buscar <termo> · usar <n> · limpar"
+    CLIP_USAGE = "Uso: /clip [explicar|traduzir|resumir|checar] [n] · hist · buscar <termo> · usar <n> · limpar"
     _CLIP_HIST = ("hist", "historico", "histórico")
     _CLIP_SEARCH = ("buscar", "busca", "search")
     _CLIP_USE = ("usar", "usa", "copiar", "use")
@@ -1121,16 +1255,18 @@ class JarvisApp(App, inherit_bindings=False):
 
     # ------------------------------------------------------------ attachments
     def _attach(self, path):
-        from core.uploads import load_local_file
+        from core.uploads import load_any
         if not path:
             self.notify("Uso: /attach <caminho do arquivo>", severity="warning")
             return
         try:
-            upload = load_local_file(path)
+            upload = load_any(path)
         except ValueError as e:
             self.notify(str(e), severity="error")
             return
-        if upload["kind"] == "image":
+        if upload["kind"] == "document":
+            self._add_pending_doc(upload)
+        elif upload["kind"] == "image":
             self._set_pending_image(upload)
         else:
             self.notify(f"Transcrevendo {upload['name']}…")
@@ -1141,16 +1277,31 @@ class JarvisApp(App, inherit_bindings=False):
 
     def _attach_dropped(self, paths):
         """Arquivos soltos no terminal = /attach. Uma imagem por mensagem
-        (fica a primeira); áudios são todos transcritos."""
+        (fica a primeira); documentos vão juntos (até MAX_DOCS); áudios são transcritos."""
         images = [p for p in paths if is_image_path(p)]
-        audios = [p for p in paths if not is_image_path(p)]
+        others = [p for p in paths if not is_image_path(p)]
         if images:
             self._attach(images[0])
             if len(images) > 1:
                 name = os.path.basename(images[0])
                 self.notify(f"Só uma imagem por mensagem — anexei {name}.", severity="warning")
-        for path in audios:
+        for path in others:
             self._attach(path)
+        self.main_screen.query_one("#prompt", PromptInput).focus()
+
+    def _add_pending_doc(self, doc):
+        if any(d["name"] == doc["name"] for d in self.pending_docs):
+            self.notify(f"{doc['name']} já está anexado.")
+            return
+        if len(self.pending_docs) >= MAX_DOCS:
+            self.notify(f"No máximo {MAX_DOCS} documentos por mensagem — {doc['name']} ficou de fora.",
+                        severity="warning")
+            return
+        self.pending_docs.append(doc)
+        if doc.get("truncated"):
+            self.notify(f"{doc['name']} é grande: vão os primeiros {len(doc['content'])} caracteres.",
+                        severity="warning")
+        self._refresh_attachbar()
 
     def _set_pending_image(self, upload):
         self.pending_image = upload
@@ -1167,12 +1318,24 @@ class JarvisApp(App, inherit_bindings=False):
         parts = []
         if self.pending_image:
             parts.append(f"📎 {self.pending_image['name']}")
+        parts += [f"📄 {doc['name']}" for doc in self.pending_docs]
         if self.pending_note:
             parts.append(f"▣ nota {self.pending_note['path'].rsplit('/', 1)[-1]}")
         bar = self.main_screen.query_one("#attachbar", Static)
         bar.display = bool(parts)
         if parts:
             bar.update(f" {' · '.join(parts)} — vai junto com a próxima mensagem   [dim]/detach remove[/]")
+
+    def _with_docs(self, text, docs):
+        """Documentos anexados viram contexto da mensagem (prompts/file_context.md). Tratados como
+        dados: a mensagem vai direto ao modelo (force_chat), nunca vira skill nem confirmação."""
+        if not docs:
+            return text
+        from core.prompts import load_prompt
+        blocks = "\n\n".join(load_prompt("file_block.md", name=d["name"], content=d["content"],
+                                           note=" (cortado: arquivo maior que o limite)" if d.get("truncated") else "")
+                               for d in docs)
+        return load_prompt("file_context.md", files=blocks, message=text)
 
     def _with_note(self, text, note):
         """Texto que vai ao modelo: a mensagem + a nota do vault como contexto
@@ -1221,14 +1384,17 @@ class JarvisApp(App, inherit_bindings=False):
 
     # ------------------------------------------------------------------- chat
     def send(self, text):
-        image, note = self.pending_image, self.pending_note
+        image, note, docs = self.pending_image, self.pending_note, self.pending_docs
         self.pending_image = self.pending_note = None
+        self.pending_docs = []
         self._refresh_attachbar()
         now = _now_hhmm()
-        meta = now + (f" · anexo: {image['name']}" if image else "")
+        names = ([image["name"]] if image else []) + [d["name"] for d in docs]
+        meta = now + (f" · anexo: {', '.join(names)}" if names else "")
         meta += f" · nota: {note['path'].rsplit('/', 1)[-1]}" if note else ""
         reply = self._begin_turn(text, user_meta=meta)
-        self._stream(text, image, self.mode, self.session_id, reply, self._with_note(text, note))
+        model_text = self._with_docs(self._with_note(text, note), docs)
+        self._stream(text, image, self.mode, self.session_id, reply, model_text, bool(docs))
 
     def _begin_turn(self, text, user_meta):
         """Bolha do usuário + bolha vazia da resposta; marca a TUI como ocupada."""
@@ -1395,7 +1561,9 @@ class JarvisApp(App, inherit_bindings=False):
             # O id vai junto: se a pendência for trocada enquanto a pergunta está na
             # tela, o "s" não executa a ação nova (core/pending.py).
             pending_id = pending.get("id")
-            self.push_screen(ConfirmScreen(text, deadline=pending.get("timeout")),
+            yes, no = confirm_labels(pending.get("type"))
+            self.push_screen(ConfirmScreen(plain_confirm_text(text), deadline=pending.get("timeout"),
+                                           yes=yes, no=no),
                              lambda approved, pid=pending_id: self._resolve_critical(approved, pid))
 
     def _resolve_critical(self, approved, pending_id=None):
@@ -1436,10 +1604,25 @@ class JarvisApp(App, inherit_bindings=False):
                 values["REDE"] = sum(net_split)
             text = "   ".join(f"{name} {block_bar(value)} {value:.0f}%"
                               for name, value in (("CPU", cpu), ("RAM", ram), ("GPU", gpu)))
+            watts = self._power_fn(cpu) if self._power_fn else None
+            if watts is not None:
+                values["ENERGIA"] = watts
+                text += f"   ⚡ {watts:.0f}W"
         except Exception as e:
             log.debug(f"Telemetria indisponível: {e}")
             text = "telemetria indisponível"
         self.call_from_thread(self._set_telemetry, text, values, net_split)
+
+    def _read_power(self, cpu):
+        """Watts estimados (core/power.py) + kWh do dia. Roda no worker da telemetria."""
+        from core import power
+        try:
+            reading = power.estimate(cpu, power.gpu_watts())
+            power.meter.add(reading)
+            return reading["total"]
+        except Exception as e:
+            log.debug(f"Energia indisponível: {e}")
+            return None
 
     def _set_telemetry(self, text, values=None, net_split=None):
         self._telemetry = text
@@ -1559,6 +1742,9 @@ class JarvisApp(App, inherit_bindings=False):
             self._clip_monitor.stop()
         if self._net_watch is not None:
             self._net_watch.stop()
+        if self._power_fn is not None:
+            from core import power
+            power.meter.flush()  # kWh do dia até agora
         self._stop_focus()  # X do terminal/erro: notificações do Windows voltam
         self._unregister_presence()
 

@@ -139,7 +139,7 @@ def resolve_site(target):
 def _ask_llm(command):
     from core.llm import query_ollama
     raw = query_ollama([{"role": "system", "content": DECISION_PROMPT}, {"role": "user", "content": command}],
-                       format="json", temperature=0.1, timeout=settings.TIMEOUT_API)
+                       format="json", temperature=0.1, timeout=settings.TIMEOUT_LLM)
     try:
         data = json.loads(raw) if raw else None
     except (TypeError, ValueError):

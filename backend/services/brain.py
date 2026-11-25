@@ -3,10 +3,10 @@ import time
 import core.state as state
 from core import log, manager, pending, settings
 from core.alerts import process_system_alert
-from core.obsidian import get_vault_context
+from core.obsidian import asks_vault, get_vault_context
 from services import live_context
 from services.chat import ask_local_ai, ask_local_ai_stream
-from services.intent import CHAT_BLOCKED_CATEGORIES, classify_intent, is_skill_enabled, skill_allowed_in_chat
+from services.intent import CHAT_ALLOWED_CATEGORIES, classify_intent, is_skill_enabled, skill_allowed_in_chat
 from services.memory import extract_fact_to_memory
 
 # Modos da interface de texto: CHAT roda só skills de consulta/produtividade
@@ -54,14 +54,20 @@ def confirm_pending_action(approved, explicit_decline=True, pending_id=None):
     return None
 
 
-def _check_pending_action(command):
-    """Se há ação crítica pendente, o próximo comando é a resposta a ela.
+def _check_pending_action(command, owner=pending.LOCAL):
+    """Se há ação crítica pendente **deste dono**, o próximo comando é a resposta a ela.
     Só uma frase de confirmação aprova (pending.parse_reply); a negação vence;
-    qualquer outra frase descarta a pendência e segue como comando normal."""
+    qualquer outra frase vai para `on_other` (se a pendência tiver) ou descarta a
+    pendência e segue como comando normal. Pendência de outro dono fica intacta."""
     current = pending.active()
-    if not current:
+    if not current or (current.get("owner") or pending.LOCAL) != (owner or pending.LOCAL):
         return None
     reply = pending.parse_reply(command, current.get("target"))
+    on_other = current.get("on_other")
+    if callable(on_other) and reply != pending.YES and not (reply == pending.NO and pending.is_pure_denial(command)):
+        # Pedido de ajuste ("deixa mais formal"): tira esta pendência e deixa quem a armou refazer.
+        _action, status = pending.take(current.get("id"))
+        return on_other(command) if status == pending.OK else None
     return confirm_pending_action(reply == pending.YES, explicit_decline=reply == pending.NO,
                                   pending_id=current.get("id"))
 
@@ -97,7 +103,8 @@ def execute_command(command, session_id='default'):
         vault_file, vault_ctx = get_vault_context(command)
         return ask_local_ai(command, intent_type=intent, entity=entity,
                             vault_context=vault_ctx, vault_filename=vault_file,
-                            session_id=session_id, live_context=live_context.build(command))
+                            session_id=session_id, live_context=live_context.build(command),
+                            vault_missing=not vault_ctx and asks_vault(command))
 
 
 def _skill_allowed(intent, mode):
@@ -107,24 +114,26 @@ def _skill_allowed(intent, mode):
 
 
 def execute_command_stream(command, session_id='default', images=None, mode=MODE_CHAT, on_route=None,
-                           force_chat=False):
+                           force_chat=False, owner=pending.LOCAL):
     """Pipeline de texto (TUI). mode=chat só roda skills fora de automation/system;
     mode=copilot roda todas. on_route(intent) é chamado quando a mensagem vira
     uma skill (badge na TUI). force_chat=True (trecho de código/erro a explicar)
     vai direto ao LLM: sem classificador, sem vault e sem responder a ação pendente
-    — o conteúdo de um trecho não pode virar skill nem um "ok" de confirmação."""
+    — o conteúdo de um trecho (ou de um arquivo anexado) não pode virar skill nem
+    um "ok" de confirmação."""
     if force_chat:
         log.info(f"🧠 [CHAT DIRETO/{mode}]: {len(command)} caracteres, sem classificador.")
-        yield from ask_local_ai_stream(command, intent_type="CHAT", session_id=session_id, mode=mode)
+        yield from ask_local_ai_stream(command, intent_type="CHAT", session_id=session_id, mode=mode,
+                                       images=images)
         return
 
-    res = _check_pending_action(command)
+    res = _check_pending_action(command, owner)
     if res:
         yield res
         return
 
-    exclude = () if mode == MODE_COPILOT else CHAT_BLOCKED_CATEGORIES
-    decision = classify_intent(command, exclude_categories=exclude)
+    allowed = None if mode == MODE_COPILOT else CHAT_ALLOWED_CATEGORIES
+    decision = classify_intent(command, allowed_categories=allowed)
     intent = decision.get("intent")
     entity = decision.get("entity")
     log.info(f"🧠 [INTENÇÃO DETECTADA STREAM/{mode}]: {intent} (Confiança: {decision.get('confidence')})")
@@ -136,7 +145,8 @@ def execute_command_stream(command, session_id='default', images=None, mode=MODE
         if on_route:
             on_route(intent)
         skill_module = manager.skills[intent]
-        result = skill_module.execute(entity, command)
+        with pending.owner_scope(owner):   # confirmação armada pela skill pertence a quem pediu
+            result = skill_module.execute(entity, command)
         if result is None or isinstance(result, str):
             yield result
         else:  # skill que responde em stream (ex.: SCREEN_READ) devolve um iterável de pedaços
@@ -147,7 +157,8 @@ def execute_command_stream(command, session_id='default', images=None, mode=MODE
         for chunk in ask_local_ai_stream(command, intent_type=intent, entity=entity,
                                           vault_context=vault_ctx, vault_filename=vault_file,
                                           session_id=session_id, images=images, mode=mode,
-                                          live_context=live_context.build(command)):
+                                          live_context=live_context.build(command),
+                                          vault_missing=not vault_ctx and asks_vault(command)):
             yield chunk
 
 

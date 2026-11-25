@@ -332,6 +332,164 @@ class TestReminders(ToolsAppCase):
         remove.assert_called_once_with(2)
 
 
+class TestWebWatch(ToolsAppCase):
+    FREE = {"presentation": False, "dnd": False, "meeting": False, "fullscreen": False}
+    QUIET = {"presentation": False, "dnd": True, "meeting": False, "fullscreen": False}
+
+    def setUp(self):
+        super().setUp()
+        self._backlog = list(state.dnd_backlog)
+        state.dnd_backlog.clear()
+
+    def tearDown(self):
+        state.dnd_backlog[:] = self._backlog
+        super().tearDown()
+
+    async def _tick(self, items, ctx):
+        from services import notify_filter, web_watch
+        app = self._app()
+        with patch.object(web_watch, "collect", return_value=items), \
+             patch.object(notify_filter, "context", return_value=ctx):
+            async with app.run_test() as pilot:
+                app._poll_webwatch()
+                await pilot.app.workers.wait_for_complete()
+                await pilot.pause()
+                replies = [(m.text, m.meta) for m in app.query(tui_app.MessageView) if m.role == "assistant"]
+        return app, replies
+
+    async def test_change_is_shown_with_vigia_meta(self):
+        item = {"text": "O preço em **loja.com.br** caiu de R$ 10,00 para R$ 8,00, Senhor.", "urgent": False}
+        app, replies = await self._tick([item], self.FREE)
+        self.assertEqual(replies[-1][0], item["text"])
+        self.assertTrue(replies[-1][1].startswith("vigia · "))
+        self.assertEqual(app.voice.spoken, [item["text"]])
+
+    async def test_normal_change_waits_during_dnd_target_hit_shows(self):
+        normal = {"text": "A página mudou.", "urgent": False}
+        app, replies = await self._tick([normal], self.QUIET)
+        self.assertEqual(replies, [])
+        self.assertEqual(len(state.dnd_backlog), 1)
+        hit = {"text": "Chegou no seu alvo.", "urgent": True}
+        app, replies = await self._tick([hit], self.QUIET)
+        self.assertEqual(replies[-1][0], hit["text"])
+        self.assertEqual(app.voice.spoken, [])
+
+    async def test_no_timer_without_services(self):
+        from services import web_watch
+        app = self._app()
+        with patch.object(web_watch, "collect") as collect:
+            async with app.run_test() as pilot:
+                await pilot.pause(0.1)
+        collect.assert_not_called()
+
+    async def test_vigiar_command(self):
+        from services import web_watch
+        app = self._app()
+        with patch.object(web_watch, "create_from_text", return_value="vigiando") as create, \
+             patch.object(web_watch, "list_text", return_value="lista") as listing, \
+             patch.object(web_watch, "remove_text", return_value="removido") as remove:
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/vigiar https://loja.com.br/x preço abaixo de 300")
+                self.assertEqual(self._last_reply(app).text, "vigiando")
+                await self._send(pilot, "/vigiar")
+                self.assertEqual(self._last_reply(app).text, "lista")
+                await self._send(pilot, "/vigia rm 1")
+                self.assertEqual(self._last_reply(app).text, "removido")
+                await self._send(pilot, "/vigiar rm")
+        create.assert_called_once_with("https://loja.com.br/x preço abaixo de 300")
+        listing.assert_called_once()
+        remove.assert_called_once_with(1)
+
+
+class TestChecarCommand(ToolsAppCase):
+    async def test_checar_and_usage(self):
+        from core import factcheck
+        app = self._app()
+        with patch.object(factcheck, "check", return_value="**Veredito: ❌ FALSO**") as check:
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/checar a Muralha da China é visível do espaço")
+                reply = self._last_reply(app)
+                self.assertEqual(reply.text, "**Veredito: ❌ FALSO**")
+                self.assertTrue(reply.meta.startswith("checagem · "))
+                await self._send(pilot, "/checar")
+        check.assert_called_once_with("a Muralha da China é visível do espaço")
+
+
+class TestFormularioCommand(ToolsAppCase):
+    async def test_formulario_with_and_without_link(self):
+        from services import form_fill
+        app = self._app()
+        with patch.object(form_fill, "request", return_value="Formulário **X** preenchido") as req:
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/formulario https://forms.example.com/a")
+                reply = self._last_reply(app)
+                self.assertEqual(reply.text, "Formulário **X** preenchido")
+                self.assertEqual(reply.meta, "formulário")
+                await self._send(pilot, "/form")
+        self.assertEqual([c.args for c in req.call_args_list], [("https://forms.example.com/a",), ("",)])
+
+
+class TestEmailCommand(ToolsAppCase):
+    async def test_list_read_and_usage(self):
+        from services import mailbox
+        app = self._app()
+        with patch.object(mailbox, "priority_text", return_value="**E-mails por prioridade**") as listing, \
+             patch.object(mailbox, "read_text", return_value=iter(["**Prova** — Ana\n\n", "resumo"])) as read:
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/email")
+                self.assertEqual(self._last_reply(app).text, "**E-mails por prioridade**")
+                await self._send(pilot, "/email ler 2")
+                self.assertEqual(self._last_reply(app).text, "**Prova** — Ana\n\nresumo")
+                await self._send(pilot, "/email dançar")
+        listing.assert_called_once()
+        read.assert_called_once_with(2)
+
+    async def test_reply_opens_confirm_screen(self):
+        from core import pending
+        from services import mailbox
+
+        def arm(n, text):
+            pending.arm("EMAIL_SEND", "Rascunho pronto. Confirma o envio?", lambda: "enviado", timeout_s=60)
+            return "Rascunho pronto. Confirma o envio?"
+
+        app = self._app()
+        with patch.object(mailbox, "reply_text", side_effect=arm) as reply:
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/email responder 1 diga que confirmo")
+                await pilot.app.workers.wait_for_complete()
+                await pilot.pause()
+                self.assertIsInstance(app.screen, tui_app.ConfirmScreen)
+                await pilot.press("n")
+                await pilot.app.workers.wait_for_complete()
+                await pilot.pause()
+        reply.assert_called_once_with(1, "diga que confirmo")
+        self.assertIsNone(state.pending_critical_action)
+
+
+class TestEmailTrashCommand(ToolsAppCase):
+    async def test_apagar_routes_to_trash_request(self):
+        from services import email_trash
+        app = self._app()
+        with patch.object(email_trash, "request", return_value="Mover para a Lixeira?") as req:
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/email apagar 2 3")
+                self.assertEqual(self._last_reply(app).text, "Mover para a Lixeira?")
+        req.assert_called_once_with("2 3")
+
+
+class TestInstallCommand(ToolsAppCase):
+    async def test_install_and_download_route_to_software(self):
+        from services import software
+        app = self._app()
+        with patch.object(software, "request", return_value="Instalar 7-Zip?") as req:
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/instalar 7-zip")
+                self.assertEqual(self._last_reply(app).text, "Instalar 7-Zip?")
+                await self._send(pilot, "/baixar vlc")
+        self.assertEqual(req.call_args_list[0].args, ("7-zip", software.INSTALL))
+        self.assertEqual(req.call_args_list[1].args, ("vlc", software.DOWNLOAD))
+
+
 class TestRedeCommand(ToolsAppCase):
     async def test_scan_trust_and_usage(self):
         from services import net_guard
@@ -346,6 +504,27 @@ class TestRedeCommand(ToolsAppCase):
                 await self._send(pilot, "/rede dançar")
         scan.assert_called_once()
         trust.assert_called_once_with(2)
+
+    async def test_kept_list_and_forget_needs_confirmation(self):
+        from services import net_trust
+        app = self._app()
+        with patch.object(net_trust, "list_text", return_value="mantidos") as listing, \
+             patch.object(net_trust, "forget", return_value="esquecido") as forget:
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/rede mantidos")
+                self.assertEqual(self._last_reply(app).text, "mantidos")
+                await self._send(pilot, "/rede esquecer 1")
+                self.assertIsInstance(app.screen, tui_app.ConfirmScreen)
+                await pilot.press("n")
+                await pilot.pause()
+                forget.assert_not_called()
+                await self._send(pilot, "/rede esquecer 1")
+                await pilot.press("s")
+                await pilot.app.workers.wait_for_complete()
+                await pilot.pause()
+                self.assertEqual(self._last_reply(app).text, "esquecido")
+        listing.assert_called_once()
+        forget.assert_called_once_with(1)
 
     async def test_block_and_reset_need_confirmation(self):
         from services import net_guard
@@ -502,8 +681,10 @@ class TestClipCommand(ToolsAppCase):
 
     async def test_clip_bad_action_and_empty_history(self):
         from core import clipboard
+        from services import clip_history
         app = self._app()
-        with patch.object(clipboard, "act") as act:
+        # banco de teste vazio: sem o patch, /clip hist lia o histórico real do usuário
+        with patch.object(clip_history, "db", self.db), patch.object(clipboard, "act") as act:
             async with app.run_test() as pilot:
                 await self._send(pilot, "/clip dançar")
                 await self._send(pilot, "/clip hist")

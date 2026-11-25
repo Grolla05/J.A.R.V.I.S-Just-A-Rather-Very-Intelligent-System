@@ -1,4 +1,4 @@
-# Integrações de conta — Google Agenda e Spotify
+# Integrações de conta — Google Agenda, Gmail, Spotify, Telegram e Discord
 
 > ⚠️ **Estas integrações exigem chaves PESSOAIS.** O JARVIS não vem com chaves de
 > nenhum serviço: cada usuário cria o próprio app no Google Cloud e no Spotify
@@ -47,6 +47,22 @@ Onde fica o `.env`:
    GOOGLE_CLIENT_SECRET=GOCSPX-xxxx
    ```
 
+### 1.4 Gmail (mesmo projeto e mesmo client)
+O Gmail usa o **mesmo** `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, mas tem card e login próprios
+(conectar o Gmail não mexe na Agenda).
+1. Abra [Gmail API](https://console.cloud.google.com/apis/library/gmail.googleapis.com) → **Ativar**.
+2. **Acesso a dados** → **Adicionar ou remover escopos** → marque
+   `https://www.googleapis.com/auth/gmail.modify` → **Atualizar** → **Salvar**.
+   - `gmail.modify` permite ler, criar rascunho, enviar, mover/etiquetar e mandar para a Lixeira. **Não**
+     permite apagar de vez — e o JARVIS não tem código de exclusão permanente.
+   - ⚠️ **Não** marque `https://mail.google.com/` (acesso total, inclui excluir para sempre).
+   - É um escopo "restrito": o login mostra o aviso de app não verificado (esperado, o app é seu).
+3. `/config` → **INTEGRAÇÕES** → **Gmail** → Enter.
+
+O que o JARVIS faz com ele: `/email` (prioridades), ler e resumir, responder, escrever com anexo do
+computador, mover para a **Lixeira** ("apaga o e-mail 3", recuperável por 30 dias) e organizar a caixa.
+**Enviar, apagar e organizar sempre mostram o rascunho/lista/plano e esperam o seu "sim".**
+
 ---
 
 ## 2. Spotify
@@ -69,7 +85,35 @@ Onde fica o `.env`:
 
 ---
 
-## 3. Conectar
+## 3. Ponte Telegram / Discord (conversar pelo celular)
+
+A plataforma é só o fio: o bot "JARVIS" não pensa nada. A ponte (`backend/messenger.py`) roda **no seu
+computador**, busca as mensagens por conexão de saída (sem abrir porta no roteador, sem servidor) e
+responde com o cérebro local, em **modo Chat** (nada de automação do PC pelo celular). Computador
+desligado = sem resposta (o Telegram guarda as mensagens até a ponte voltar).
+
+**Segurança:** só os IDs em `*_ALLOWED_IDS` conversam; lista vazia = ninguém. Ações que mexem em algo
+(enviar e-mail, organizar a caixa) pedem um "sim" seu no próprio chat — e só o seu "sim" vale.
+
+### 3.1 Telegram
+1. No Telegram, fale com **@BotFather** → `/newbot` → escolha nome e usuário → copie o **token**.
+2. No `.env`: `TELEGRAM_BOT_TOKEN=<token>`. Reinicie o JARVIS.
+3. Ainda sem o seu ID? Ligue a ponte (passo 5), mande `/id` ao seu bot: ele responde o número.
+4. No `.env`: `TELEGRAM_ALLOWED_IDS=<seu id>` (vários separados por vírgula). Reinicie.
+5. `/config` → **INTEGRAÇÕES** → **Telegram** → Enter (**Ligar ponte**). Del desliga.
+
+### 3.2 Discord
+1. [Developer Portal](https://discord.com/developers/applications) → **New Application** → **Bot** →
+   **Reset Token** → copie. Na mesma página ligue **Message Content Intent**.
+2. **OAuth2 → URL Generator**: escopo `bot`, permissões `Send Messages` e `Read Message History` →
+   abra a URL e adicione o bot a um servidor seu (necessário para mandar DM a ele).
+3. No `.env`: `DISCORD_BOT_TOKEN=<token>` e `DISCORD_ALLOWED_IDS=<seu id>` (Discord → Configurações →
+   Avançado → Modo desenvolvedor → clique no seu nome → **Copiar ID do usuário**).
+4. `/config` → **INTEGRAÇÕES** → **Discord** → Enter. O bot responde DM e menção (`@JARVIS ...`).
+
+---
+
+## 4. Conectar
 
 1. Salve o `.env` e **reinicie o JARVIS** (as variáveis são lidas no boot).
 2. `/config` → **INTEGRAÇÕES** → selecione o card → **Enter**.
@@ -85,6 +129,9 @@ Onde fica o `.env`:
 | Google pede login toda semana | App ficou em **Teste**. Publique em produção. |
 | Spotify: `INVALID_CLIENT: Invalid redirect URI` | Redirect cadastrado diferente de `http://127.0.0.1:8888/callback`. |
 | Spotify: "User not registered in the Developer Dashboard" | Adicione sua conta em **User Management** (passo 2.4). |
+| Gmail: "precisa de permissão nova" | Escopo `gmail.modify` não marcado (1.4) ou login antigo. Del e Enter no card do Gmail. |
+| Bot do Telegram não responde | Card **Telegram** desligado, `TELEGRAM_ALLOWED_IDS` sem o seu ID (mande `/id`) ou computador dormindo. |
+| Discord: bot online mas mudo | **Message Content Intent** desligado no Developer Portal. |
 | Porta 8888 ocupada | Feche o programa que usa a porta, ou mude `SPOTIFY_REDIRECT_URI` (e no app do Spotify) para outra porta. |
 
 Nunca versione o `.env` nem compartilhe as chaves: elas são suas.

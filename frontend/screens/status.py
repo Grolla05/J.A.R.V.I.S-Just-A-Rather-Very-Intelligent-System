@@ -1,6 +1,6 @@
 """/status — dashboard do sistema (canvas: "6 · Dashboard de sistema").
 
-Grade 2×2 (CPU, RAM, GPU, REDE): nome e valor atual no topo do painel, gráfico
+Grade 2×3 (CPU, RAM, GPU, REDE e ENERGIA na largura toda): nome e valor atual no topo do painel, gráfico
 de barras espaçadas do histórico que o JarvisApp já coleta a cada
 TELEMETRY_INTERVAL (cada barra na cor da sua faixa de carga) e o detalhe
 embaixo. Ao lado: núcleo pixel-art, faixa de carga, top processos por memória
@@ -20,8 +20,9 @@ from frontend import sprites
 from frontend.screens.base import JarvisScreen
 from frontend.widgets import PixelSprite
 
-METERS = (("CPU", "%"), ("RAM", "%"), ("GPU", "%"), ("REDE", "B/s"))
+METERS = (("CPU", "%"), ("RAM", "%"), ("GPU", "%"), ("REDE", "B/s"), ("ENERGIA", "W"))
 NET_MIN_TOP = 1024 * 1024  # escala mínima do gráfico de rede (1 MB/s)
+POWER_MIN_TOP = 200.0  # escala mínima do gráfico de energia (W)
 TOP_PROCESSES = 5
 _ORB_COLOR = {"baixa": sprites.NEON, "moderada": sprites.NEON, "alta": sprites.DANGER}
 _LEVEL_LABEL = {"baixa": "BAIXA", "moderada": "MODERADA", "alta": "ALTA"}
@@ -169,6 +170,9 @@ class Meter(Vertical):
         if self.unit == "%":
             top, text = 100.0, f"{current:.0f}%"
             level = sprites.load_level(current)
+        elif self.unit == "W":  # energia: escala pelo pico recente (mín. 200 W)
+            top, text = max([POWER_MIN_TOP, *values]), f"{num(current, 0)} W"
+            level = "baixa"
         else:  # rede: escala pelo pico recente (mín. 1 MB/s)
             top, text = max([NET_MIN_TOP, *values]), human_rate(current)
             level = "baixa"
@@ -246,6 +250,7 @@ class StatusScreen(JarvisScreen):
             "RAM": details.get("RAM", ""),
             "GPU": details.get("GPU", ""),
             "REDE": net_detail(down, up),
+            "ENERGIA": details.get("ENERGIA", "estimativa · GPU medida"),
         }
         for name, _unit in METERS:
             self.query_one(f"#meter-{name.lower()}", Meter).update_values(history.get(name, ()), texts[name])
@@ -276,15 +281,30 @@ class StatusScreen(JarvisScreen):
         except Exception as e:
             log.debug(f"Detalhes do /status indisponíveis: {e}")
         info["perimeter"] = perimeter_text()
+        info["power"] = power_detail() if getattr(self.app, "_power_fn", None) else None
         self.app.call_from_thread(self._apply_details, info)
 
     def _apply_details(self, info):
         self._details = dashboard_texts(info)
+        if info.get("power"):
+            self._details["ENERGIA"] = info["power"]
         self.query_one("#status-net", Static).update(info.get("perimeter") or "indisponível")
         self.query_one("#status-procs", ProcessList).set_items(top_processes(info))
         uptime = _uptime_text(info.get("uptime"))
         self.set_info(f"uptime {uptime}" if uptime else "")
         self.refresh_data()
+
+
+def power_detail():
+    """'hoje 0,42 kWh · R$ 0,36 · mês R$ 9,80' (core/power.py)."""
+    try:
+        from core import power
+        today, month = power.meter.day_kwh(), power.meter.month_kwh()
+        return (f"hoje {power.kwh_text(today)} · {power.brl(power.cost(today))}"
+                f" · mês {power.brl(power.cost(month))}")
+    except Exception as e:
+        log.debug(f"Energia do /status indisponível: {e}")
+        return None
 
 
 def perimeter_text():

@@ -4,8 +4,9 @@ Sua missão é classificar a intenção do comando do usuário e extrair a entid
 1. Responda APENAS o JSON, sem texto adicional.
 2. Se houver um nome de aplicativo ou objeto no comando, ele DEVE ir para o campo 'entity'.
 3. Nunca use "null" para 'entity' se houver um substantivo alvo na frase.
-4. Priorize as SKILLS DINÂMICAS. Use "CHAT" apenas se for uma saudação ou conversa vazia.
+4. Escolha uma SKILL só quando o pedido se encaixar no "Use quando" dela. Perguntas gerais, explicações, programação e qualquer pedido que nenhuma skill cobre são "CHAT".
 5. Se o comando envolver uma AÇÃO (desligar, abrir, tocar, etc), ele NUNCA será MEMORY_WRITE ou MEMORY_READ.
+6. Pedido de AÇÃO que nenhuma skill da lista abaixo faz (abrir programa ou site, tocar música, mexer no volume...) é "CHAT". Nunca escolha uma skill "parecida" só porque ela é a mais próxima.
 
 # DEFINIÇÃO DE CATEGORIAS:
 - HARDWARE: Perguntas EXCLUSIVAS e DIRETAS sobre especificações físicas do computador host (CPU, RAM, GPU, bateria, temperatura, velocidade do cooler, velocidade da internet, armazenamento). NUNCA use se o usuário estiver pedindo explicações, fórmulas matemáticas, programando/codando, ou escrevendo textos gerais.
@@ -17,30 +18,9 @@ Sua missão é classificar a intenção do comando do usuário e extrair a entid
 # SKILLS E SEUS OBJETIVOS (PRIORIDADE ALTA):
 $skills_prompts
 
-# EXEMPLOS:
-- "fechar o spotify" -> {"intent": "APP_CONTROL", "entity": "spotify", "confidence": 1.0}
-- "encerrar o computador" -> {"intent": "SYSTEM_SECURITY", "entity": null, "confidence": 1.0}
-- "proteger estação" -> {"intent": "SYSTEM_SECURITY", "entity": null, "confidence": 1.0}
+# EXEMPLOS (os de cada skill vêm no bloco dela, acima):
 - "quem sou eu?" -> {"intent": "MEMORY_READ", "entity": null, "confidence": 1.0}
 - "meu nome é felipe" -> {"intent": "MEMORY_WRITE", "entity": "felipe", "confidence": 1.0}
-- "pesquisa a última versão do python" -> {"intent": "WEB_SEARCH", "entity": "última versão do python", "confidence": 1.0}
-- "quantos PRs abertos eu tenho?" -> {"intent": "GITHUB", "entity": null, "confidence": 1.0}
-- "bom dia, jarvis, qual o resumo do dia?" -> {"intent": "DAILY_BRIEFING", "entity": null, "confidence": 1.0}
-- "traduz o que eu copiei" -> {"intent": "CLIPBOARD", "entity": "traduzir", "confidence": 1.0}
-- "anota essa ideia: um app que resume reuniões" -> {"intent": "INSIGHT_SAVE", "entity": "app que resume reuniões", "confidence": 1.0}
-- "me lembra em 30 minutos de tirar a roupa da máquina" -> {"intent": "REMINDER", "entity": "tirar a roupa da máquina", "confidence": 1.0}
-- "inicia um pomodoro de 50 minutos" -> {"intent": "FOCUS_MODE", "entity": "50", "confidence": 1.0}
-- "modo não perturbe por uma hora" -> {"intent": "FOCUS_MODE", "entity": "60", "confidence": 1.0}
-- "explica o erro que está na minha tela" -> {"intent": "SCREEN_READ", "entity": null, "confidence": 1.0}
-- "resolve a questão aberta no monitor 2" -> {"intent": "SCREEN_READ", "entity": "monitor 2", "confidence": 1.0}
-- "diminui o brilho da tela" -> {"intent": "SCREEN_CONTROL", "entity": "brilho", "confidence": 1.0}
-- "resume essa página aberta" -> {"intent": "SCREEN_READ", "entity": null, "confidence": 1.0}
-- "fecha a aba do youtube" -> {"intent": "BROWSER_TABS", "entity": "youtube", "confidence": 1.0}
-- "abre uma aba nova no github" -> {"intent": "BROWSER_TABS", "entity": "github", "confidence": 1.0}
-- "fecha o chrome" -> {"intent": "APP_CONTROL", "entity": "chrome", "confidence": 1.0}
-- "toca lo-fi no youtube" -> {"intent": "YOUTUBE_CONTROL", "entity": "lo-fi", "confidence": 1.0}
-- "pausa o vídeo" -> {"intent": "YOUTUBE_CONTROL", "entity": null, "confidence": 1.0}
-- "toca Coldplay" -> {"intent": "SPOTIFY_CONTROL", "entity": "Coldplay", "confidence": 1.0}
 
 Comando do Usuário: "$text"
 Schema de Resposta: 

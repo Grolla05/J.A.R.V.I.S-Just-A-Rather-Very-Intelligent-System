@@ -173,8 +173,17 @@ def _tray_image():
     return img
 
 
+ELEVATION_FLAGS = {"--elevation-install": "--install", "--elevation-remove": "--remove",
+                   "--firewall-queue": "--queue"}  # core/elevation.py (tarefa \JARVIS\Firewall)
+
+
 def main():
     _prepare_environment()
+    args = sys.argv[1:]
+    action = next((ELEVATION_FLAGS[a] for a in args if a in ELEVATION_FLAGS), None)
+    if action:  # UAC (instalador ou /config) cria/apaga a tarefa; a tarefa elevada atende a fila do firewall
+        from core import elevation
+        return elevation.main([action, *(a for a in args if a not in ELEVATION_FLAGS)])
     if _single_instance() is None:
         return 0  # já existe um agente rodando
 
@@ -277,6 +286,14 @@ def main():
             log.info(f"Atualização pedida pela TUI: {status}")
             installing.release()
         threading.Thread(target=run, daemon=True, name="jarvis-install").start()
+
+    # Ponte Telegram/Discord (messenger.py): sobe junto com o agente se algum canal está ligado.
+    try:
+        from core import messenger_ctl
+        if messenger_ctl.should_run():
+            messenger_ctl.start()
+    except Exception as e:
+        log.warning(f"Ponte Telegram/Discord não subiu: {e}")
 
     presence.wait_signals(lambda _name: start_install(), threading.Event(), events=presence.AGENT_EVENTS)
     if install_now:

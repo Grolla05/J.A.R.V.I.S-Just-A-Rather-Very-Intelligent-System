@@ -55,7 +55,7 @@ def _ask_ollama_screen(user_text, monitors_context):
         # core.llm normaliza OLLAMA_HOST e trata erro (devolve None).
         return query_ollama([{"role": "system", "content": prompt_with_context},
                              {"role": "user", "content": user_text}],
-                            format="json", temperature=0.1, timeout=settings.TIMEOUT_API)
+                            format="json", temperature=0.1, timeout=settings.TIMEOUT_LLM)
     except Exception as e:
         log.error(f"❌ [SCREEN] Erro IA: {e}")
         return None

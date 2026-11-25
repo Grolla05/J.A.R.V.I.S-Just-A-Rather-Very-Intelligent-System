@@ -135,6 +135,26 @@ def ci_status(repo=None):
     return "\n".join(lines)
 
 
+def repo_snapshot(repo):
+    """Dados crus para comparar (Web Watch): última release e último commit do
+    branch padrão. Sem Markdown; levanta GitHubError/erro do PyGithub (quem chama trata)."""
+    r = _repo(repo)
+    release = None
+    try:
+        rel = r.get_latest_release()
+        release = {"tag": rel.tag_name, "name": rel.title or rel.tag_name, "url": rel.html_url}
+    except Exception as e:  # repositório sem release responde 404
+        if getattr(e, "status", None) != 404:
+            raise
+    commits = _take(r.get_commits(), 1)
+    commit = None
+    if commits:
+        c = commits[0]
+        commit = {"sha": c.sha, "title": ((c.commit.message or "").splitlines() or [""])[0],
+                  "url": c.html_url}
+    return {"repo": r.full_name, "branch": r.default_branch, "release": release, "commit": commit}
+
+
 @_safe
 def create_issue(repo, title, body=""):
     """Cria a issue (a confirmação é responsabilidade de quem chama)."""

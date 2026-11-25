@@ -170,7 +170,7 @@ def _ask_ollama_spotify_expert(command):
          {"role": "user", "content": command}],
         format="json",
         temperature=0.1,
-        timeout=settings.TIMEOUT_API
+        timeout=settings.TIMEOUT_LLM
     )
     if not resposta:
         return None

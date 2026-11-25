@@ -318,7 +318,7 @@ JarvisScreen.-critical StatusLine > .status--bar { color: $j-danger; }
 #status-body { height: 1fr; padding: 1 2; }
 
 #status-grid {
-    grid-size: 2 2;
+    grid-size: 2 3;
     grid-gutter: 1 2;
     width: 1fr;
     height: 1fr;
@@ -331,6 +331,7 @@ JarvisScreen.-critical StatusLine > .status--bar { color: $j-danger; }
     height: 1fr;
 }
 
+#meter-energia { column-span: 2; }
 .meter-head { height: 1; margin-bottom: 1; }
 .meter-name { width: 1fr; color: $j-white; text-style: bold; }
 .meter-value { width: auto; color: $j-neon; text-style: bold; }

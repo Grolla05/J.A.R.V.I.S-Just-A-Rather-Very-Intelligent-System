@@ -74,7 +74,7 @@ def _ask_ollama_macro_expert(user_text):
     # core.llm normaliza OLLAMA_HOST e trata erro (devolve None).
     return query_ollama([{"role": "system", "content": MACRO_DECISION_PROMPT},
                          {"role": "user", "content": user_text}],
-                        format="json", temperature=0.1, timeout=settings.TIMEOUT_API)
+                        format="json", temperature=0.1, timeout=settings.TIMEOUT_LLM)
 
 def execute_app_action(app_name, action="open"):
     """Reutiliza a skill APP_CONTROL para abrir os apps da macro."""

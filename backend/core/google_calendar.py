@@ -10,6 +10,7 @@ REST direto com `requests` (sem google-api-python-client: custo de boot e ~20 MB
 Funções públicas nunca levantam: falha vira log + None/texto amigável.
 """
 import datetime
+import re
 import threading
 import time
 import unicodedata
@@ -29,6 +30,8 @@ SECRET_NAME = "google_calendar"
 TIMEOUT = 8
 BUSY_TTL = 60  # s — o filtro de notificações pergunta a cada alerta
 MAX_EVENTS = 15
+MAX_RANGE_EVENTS = 250   # semana/mês/ano
+RANGE_SHOWN = 40         # eventos listados na resposta; o resto vira "… e mais N"
 
 NOT_CONFIGURED = ("Falta a sua chave do Google, Senhor. Crie um client \"App para computador\" "
                   "no Google Cloud (passo a passo em docs/integracoes-oauth.md), preencha "
@@ -200,15 +203,29 @@ def parse_event(item):
             "all_day": all_day, "id": item.get("id") or "", "location": (item.get("location") or "").strip()}
 
 
+def events_range(start_day, end_day, limit=MAX_RANGE_EVENTS):
+    """Eventos de `start_day` (inclusive) até `end_day` (exclusivo), em ordem, paginando
+    até `limit`. Levanta CalendarError."""
+    start, _ = _local_bounds(start_day)
+    end, _ = _local_bounds(end_day)
+    token, items, page = _access_token(), [], None
+    while len(items) < limit:
+        params = {"timeMin": start.isoformat(), "timeMax": end.isoformat(), "singleEvents": "true",
+                  "orderBy": "startTime", "maxResults": min(250, limit - len(items))}
+        if page:
+            params["pageToken"] = page
+        data = _get(f"{API_BASE}/calendars/primary/events", token, params)
+        items += [parse_event(i) for i in data.get("items", []) if i.get("status") != "cancelled"]
+        page = data.get("nextPageToken")
+        if not page:
+            break
+    return items[:limit]
+
+
 def events(day=None):
     """Eventos do dia (agenda principal), em ordem. Levanta CalendarError."""
     day = day or datetime.date.today()
-    start, end = _local_bounds(day)
-    data = _get(f"{API_BASE}/calendars/primary/events", _access_token(), {
-        "timeMin": start.isoformat(), "timeMax": end.isoformat(),
-        "singleEvents": "true", "orderBy": "startTime", "maxResults": MAX_EVENTS,
-    })
-    return [parse_event(i) for i in data.get("items", []) if i.get("status") != "cancelled"]
+    return events_range(day, day + datetime.timedelta(days=1), limit=MAX_EVENTS)
 
 
 def upcoming(hours=24, now=None, clock=time.monotonic):
@@ -309,3 +326,82 @@ def resolve_day(text, today=None):
             label = label.replace("sabado", "sábado").replace("terca", "terça")
             return today + datetime.timedelta(days=delta), label
     return today, "hoje"
+
+
+# --------------------------------------------------------- período pedido
+_NEXT_RE = r"(proxim[oa]|que vem|seguinte)"
+_WEEKEND_RE = re.compile(r"\b(fim|final) de semana\b")
+_WEEK_RE = re.compile(r"\bsemana\b")
+_MONTH_RE = re.compile(r"\bmes\b")
+_YEAR_RE = re.compile(r"\bano\b")
+_SHORT_WEEKDAYS = ("seg", "ter", "qua", "qui", "sex", "sáb", "dom")
+
+
+def _first_of_next_month(day):
+    return datetime.date(day.year + (day.month == 12), day.month % 12 + 1, 1)
+
+
+def _is_next(low, unit):
+    return bool(re.search(rf"{_NEXT_RE}\s+{unit}|{unit}\s+{_NEXT_RE}", low))
+
+
+def resolve_period(text, today=None):
+    """Período pedido: {'kind': 'day'|'range'|'next', 'start', 'end' (exclusivo), 'label'}.
+
+    Semana, fim de semana, mês e ano "atuais" começam hoje (o que já passou não
+    interessa); "próxima semana/mês que vem/próximo ano" pegam o período inteiro.
+    Sem período, vale o dia de `resolve_day` (hoje, amanhã, sexta…).
+    """
+    today = today or datetime.date.today()
+    low = _plain(text)
+    one = datetime.timedelta(days=1)
+    if _WEEKEND_RE.search(low):
+        saturday = today + datetime.timedelta(days=(5 - today.weekday()) % 7) if today.weekday() < 5 else today
+        end = saturday + datetime.timedelta(days=(7 - saturday.weekday()))
+        return {"kind": "range", "start": saturday, "end": end, "label": "no fim de semana"}
+    if _WEEK_RE.search(low):
+        monday_next = today + datetime.timedelta(days=7 - today.weekday())
+        if _is_next(low, "semana"):
+            return {"kind": "range", "start": monday_next, "end": monday_next + datetime.timedelta(days=7),
+                    "label": "na próxima semana"}
+        return {"kind": "range", "start": today, "end": monday_next, "label": "nesta semana"}
+    if _MONTH_RE.search(low):
+        first_next = _first_of_next_month(today)
+        if _is_next(low, "mes"):
+            return {"kind": "range", "start": first_next, "end": _first_of_next_month(first_next),
+                    "label": "no próximo mês"}
+        return {"kind": "range", "start": today, "end": first_next, "label": "neste mês"}
+    if _YEAR_RE.search(low):
+        jan_next = datetime.date(today.year + 1, 1, 1)
+        if _is_next(low, "ano"):
+            return {"kind": "range", "start": jan_next, "end": datetime.date(today.year + 2, 1, 1),
+                    "label": "no próximo ano"}
+        return {"kind": "range", "start": today, "end": jan_next, "label": "neste ano"}
+    day, label = resolve_day(text, today)
+    if day == "next":
+        return {"kind": "next", "start": today, "end": today + one, "label": None}
+    return {"kind": "day", "start": day, "end": day + one, "label": label}
+
+
+def _day_key(event, start_day):
+    day = event["start"].date() if event["start"] else start_day
+    return max(day, start_day)   # evento que começou antes do período (férias) entra no 1º dia
+
+
+def format_range(items, label, start_day, end_day):
+    """Eventos de um período agrupados por dia: '**qua 25/11** · 09:00 Daily · 14:00 Dentista'."""
+    last = end_day - datetime.timedelta(days=1)
+    span = f"{start_day:%d/%m} a {last:%d/%m}" if last != start_day else f"{start_day:%d/%m}"
+    if not items:
+        return f"Agenda livre {label} ({span})."
+    noun = "evento" if len(items) == 1 else "eventos"
+    lines, by_day = [f"{len(items)} {noun} {label} ({span}):", ""], {}
+    for e in items[:RANGE_SHOWN]:
+        by_day.setdefault(_day_key(e, start_day), []).append(e)
+    for day in sorted(by_day):
+        parts = [("dia inteiro: " if e["all_day"] or not e["start"] else e["start"].strftime("%H:%M ")) + e["title"]
+                 for e in by_day[day]]
+        lines.append(f"- **{_SHORT_WEEKDAYS[day.weekday()]} {day:%d/%m}** · " + " · ".join(parts))
+    if len(items) > RANGE_SHOWN:
+        lines.append(f"- … e mais {len(items) - RANGE_SHOWN} eventos")
+    return "\n".join(lines)

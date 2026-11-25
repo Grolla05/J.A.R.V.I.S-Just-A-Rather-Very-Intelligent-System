@@ -3,11 +3,11 @@
 Singletons e serviços de baixo nível usados pelo resto do JARVIS. O `__init__.py` expõe os principais:
 
 ```python
-from core import settings, log, db, obsidian, mcp_client, get_vault_context, manager, SystemInfo, load_prompt
+from core import settings, log, db, obsidian, get_vault_context, manager, SystemInfo, load_prompt
 import core.state as state   # estado global (não instancie SystemInfo de novo)
 ```
 
-Importar `core` abre o banco, carrega as skills e prepara o cliente MCP. Por isso o agente residente (`agent.py`) registra um pacote `core` vazio e importa só os módulos leves (`config`, `logger`, `hotkey`, `presence`, `autostart`, `launcher`, `window_utils`, `updater`, `selection`, `wt_profile`).
+Importar `core` abre o banco e prepara os singletons (as skills carregam no boot, por `manager.ensure_loaded()`). Por isso o agente residente (`agent.py`) registra um pacote `core` vazio e importa só os módulos leves (`config`, `logger`, `hotkey`, `presence`, `autostart`, `launcher`, `window_utils`, `updater`, `selection`, `wt_profile`).
 
 ## Fundação
 
@@ -15,7 +15,7 @@ Importar `core` abre o banco, carrega as skills e prepara o cliente MCP. Por iss
 |---|---|---|
 | `config.py` | Lê o `.env` e define caminhos e padrões. Todo caminho gravável sai de `settings.DIR_*`/`DB_PATH` | `settings`, `perform_sanity_check()` |
 | `logger.py` | Arquivo diário em `logs/`, console colorido fora da TUI; com a TUI, WARNING+ vira notificação. `RingBufferHandler` alimenta o `/log` | `log.info/warning/error/critical`, `log.use_tui()` |
-| `database.py` | SQLite com `config`, `history`, `sessions`, `hardware` e migrações por `PRAGMA table_info` | `db.log_interaction`, `get_config/save_config`, `update_hardware_spec` |
+| `database.py` | SQLite com 8 tabelas (`config`, `history`, `sessions`, `hardware`, `clipboard_history`, `reminders`, `net_trusted_apps`, `email_contacts`) e migrações por `PRAGMA table_info` | `db.log_interaction()`, `db.get_config()`, `db.save_config()` |
 | `state.py` | Estado de runtime: `sys_monitor`, `pending_critical_action`, `voice_enabled`, `dnd_active`/`dnd_backlog`, `auto_quiet`, `presentation_active`, `announce` | `import core.state as state` |
 | `pending.py` | Ação crítica pendente (única porta de `state.pending_critical_action`): `arm` não sobrescreve pendência válida e dá `id`; `take(id)`; `parse_reply` (só frase de confirmação aprova) | `from core import pending` |
 | `processes.py` | `terminate_if_same(pid, nome, criado)` (confere o PID antes de encerrar) e `PROTECTED` (sistema e o próprio JARVIS nunca são encerrados) | `from core import processes` |
@@ -38,6 +38,7 @@ Importar `core` abre o banco, carrega as skills e prepara o cliente MCP. Por iss
 | Módulo | Papel |
 |---|---|
 | `SystemInfo.py` | CPU, RAM, GPU (GPUtil), disco, rede, bateria, processos; limites (`DEFAULT_THRESHOLDS`: CPU/RAM 90 %, GPU 85 °C, disco 20/10 GB, bateria 15 %) e monitor proativo |
+| `power.py` | Consumo de energia: GPU NVIDIA medida (`nvidia-smi`), CPU e resto estimados (`POWER_CPU_TDP_W`, `POWER_BASE_W`, `POWER_PSU_EFF`); `meter` integra kWh por dia em `config.power_daily` com custo pela `POWER_TARIFF_KWH`. Só conta com a TUI aberta |
 | `alerts.py` | `process_system_alert`: passa pelo `services/notify_filter`, fala/notifica, guarda no backlog ou pede confirmação para matar processo (`PROCESS_JUDGEMENT_CACHE`) |
 | `notifications.py` | Liga/desliga os toasts do Windows (HKCU) |
 | `window_utils.py` | Win32: monitores, janela em foco, tela cheia, detecção de apresentação |
@@ -48,7 +49,7 @@ Importar `core` abre o banco, carrega as skills e prepara o cliente MCP. Por iss
 
 | Módulo | Papel |
 |---|---|
-| `obsidian.py` | `ObsidianClient` (REST) + `ObsidianMCPClient` (`uvx mcp-obsidian`). `get_vault_context(texto)`: camada 1 = palavras de perfil → `⚙️ Configurações/🧠 Sobre mim.md`; camada 2 = busca no vault → nota de maior score. `save_memory` nunca sobrescreve |
+| `obsidian.py` | `ObsidianClient` (API REST do plugin Local REST API; busca por **POST**). `get_vault_context(texto)`: camada 1 = palavras de perfil → `⚙️ Configurações/🧠 Sobre mim.md`; camada 2 = palavras do assunto (`search_keywords`) → busca → ranking por caminho/nota principal da pasta (`_rank`, `_main_note`). `asks_vault()` marca pedido de nota sem resultado (o chat avisa em vez de inventar). `save_memory` nunca sobrescreve. Detalhes: `docs/core/obsidian.md` |
 | `transcription.py` | Whisper local (faster-whisper) para áudio anexado |
 | `uploads.py` | Valida (MIME, tamanho) e grava anexos em `DIR_UPLOADS` |
 
@@ -66,6 +67,11 @@ Importar `core` abre o banco, carrega as skills e prepara o cliente MCP. Por iss
 | `youtube.py` | `find_video` (página de resultados do YouTube (1º `videoId` do HTML) → ddgs de reserva → senão abre os resultados), `clean_title`/`is_youtube_title` |
 | `spotify.py` | OAuth PKCE, Web API (busca, playlists, dispositivos) e player |
 | `oauth.py` | OAuth Desktop genérico: PKCE + callback no loopback |
+| `google_auth.py` | `GoogleAccount`: OAuth PKCE + token no Cofre + request autenticado; um segredo e um card por integração Google (Agenda, Gmail) |
+| `gmail.py` | Gmail (escopo `gmail.modify`): `inbox`, `read_body`, `build_mime` (resposta/anexo), `send`, `save_draft`, `ensure_label`, `batch_modify`, `trash` (Lixeira, 30 dias), `find_contacts` — sem exclusão permanente |
+| `telegram_bot.py` | Bot API por long polling (`requests`): só chat privado, token fora do log, backoff só em erro |
+| `discord_bot.py` | `discord.py` (gateway): responde DM ou menção |
+| `messenger_ctl.py` | Ponte Telegram/Discord: canais ativos (token + pref), `is_running` (mutex), `start` (leve: o agente usa) |
 | `secrets_store.py` | Tokens no Cofre de Credenciais do Windows (`keyring`); fallback JSON |
 | `web.py` | DuckDuckGo → leitura das páginas em paralelo → resumo no Ollama |
 | `clipboard.py` | Monitor de clipboard, classificação (link, erro, código, inglês) e ações (explicar, traduzir, resumir). `on_capture` entrega todo texto novo ao histórico |
@@ -77,10 +83,12 @@ Importar `core` abre o banco, carrega as skills e prepara o cliente MCP. Por iss
 | Módulo | Papel |
 |---|---|
 | `hotkey.py` | Atalho global (`RegisterHotKey`) numa thread com laço de mensagens próprio |
-| `presence.py` | Ponte TUI ⇄ agente: `tui.json` ({pid, hwnd}) + eventos nomeados (`SUMMON`, `TO_CHAT`, `INSTALL_UPDATE`) |
+| `presence.py` | Ponte TUI ⇄ agente: `tui.json` ({pid, hwnd}) + eventos nomeados (`SUMMON`, `TO_CHAT`, `EXPLAIN`, `INSTALL_UPDATE`) + `explain.json` (trecho a explicar, descartado após 120 s) |
 | `autostart.py` | Valor `JARVIS` em `HKCU\…\Run` (com `--logon`); detecta e sobe o agente |
 | `launcher.py` | Abre a TUI numa janela nova (Windows Terminal ou console) |
-| `updater.py` | `check_available()` (Release mais novo, cache 6 h) e `install_latest()` (baixa, confere SHA-256, setup silencioso) |
+| `updater.py` | `check_available()` (Release mais novo, cache 6 h; Esc adia a versão por 24 h) e `install_latest()` (baixa, confere o SHA-256 **e** a assinatura Minisign `JARVIS-Setup.exe.minisig`; sem assinatura válida não roda; setup silencioso) |
+| `minisign.py` | Ed25519 no formato Minisign: gerar chave, assinar (CI, `installer/sign_release.py`) e verificar (`updater`) contra a `PUBLIC_KEY` embutida |
+| `winget.py` | `search` (parser da saída pt/en), `best_match`, `install`/`download` sem shell e com id validado (download inteligente, `/instalar`, `/baixar`) |
 | `wt_profile.py` | Fragmento do perfil "JARVIS" do Windows Terminal (logo na aba) |
 
 ## Regras

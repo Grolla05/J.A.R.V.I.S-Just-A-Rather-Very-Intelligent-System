@@ -28,6 +28,7 @@ ACTION_ALIASES = {
     "explicar": "explain", "explica": "explain", "explain": "explain",
     "traduzir": "translate", "traduz": "translate", "translate": "translate",
     "resumir": "summarize", "resume": "summarize", "summarize": "summarize",
+    "checar": "factcheck", "checa": "factcheck", "verificar": "factcheck", "factcheck": "factcheck",
 }
 SUGGESTION = {
     "error": "Copiou um erro — `/clip` para eu diagnosticar.",
@@ -129,10 +130,13 @@ def act(action, text):
         if not page:
             return f"Não consegui ler a página {text}, Senhor."
         return web.summarize(f"Resuma esta página: {text}", [{"title": text, "url": text, "text": page}])
+    if action == "factcheck":
+        from core import factcheck
+        return factcheck.check(text[:factcheck.CLAIM_MAX])
     prompts = {"explain": "clipboard_explain.md", "translate": "clipboard_translate.md",
                "summarize": "clipboard_summarize.md"}
     if action not in prompts:
-        return "Ação desconhecida. Use: explicar, traduzir ou resumir."
+        return "Ação desconhecida. Use: explicar, traduzir, resumir ou checar."
     from core.llm import query_ollama
     prompt = load_prompt(prompts[action], text=text[:MAX_CHARS])
     answer = query_ollama([{"role": "user", "content": prompt}], temperature=0.3)

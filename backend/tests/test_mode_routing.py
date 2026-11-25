@@ -55,7 +55,7 @@ class TestModeRouting(unittest.TestCase):
         out, classify = self._run(brain.MODE_CHAT)
         self.assertEqual(out, "resposta do chat")
         self.skill.execute.assert_not_called()
-        self.assertEqual(classify.call_args.kwargs["exclude_categories"], ("automation", "system"))
+        self.assertEqual(classify.call_args.kwargs["allowed_categories"], ("productivity", "web"))
 
     def test_force_chat_skips_classifier_vault_and_pending_action(self):
         """Trecho a explicar: vai direto ao LLM, mesmo que pareça comando ou confirmação."""
@@ -117,7 +117,7 @@ class TestModeRouting(unittest.TestCase):
         out, classify = self._run(brain.MODE_COPILOT)
         self.assertEqual(out, "Spotify aberto.")
         self.skill.execute.assert_called_once_with("spotify", "abre o spotify")
-        self.assertEqual(classify.call_args.kwargs["exclude_categories"], ())
+        self.assertEqual(classify.call_args.kwargs["allowed_categories"], None)
 
     def test_mode_is_forwarded_to_chat_prompt(self):
         with patch.object(brain, "classify_intent", return_value={"intent": "CHAT"}):

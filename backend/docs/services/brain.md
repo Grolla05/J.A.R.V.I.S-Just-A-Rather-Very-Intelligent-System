@@ -16,14 +16,15 @@ O `brain` recebe cada mensagem (digitada ou falada) e decide o destino: confirma
 ```
 1. Há ação crítica pendente?      → a mensagem é a resposta (sim/pode/ok… = aprovado)
 2. classify_intent(...)           → {intent, entity, confidence}
-      modo chat: exclude_categories = ("automation", "system")
+      modo chat: allowed_categories = ("productivity", "web")
 3. intent == MEMORY_WRITE         → memory.extract_fact_to_memory(command)
 4. skill ligada e permitida       → on_route(intent); skill.execute(entity, command)
       copilot: qualquer skill · chat: só skill_allowed_in_chat()
       resposta str → 1 pedaço · iterável → yield from (stream; ex.: SCREEN_READ)
 5. resto (CHAT, HARDWARE, MEMORY_READ, skill bloqueada)
       → get_vault_context(command) + live_context.build(command)
-      → chat.ask_local_ai_stream(..., mode=mode)
+      → chat.ask_local_ai_stream(..., mode=mode,
+            vault_missing=not vault_ctx and asks_vault(command))   # pediu nota e não achou → avisa, não inventa
 ```
 
 `on_route` é como a TUI sabe que a resposta veio de uma skill e mostra o selo `[INTENT] executando… ✓/✗`.

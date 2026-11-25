@@ -2,1141 +2,516 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
-## /config redesenhado: seções, selos e fala do JARVIS
+## Correções achadas nas fotos do post 12 (TUI real)
 
-**Data:** 2026-11-21
-**Escopo:** Tela `/config` refeita a partir do artboard aprovado no canvas "JARVIS TUI" ("10 · Configurações — Rotinas (seções)"). Antes: 14 opções de ROTINAS numa lista só, colunas tortas, barra ▰▱ em liga/desliga e o texto de ajuda despejado no fim.
+**Data:** 2026-11-25
+**Escopo:** Ao tirar as fotos do post do LinkedIn das fases F1–F5 com a TUI real (gemma2:2b, busca, KaBuM e httpbin de verdade), apareceram erros que os testes com dados falsos não pegavam.
 
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | Cada grupo vira **cards de seção** com título, ícone e contagem de ativas (`2/3`). ROTINAS em 2 colunas: ☀ BRIEFING, ✎ ASSISTENTE, ⛨ SEGURANÇA · ◷ AGENDA, ☾ SILÊNCIO & PALCO. VOZ (♪ FALA), MICROFONE (◉ ESCUTA) e SISTEMA (⚙ INICIALIZAÇÃO) seguem o mesmo padrão. Rótulos curtos (o título da seção dá o contexto) e a ajuda de cada grupo foi para o pé do seu card | `frontend/screens/settings_rows.py` (novo: `SECTIONS`, `SHORT_LABELS`, `HELP`), `frontend/screens/settings.py` |
-| 2 | Linha `PrefRow`: `▌ nome ◀ valor ▶ pontos` em colunas fixas. Liga/desliga = selo `● ON` verde / `○ OFF` apagado (agente: `● RODANDO`/`○ PARADO`); escolhas mostram a posição em pontos `▮▮▮▯`. Setas só na linha em foco, que ganha fundo de seleção e a ajuda `↳` embaixo | `frontend/screens/settings_rows.py` (`PrefRow`, `row_segments`) |
-| 3 | Menu com ícone e contagem por grupo (`↻ ROTINAS 14`); no pé, "✓ salvo no SQLite · alterado às HH:MM:SS". Topo do painel: subtítulo do grupo e barra `▮▮▮▯ 11/14` (só em grupos com liga/desliga); topo da tela: `ROTINAS · 11 de 14 ativas` | `frontend/screens/settings.py`, `frontend/jarvis.tcss` |
-| 4 | Fala do JARVIS numa faixa própria no pé (rosto pixel-art + `jarvis ›` + `QuipLine` digitando 30 car./quadro com cursor `▌`) | `frontend/screens/settings_rows.py` (`QuipLine`), `frontend/screens/settings.py` |
-| 5 | Animações só por evento: troca de grupo = cards entram um a um (0,06 s cada); trocar valor = selo desliza `○──●` e pisca (2 quadros); no limite da lista nada muda e nada pisca. O fade por opacidade foi descartado: o compositor do Textual deixava fundo velho nas linhas | `frontend/screens/settings.py`, `frontend/screens/settings_rows.py` |
-| 6 | Navegação: `↑↓` andam entre as linhas de todos os cards (sair pelo topo volta ao menu), `←→` ajustam, `tab` alterna menu/opções (+ campo de fontes em SISTEMA), Enter no menu volta à última linha usada. Setas presas na própria linha: o `VerticalScroll` do painel escondia `←→ Ajustar` do rodapé | `frontend/screens/settings_rows.py`, `frontend/screens/settings.py` |
-| 7 | Cores novas do tema: `$j-select`, `$j-focus-help`, `$j-on-bg`, `$j-on-fg` | `frontend/jarvis.tcss` |
-| 8 | Documentação | `AGENTS.md`, `docs/arquitetura.md`, `frontend/README.md` |
+### Como ficou
 
-**Testes:** `test_tui_settings_rows.py` (novo: toda pref em uma seção só, ajuda sem emoji, 2 colunas em ROTINAS, selo em vez de barra, largura exata e corte com `…`, setas só em foco, valor compacto e pontos, desligado apagado, quadros do flash, selo do agente, resumo, máquina de escrever, rótulos curtos); `test_tui_phase34.py` (cards de ROTINAS, contagens, ajuda só na linha em foco, ↑↓ entre linhas e saída pelo topo, flash ao trocar e nada no limite; testes antigos do `/config` adaptados).
-
-## Interface igual ao canvas: Voz, Vault e Protocolo Crítico
-
-**Data:** 2026-11-21
-**Escopo:** Três telas que estavam diferentes do canvas "JARVIS TUI": "Visualizador de voz" (Copilot), "Memória / Vault" e "Protocolo crítico".
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | **Voz (Copilot):** `CopilotHero` + `VoiceBar` saem; entra `VoiceStage`, tela de voz inteira: espectro vertical dos dois lados da orb (o mais recente encostado na orb, espelhado), estado espaçado (`O U V I N D O`), a fala reconhecida no centro entre aspas (cursor `▌` enquanto ouve; "aguardando sua resposta" numa confirmação) e o VU de 30 blocos com o nível em dB (`-18 dB`, mesma escala do `listen.py`). A conversa fica escondida no Copilot (segue gravada na sessão e volta no Chat). Topo do Copilot: `mic N · 16 kHz` | `frontend/widgets.py` (`Spectrum`, `VoiceStage`), `frontend/sprites.py` (`spectrum`, `level_db`), `frontend/app.py`, `frontend/jarvis.tcss` |
-| 2 | **Vault:** o `OptionList` de resultados virou a lista de scores do canvas (`0.92 rotina_trabalho`; o melhor em ciano, o resto apagado; clique abre a nota) e o estado "parado" virou `varredura N/8`, seguindo o quadro do radar (8/8 ao terminar). A contagem mostra o tempo da busca (`3 resultados · 140 ms`) | `frontend/screens/vault.py` (`ScoreList`, `score_rows`, `sweep_label`), `frontend/jarvis.tcss` |
-| 3 | **Crítico:** o topo mostra só `⚠ PROTOCOLO CRÍTICO`, sem os motivos. Eles continuam no log (`log.warning` vira notificação e aparece no `/log`) | `frontend/app.py`, `backend/core/SystemInfo.py` (comentários) |
-
-**Testes:** `test_tui_sprites.py` (espectro centrado com meio bloco, lixo na entrada, escala de dB); `test_tui_phase34.py` (VU/espectro com nível real e zerando, lista de scores, `varredura 8/8`, tempo da busca); `test_tui_app.py` (Copilot esconde input e conversa, fala no centro, topo `mic N · 16 kHz`, selo crítico sem motivos); `test_tui_orb.py` (`VoiceStage` desmontado não levanta).
-
-**Observação:** `test_tui_tools.py::TestClipCommand::test_clip_bad_action_and_empty_history` já falhava antes destas mudanças (falha igual com o código anterior).
-
-## Navegador: Abas, YouTube Pro e Extração de Conteúdo
-
-**Data:** 2026-11-21
-**Escopo:** Itens "Gestão Dinâmica de Abas", "Protocolo YouTube Pro" e "Extração de Conteúdo" (Nível 2-B, The Navigator) do brainstorm. Navegadores Chromium (Opera GX, Chrome, Edge, Brave, Vivaldi), sem extensão e sem `--remote-debugging-port`.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | `core/browser.py`: janela do navegador (ordem Z, pula o terminal do JARVIS), atalhos só com foco confirmado (toque de Alt contra o foreground-lock), UI Automation via comtypes (URL da aba, listar/selecionar/fechar abas pelo botão "x"), `normalize_url`, `match_tab`, `clean_tab_title` (tira "- Memory usage - 86 MB", visto no Edge real) e `is_fetch_safe`. `CHROMIUM_APPS` em `window_utils` | `backend/core/browser.py`, `backend/core/window_utils.py` |
-| 2 | Skill `BROWSER_TABS` (automation, Copilot): aba nova (vazia/site/busca), fechar atual/por nome/número, ir para aba, próxima/anterior, reabrir, listar, recarregar, voltar/avançar, duplicar, anônima. Regex primeiro, LLM só no resto; fechar outras/todas pede confirmação (`pending`) | `backend/skills/automation/browser_tabs.py`, `backend/prompts/skills/browser_tabs.md`, `backend/prompts/skills/browser_tabs_decision.md` |
-| 3 | `core/youtube.py` + skill `YOUTUBE_CONTROL` (automation, Copilot): "toca X no YouTube" abre o 1º vídeo (página de resultados do YouTube; ddgs de reserva; sem vídeo, resultados); player pelas teclas oficiais na aba do YouTube (troca de aba se preciso, devolve o foco nas ações rápidas); velocidade exata; "que vídeo é esse?" | `backend/core/youtube.py`, `backend/skills/automation/youtube_control.py`, `backend/prompts/skills/youtube_control.md`, `backend/prompts/skills/youtube_decision.md` |
-| 4 | `SCREEN_READ` lê a página do navegador pela URL da aba (página inteira, inclusive fora da tela) antes do OCR; só URL pública sem parâmetro de credencial; página curta/logada ou falha → OCR. Prompt `page_read.md`; KEYWORDS `pagina*`, `artigo*`, `site` | `backend/skills/productivity/screen_read.py`, `backend/prompts/page_read.md`, `backend/prompts/skills/screen_read.md` |
-| 5 | Classificador: exemplos BROWSER_TABS × APP_CONTROL e YOUTUBE_CONTROL × SPOTIFY_CONTROL; "NÃO use para…" em APP_CONTROL e SPOTIFY_CONTROL | `backend/prompts/classify_intent.md`, `backend/prompts/skills/app_control.md`, `backend/prompts/skills/spotify_control.md` |
-| 6 | Instalador gera os wrappers COM da UI Automation no build (o runtime instalado é só leitura) | `installer/build_runtime.ps1` |
-| 7 | Testes: `core/browser` (janela, URL, URL segura, aba, título, UIA indisponível, sem foco), abas, YouTube, página no SCREEN_READ e KEYWORDS das skills novas | `backend/tests/test_browser.py`, `backend/tests/test_browser_tabs.py`, `backend/tests/test_youtube.py`, `backend/tests/test_screen_read.py`, `backend/tests/test_intent_prefilter.py` |
-| 9 | Achados tirando as fotos do post com a TUI real (gemma2 + Edge isolado): "avança 30 segundos" não casava nenhuma KEYWORD → o classificador recebia as 23 skills, estourava o contexto e caía no CHAT (KEYWORDS ganharam `avanc*`, `adiant*`, `retroced*`, `segundos`); a busca de vídeos do ddgs falhou por DNS → `find_video` lê primeiro a página de resultados do YouTube e tenta o ddgs 3× de reserva; o resumo de página inventava "Fórmula/Resposta" no fim → `page_read.md` limita a 6 tópicos e só resolve questão quando pedido. Atalhos validados ao vivo (abrir vídeo, avançar 30 s, legenda) | `backend/skills/automation/youtube_control.py`, `backend/core/youtube.py`, `backend/prompts/page_read.md`, `backend/tests/test_youtube.py`, `backend/tests/test_intent_prefilter.py` |
-| 8 | Documentação | `backend/docs/skills/automation/browser_tabs.md` (novo), `backend/docs/skills/automation/youtube_control.md` (novo), `backend/docs/skills/productivity/screen_read.md`, `backend/core/README.md`, `docs/arquitetura.md`, `SECURITY.md`, `AGENTS.md`, `README.md` |
-
-## Leitura de Tela (OCR do Windows + modelo de texto)
-
-**Data:** 2026-11-21
-**Escopo:** Item "Visão de Tela" do brainstorm, na versão só texto. A tela vira texto pelo OCR nativo do Windows (0 VRAM) e o `OLLAMA_MODEL` (gemma2) responde. Interpretar imagem (modelo de visão) fica para o plano da Thinking Layer.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | Skill `SCREEN_READ` (productivity: Chat e Copilot): captura → OCR → segredos mascarados → prompt por tipo (erro → `explain_error.md`, código → `explain_code.md`, resto → `screen_read.md` com o pedido e o título da janela) → resposta em stream. Sem texto legível → avisa e sugere `/attach` | `backend/skills/productivity/screen_read.py`, `backend/prompts/screen_read.md`, `backend/prompts/skills/screen_read.md` |
-| 2 | `core/screen_capture.py`: janela-alvo = a em foco; se for o terminal do JARVIS (Chat), desce na ordem Z até a 1ª janela real. "tela inteira"/"monitor N" capturam o monitor. Imagem só em memória | `backend/core/screen_capture.py` |
-| 3 | `core/ocr.py`: `Windows.Media.Ocr` via pywinrt (import tardio), `OCR_LANGUAGE` → pt-BR → en-US → perfil; `mask_secrets()` mais rígido que o `looks_secret` do clipboard (não esconde `NameError:` nem `main.py:3`) | `backend/core/ocr.py` |
-| 4 | Skill pode devolver um iterável (stream): `execute_command_stream` repassa pedaço a pedaço; `execute_command` (voz) junta | `backend/services/brain.py`, `backend/skills/README.md`, `CLAUDE.md` |
-| 5 | Classificador: exemplos `SCREEN_READ` × `SCREEN_CONTROL` e "NÃO use para…" em `SCREEN_CONTROL` e `CLIPBOARD` | `backend/prompts/classify_intent.md`, `backend/prompts/skills/screen_control.md`, `backend/prompts/skills/clipboard.md` |
-| 6 | Config `OCR_LANGUAGE` e `SCREEN_TEXT_MAX` (padrão 6000) | `backend/core/config.py`, `env.example` |
-| 7 | Dependências `winrt-*` (OCR, Imaging, Streams, Globalization, Foundation) no `requirements.txt` + lock regenerado; smoke de imports do instalador | `backend/requirements.txt`, `backend/requirements.lock`, `installer/build_runtime.ps1` |
-| 8 | Testes: escolha da janela/monitor, OCR (tamanho, idiomas, segredos, sem winrt), skill (prompt por tipo, pouco texto, corte, escopo, segredos) e skill em stream no `brain` | `backend/tests/test_screen_capture.py`, `backend/tests/test_ocr.py`, `backend/tests/test_screen_read.py`, `backend/tests/test_mode_routing.py` |
-| 11 | OCR lê dígitos de fonte de código: o motor pt-BR lia "80"→"8a" e "430"→"438" (Consolas, fundo escuro); o en-US acerta dígitos mas troca "ã"→"ä". `recognize` lê com os dois sobre o mesmo bitmap e `merge_readings` junta palavra a palavra (difflib): vale o en-US só onde os dois lados têm dígito e divergem. Ampliar ×2 piorava a leitura medida: agora só abaixo de 400 px. Achado ao tirar as fotos do post com a TUI real | `backend/core/ocr.py`, `backend/tests/test_ocr.py`, `docs/arquitetura.md`, `backend/docs/skills/productivity/screen_read.md` |
-| 10 | Corrida no fim do stream com o app fechando: `CopilotHero.set_info` tolera o label não montado e `_stream_done` ignora a atualização com a tela desmontada (`NoMatches '#hero-info'` derrubou o CI uma vez) | `frontend/widgets.py`, `frontend/app.py`, `backend/tests/test_tui_orb.py` |
-| 9 | Documentação: doc da skill, módulos novos no `core`, contrato de `execute` com stream, variáveis novas, risco de leitura de tela no SECURITY | `backend/docs/skills/productivity/screen_read.md` (novo), `backend/docs/skills/automation/screen_control.md`, `backend/docs/services/brain.md`, `backend/docs/core/config.md`, `backend/README.md`, `backend/core/README.md`, `backend/services/README.md`, `frontend/README.md`, `README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `SECURITY.md`, `docs/arquitetura.md` |
-
-## Manchetes mais espertas + CNN Brasil
-
-**Data:** 2026-11-21
-**Escopo:** Itens "Manchetes mais espertas" e "CNN internacional" do brainstorm de melhorias.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | Fonte padrão "CNN" vira "CNN Brasil": os feeds `rss.cnn.com` estão parados desde abril de 2023; o da CNN Brasil está vivo e já estava em `FEEDS`. "CNN" digitado continua indo pela busca `site:cnn.com` | `backend/core/news.py` |
-| 2 | Relevância com radicais (`morr*`, `despenc*`, `bombarde*`…; `*` = prefixo, como nas `KEYWORDS`); palavras ambíguas seguem exatas ("bolsa" não casa "Bolsonaro") | `backend/core/news.py` |
-| 3 | `_FALSE_CONTEXT`: "bolsa de estudos", "bolsa família", "morrer de rir", "queda de cabelo"… saem do título antes da contagem | `backend/core/news.py` |
-| 4 | `top_candidates()` devolve os 3 melhores por fonte; `rerank()` manda todos numa **única** chamada ao Ollama (`format="json"`, `temperature=0`), que escolhe o mais importante. Resposta inválida ou erro → vale a nota de palavras | `backend/core/news.py`, `backend/prompts/news_rank.md` |
-| 5 | Pref `news_ai` ("Manchetes escolhidas pela IA", `/config` → ROTINAS, padrão ligada) | `backend/services/user_prefs.py`, `frontend/screens/settings.py` |
-| 6 | Testes: radicais, palavras ambíguas, contexto, `top_candidates`, `rerank` (JSON válido/inválido/fora da faixa/erro) e uma chamada só por briefing | `backend/tests/test_news.py` |
-| 8 | Fonte acadêmica (Google Acadêmico, SciELO) não traz mais página de perfil como manchete: título que é só nome próprio ("DELIA TERESA SPONZA - Google Akademik", caso real) é descartado. A regra vale só para domínios acadêmicos; em portal de notícias, nome próprio no título é normal | `backend/core/news.py`, `backend/tests/test_news.py` |
-| 7 | Documentação das manchetes | `docs/arquitetura.md`, `backend/core/README.md`, `backend/services/README.md`, `backend/database/README.md`, `README.md`, `AGENTS.md` |
-
-## Melhorias da revisão geral (issues `enhancement`)
-
-**Data:** 2026-11-19
-**Escopo:** As 5 issues `enhancement` abertas pela revisão geral (DEV @ 87f6671): #51, #52, #57, #58 e #60.
-
-### 1. Skills desligadas lidas uma vez por mensagem (#52)
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | `skill_settings.disabled_sets()` guarda as listas de skills/categorias desligadas em cache; `_toggle` invalida. Antes eram ~80 conexões SQLite por mensagem | `backend/services/skill_settings.py` |
-| 2 | `is_skill_enabled(intent, disabled=None)`; `classify_intent` calcula as skills oferecidas uma vez (antes, 2× por skill) | `backend/services/intent.py` |
-| 3 | `PRAGMA journal_mode=WAL` só na criação das tabelas (é persistente no arquivo); `busy_timeout` segue por conexão | `backend/core/database.py` |
-
-### 2. Classificador mais leve (#51)
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | Mensagem trivial ("oi", "valeu", "ok, obrigado") vira `CHAT` sem ida ao Ollama (`is_trivial`). "bom dia" sozinho continua indo ao classificador (pede o briefing) | `backend/services/intent.py` |
-| 2 | Contrato opcional `KEYWORDS` nas skills (sem acento, `*` = prefixo). Só o `PROMPT_TEXT` das skills que casam entra no prompt; nenhuma casou → todas. Prompt típico cai de ~6,3 mil para 300–900 caracteres | `backend/services/intent.py`, `backend/skills/**` |
-| 3 | Aviso no log quando o prompt passa de 70% do `num_ctx` (no máximo 1 por hora) | `backend/services/intent.py` |
-| 4 | Guia do campo `KEYWORDS` | `backend/skills/README.md`, `docs/arquitetura.md` |
-
-### 3. pytest no CI (#58)
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | `main.yml`: job `lint` (ubuntu) + job `tests` em `windows-latest` com `pytest -n auto` | `.github/workflows/main.yml` |
-| 2 | `release.yml` roda a suíte inteira (sai o `--ignore` do arquivo que já não existe), em paralelo | `.github/workflows/release.yml` |
-| 3 | `requirements-dev.txt`: pytest, pytest-xdist, ruff fixo. Suíte de ~880 testes: ~4,5 min com `-n auto` | `backend/requirements-dev.txt` |
-| 4 | Testes do microfone (`TestLevelTap`) não dependem mais da ordem: `test_net_guard` não deixa mock de `services.listen` em `sys.modules` e `TestLevelTap` carrega o arquivo real | `backend/tests/test_net_guard.py`, `backend/tests/test_tui_phase34.py` |
-| 5 | `_refresh_status` ignora a atualização quando a tela da conversa já foi desmontada (worker terminando com o app fechando dava `NoMatches '#status-left'`; derrubou o 1º ensaio do release) | `frontend/app.py` |
-
-### 4. Dependências reproduzíveis (#57)
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | Faixas compatíveis no `requirements.txt` (ex.: `textual>=8.2,<9`) | `backend/requirements.txt` |
-| 2 | `requirements.lock` / `requirements-dev.lock` com hash (`uv pip compile --python-version 3.11 --python-platform windows --generate-hashes`) | `backend/*.lock` |
-| 3 | Instalador, CI e release instalam do lock com `--require-hashes` | `installer/build_runtime.ps1`, `.github/workflows/*.yml` |
-| 4 | Dependabot abre PR na `DEV` | `.github/dependabot.yml` |
-
-### 5. Setup assinado na atualização automática (#60)
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | `core/minisign.py`: Ed25519 no formato Minisign (gerar chave, assinar, verificar), sem depender do pacote `core` | `backend/core/minisign.py` |
-| 2 | O updater exige `JARVIS-Setup.exe.minisig` no Release e confere contra a `PUBLIC_KEY` embutida antes de rodar o setup; falha apaga o download | `backend/core/updater.py` |
-| 3 | `installer/sign_release.py` (`--generate` e assinatura no CI, conferindo contra a `PUBLIC_KEY`) | `installer/sign_release.py` |
-| 4 | `release.yml` no environment `release` (secret `MINISIGN_SECRET_KEY`), assina e publica os dois assets | `.github/workflows/release.yml` |
-| 5 | `cryptography` explícita no `requirements.txt` + smoke do build | `backend/requirements.txt`, `installer/build_runtime.ps1` |
-
-> **Antes do próximo merge na main:** criar o environment `release` no GitHub com o secret `MINISIGN_SECRET_KEY` (conteúdo do arquivo da chave secreta gerado por `installer/sign_release.py --generate`). Sem ele o Release falha de propósito. Authenticode (aviso do SmartScreen) fica para depois — exige certificado pago.
->
-> **Feito em 21/11:** environment `release` criado (revisor obrigatório, só `main` e `DEV`) com o secret cadastrado. Ensaio do release na DEV passou e a assinatura do setup gerado no CI confere com a `PUBLIC_KEY` embutida.
+- **Fact-Checking** (`core/factcheck.py`): o modelo deu ✅ CONFIRMADO para "a Muralha da China é visível do espaço" citando "Desmentido: …" como fonte a favor, e com 2 fontes contra
+  - Fonte citada a favor cujo **título** (da busca, não do modelo) desmente ("Mito:", "Desmentido:", "Por que NÃO…", "é fake/falso", "não é verdade/possível") passa para contra
+  - CONFIRMADO exige ≥ 2 a favor **e nenhuma contra**; se as fontes desmentem vira FALSO (≥ 2 contra, nenhuma a favor), se divergem vira IMPRECISO. FALSO do modelo nunca vira CONFIRMADO
+  - Quando a regra muda o veredito, a resposta diz: "O modelo disse X, mas as fontes citadas não sustentam isso"
+  - `prompts/factcheck_verdict.md` define os lados ("fonte que chama a afirmação de mito é CONTRA")
+- **Títulos da busca** (`core/web.clean_title`): o buscador devolvia títulos colados ("…Mundo EducaçãoA muralha da China…"); corta onde o título se repete e limita a 120 caracteres
+- **Navegação em segundo plano** (`services/headless_tasks.py`): na KaBuM o modelo chamou uma RX 7600 **patrocinada** de "RTX 5060 por R$ 1.899,99" e pegou o preço riscado de outra placa
+  - Pergunta de preço → `price_list` **por regra**: linha que cita o produto + linhas só de preço logo abaixo (dois seguidos = o 1º é o antigo, vale o último); o produto em si antes de quem só o contém ("Placa de Vídeo RTX 5060" antes de "Notebook…, RTX 5060"); o modelo não toca no preço
+  - Outras perguntas → `focus_text`: o modelo recebe só as linhas que citam o objetivo (+ 6 abaixo)
+  - `clean_goal`: "o usuário quer saber o preço…" vira "O preço…"; `prompts/headless_answer.md` explica preço antigo × atual
+- **Formulários** (`services/form_fill.py`): o modelo mapeou "Preferred delivery time" (`type=time`) para a cidade → só campos de texto (`TEXT_TYPES`) recebem dado do perfil; data/hora/número obrigatórios aparecem em "não preenchi". Rótulo sem ":" no fim
+- **Tela de confirmação** (`frontend/commands.confirm_labels` + `plain_confirm_text`): mostrava **Encerrar / Manter** para toda ação (rótulo do vigia de rede) e Markdown cru. Agora cada tipo de pendência tem os seus botões (Enviar / Não enviar, Instalar / Cancelar, Lixeira / Manter, Encerrar / Manter só para processo…) e o texto vem sem `**`/`_`/crase
 
 ### Testes
 
-Suíte completa em Python 3.11 com o lock: **881 passaram** (`-n auto`, ~3,5 min); `ruff` limpo. Novos: `tests/test_skill_settings_cache.py`, `tests/test_intent_prefilter.py`, assinatura em `tests/test_updater.py`.
+- `tests/test_factcheck.py`: caso real da Muralha (fonte "Desmentido" passa para contra; divergência = IMPRECISO; desmentido = FALSO com aviso), FALSO nunca vira CONFIRMADO, títulos que desmentem × "Fato ou Fake", título colado
+- `tests/test_headless.py`: patrocinado de outro produto some do foco, preço por regra (antigo e repetido saem, placa antes do notebook, modelo nem é chamado), `clean_goal`
+- `tests/test_form_fill.py`: campo de horário/data nunca recebe texto do perfil, rótulo sem ":"
+- `tests/test_tui_commands.py`: botões por tipo de pendência e texto limpo
+- Suíte completa: 1366 passaram; `ruff check .` limpo em `backend/` e `frontend/`
 
----
+## Preenchimento de Formulários com a memória do JARVIS
 
-## Correção das issues `bug`
+**Data:** 2026-11-25
+**Escopo:** Item "Preenchimento de Formulários — usando a memória semântica" do brainstorm (The Shadow Operator), fase F5 do plano. O JARVIS preenche um formulário com o que já sabe do usuário, numa janela do Edge, e **para antes do envio**.
 
-**Data:** 2026-11-19
-**Escopo:** Correção das 9 issues abertas com a tag `bug` (revisão geral, DEV @ 87f6671): #48, #49, #50, #53, #54, #55, #56, #59 e #61.
+### Como ficou
 
-### 1. `ShutdownScreen` para o timer ao sair (#59)
+- **Skill `FORM_FILL`** (`skills/productivity/form_fill.py`, Chat e Copilot): "preenche esse formulário", "completa a inscrição desse link". Sem link usa a **aba aberta** no navegador
+- **`/formulario [link]`** (alias `/form`)
+- **`services/form_fill.py`**:
+  - Perfil só do que já existe: `🧠 Sobre mim.md` no Obsidian (linhas `- **Campo:** valor` e links de GitHub/LinkedIn; "← preencha" e dado sensível ignorados), e-mail da conta Google conectada e endereço de casa do `/rota` (cache 5 min)
+  - Campos por regra: `autocomplete` → tipo (`email`/`tel`) → nome/id/rótulo/placeholder; `<select>` casa a opção sem acento. O que sobrou vai ao modelo (`prompts/form_map.md`), que **só escolhe a chave do perfil** entre as oferecidas — nunca escreve valor
+  - Campo já preenchido não é sobrescrito
+  - Resumo "campo → valor" + "Não preenchi: … (dado sensível / não sei)" → confirmação (`core/pending.py`, 5 min): **sim** clica no botão de envio do formulário; **não** deixa a janela aberta e preenchida; outra frase ("o telefone é 19 99999-0000") corrige o campo com o valor dito e pergunta de novo
+- **`core/headless.FormSession`**: Edge **com janela** numa thread própria (a API síncrona do Playwright só funciona na thread que a criou), campos lidos por um script fixo (`_FIELDS_JS`, marca `data-jarvis-field`; não lê os valores já digitados), fila preencher/enviar/fechar, aberta até o usuário fechar a janela (máx. 30 min; 2 min depois do envio), uma navegação por vez
+- **Nunca preenche** senha, cartão, CVV, CPF/CNPJ/RG, passaporte, conta, PIX, token: rótulo, nome/id (`user_cpf`, `userCpf`), placeholder, `type=password`, `autocomplete=cc-*` e valor com cara de CPF/cartão — vale para o perfil, para o modelo e para o ajuste pela fala
 
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | `_finish()` para o timer antes de chamar `on_done` (cobre o Esc de novo); `_tick`/`_crt_tick` saem cedo se a tela já foi desmontada ou terminou. Fim do `NoMatches '#crt'` | `frontend/screens/shutdown.py` |
+### Testado de verdade
 
-### 2. `get_config` devolve o tipo que foi salvo (#55)
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | Coluna nova `config.is_json` (migração `PRAGMA table_info` + `ALTER TABLE`). String grava crua (`is_json=0`) e volta igual: `"123"`, `"true"`, `"null"` deixam de virar int/bool/None. O resto vai em JSON (`is_json=1`). Linhas antigas (`NULL`) mantêm o comportamento anterior | `backend/core/database.py` |
-| 2 | Trânsito grava lugar/índice como dict/list direto (sem `json.dumps` manual) | `backend/core/traffic.py` |
-
-### 3. Histórico do chat para a IA (#53)
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | `ORDER BY id DESC` (o `timestamp` empatava pergunta e resposta do mesmo segundo); `with db.connection()` (a conexão fecha sempre); índice `(session_id, id)` | `backend/services/chat.py`, `backend/core/database.py` |
-| 2 | Memória configurável: `CHAT_HISTORY_TURNS` (padrão 10 turnos; antes 4) | `backend/core/config.py`, `env.example` |
-
-### 4. Erro do LLM não entra no histórico (#54)
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | `query_ollama_stream` levanta `LLMError` em vez de emitir "Erro de processamento neural." como texto | `backend/core/llm.py` |
-| 2 | A TUI mostra o parcial + o erro na bolha, mas não grava a resposta nem registra insight; o placeholder "Sem resposta do modelo" também não vai para o banco. No Copilot por voz, fala uma frase curta de erro | `frontend/app.py` |
-| 3 | Respostas de erro gravadas por versões antigas são ignoradas ao montar o histórico | `backend/services/chat.py` |
-
-### 5. RAG do Obsidian pela API REST, sem MCP (#48)
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | `get_vault_context` usa o `ObsidianClient` REST (`search_scored` + `get_file`), o mesmo plugin Local REST API e a mesma chave. Sai o subprocesso `uvx mcp-obsidian` por chamada (1 a 3 por mensagem); funciona na instalação limpa | `backend/core/obsidian.py` |
-| 2 | Removidos `ObsidianMCPClient`, `mcp_client`, `mcp_endpoint` e a dependência `mcp` | `backend/core/obsidian.py`, `backend/core/__init__.py`, `backend/requirements.txt`, `installer/build_runtime.ps1`, `installer/test_setup.ps1`, `backend/tests/_stubs.py` |
-| 3 | Obsidian fora do ar: aviso uma vez por sessão, depois só no log | `backend/core/obsidian.py` |
-
-### 6. "Sobre mim" só em pergunta pessoal (#49)
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | Palavras-chave do perfil casam como palavra inteira, sem acento (`core.utils.plain` / `word_regex`). Lista revista: saem `age`, `quem`, `meta`, `mora`, `curso`, `mouse`… e entram frases ("meu nome", "onde moro", "meu curso") | `backend/core/obsidian.py`, `backend/core/utils.py` |
-| 2 | Camada 2: a nota só entra se citar ao menos metade das palavras buscadas; `VAULT_MIN_SCORE` opcional; conversa fiada ("oi, tudo bem?") nem busca | `backend/core/obsidian.py`, `backend/core/config.py`, `env.example` |
-
-### 7. Tela de atualização: Enter instala, Esc adia (#50)
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | Só Enter instala; Esc adia aquela versão por 24 h; outras teclas não fazem nada; teclas nos primeiros 0,5 s são ignoradas (a tela pode abrir enquanto o usuário digita) | `frontend/screens/update.py`, `frontend/app.py`, `backend/main.py` |
-| 2 | `updater.snooze()` / `is_snoozed()` (`updates/snooze.json`): `check_available` não oferece a versão adiada, nem no logon. Versão mais nova aparece na hora; pedir a instalação limpa o adiamento | `backend/core/updater.py` |
-
-### 8. Skills e `import core` (#56)
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | Pasta de skills absoluta (`Path(__file__)`): `python backend/main.py` da raiz carrega as skills | `backend/core/skill_loader.py` |
-| 2 | INTENT duplicado gera aviso e mantém o primeiro (ordem alfabética, determinística) | `backend/core/skill_loader.py` |
-| 3 | Skills carregam na etapa do boot (`manager.ensure_loaded()`) ou no 1º uso, não no import. `import core` ficou leve: `db`, `manager` e `SystemInfo` são carregados sob demanda (PEP 562) | `backend/core/skill_loader.py`, `backend/core/__init__.py`, `backend/core/boot.py` |
-
-### 9. Ajustes menores (#61)
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | Veredito do juiz de processo: só a primeira palavra conta ("SIMPLESMENTE" não é "SIM"); cache em `TTLCache` (remove vencidas, máx. 256) | `backend/core/alerts.py` |
-| 2 | `get_top_processes('memory')` não quebra com `memory_percent` `None` | `backend/core/SystemInfo.py` |
-| 3 | `ollama.Client` reaproveitado por timeout | `backend/core/llm.py` |
-| 4 | 15 `except:` sem tipo viram `except Exception` + `log.debug`; `E722` voltou a valer no ruff. `try/except/pass` que escondiam falha ganharam `log.debug` | `backend/core/SystemInfo.py`, `backend/skills/**`, `backend/core/{secrets_store,updater}.py`, `backend/services/focus.py`, `backend/pyproject.toml` |
-| 5 | Comentários que ainda citavam PyWebView/bridge | `backend/core/database.py`, `backend/tests/test_spotify_control.py` |
+- Formulário público de teste (httpbin.org/forms/post) com o perfil real do vault: 5 campos lidos, "Customer name" preenchido com o nome completo; telefone e e-mail listados como "não sei" (Gmail não conectado nesta máquina); sessão fechada e lock liberado. Não enviado
 
 ### Testes
 
-Novos: `test_chat_history.py`, `test_vault_keywords.py`, `test_skill_loader.py`, `test_systeminfo_top.py`. Ampliados: `test_database.py` (ida e volta de tipos, migração), `test_llm_options.py` (`LLMError`, reuso do Client), `test_tui_app.py` (erro do LLM fora do histórico, Enter/Esc/carência da tela de atualização), `test_updater.py` (adiamento), `test_tui_phase34.py` (timer do shutdown), `test_alerts_cache.py` (TTLCache, primeira palavra), `test_obsidian_endpoint.py` (RAG via REST).
+- `tests/test_form_fill.py` (novo, 16): perfil do Obsidian (sem CPF nem "← preencha"), fontes do perfil, regras + lista negra + modelo só para o resto, modelo não inventa valor nem usa chave fora da lista, campo já preenchido, sensíveis por tipo/autocomplete/nome, fluxo com sim/não, ajuste pela fala, ajuste sensível recusado, guardas (sem link, localhost, erro, sem campos), confirmação ocupada, skill, `FormSession` com página falsa (preencher, recusar senha, enviar, fechar, janela fechada pelo usuário, redirecionamento proibido)
+- `tests/test_tui_tools.py::TestFormularioCommand`; frases do `FORM_FILL` no golden set das KEYWORDS
+- Suíte completa: 1355 passaram (o `TestFormularioCommand`, escrito depois, passou rodado à parte); `ruff check .` limpo em `backend/` e `frontend/`
 
----
+## Navegação Headless: tarefas web em segundo plano no Edge
 
-**Data:** 2026-11-17
-**Escopo:** Segurança — correção dos 5 Security Advisories privados abertos pela revisão geral (GHSA-8j53, GHSA-ph22, GHSA-48jx, GHSA-p7rm, GHSA-x47w) e da issue #47 (URL do Ollama duplicada em 7 skills).
+**Data:** 2026-11-25
+**Escopo:** Item "Navegação Headless — tarefas web em segundo plano" do brainstorm (The Shadow Operator), fase F4 do plano. O JARVIS abre um site sem janela, busca, clica e traz a informação pedida, avisando quando termina.
 
-### 1. Skills falam com o Ollama só por `core.llm` (issue #47)
+### Como ficou
 
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | **Fim do `http://http://`**: 7 skills montavam `f"http://{OLLAMA_HOST}/api/generate"`; com o padrão do `env.example` (`http://localhost:11434`) a URL quebrava e as skills falhavam na instalação padrão (inclusive o "sim" do alerta de processo crítico, que nunca encerrava nada). Agora todas usam `query_ollama(..., format="json")`, que normaliza o host e trata erro | `backend/skills/automation/{app_control,audio_control,keyboard_control,screen_control,work_macros}.py`, `backend/skills/system/{system_clear,system_security}.py` |
-| 2 | `SYSTEM_CLEANUP`: `winget` e `Get-StartApps` como lista de argumentos (sem `shell=True`); `appwiz.cpl` via `os.startfile` | `backend/skills/system/system_clear.py` |
-| 3 | Teste estático: nenhuma skill monta URL do Ollama nem usa `requests.post` para ele | `backend/tests/test_skills_llm.py` |
+- **Skill `HEADLESS_TASK`** (`skills/web/headless_task.py`, Chat e Copilot): "entra no site da kabum e vê o preço da rtx 5060", "em segundo plano, abre a wikipedia e me traz…". Resposta imediata ("Executando em segundo plano: abrir … → …") e o resultado chega depois como aviso, com a página de origem
+- **`core/headless.py`** (motor): Playwright dirigindo o **Edge do Windows** (`channel="msedge"`, sem `playwright install`), perfil próprio em `headless_profile/` na pasta de dados (nunca o perfil do usuário, nunca login)
+  - Passos tipados e limitados: `goto`, `fill`, `press`, `click`, `wait`, `extract` — no máximo 8, o 1º sempre `goto`; nada de JavaScript vindo do modelo
+  - Rotas vigiadas: navegação principal só para URL pública (`browser.is_fetch_safe`); imagens/scripts/XHR só para host público (localhost e rede local abortados); redirecionamento para endereço não permitido interrompe
+  - **Nunca preenche** senha, cartão, CVV, CPF/CNPJ/RG, passaporte, agência/conta, PIX ou token: pelo rótulo, pelo valor (cara de CPF/cartão), por `type=password` e por `autocomplete=cc-*`
+  - Download desligado, service workers bloqueados, uma tarefa por vez
+  - Texto devolvido = texto **visível** do `<main>`/`<body>` (o `extract_text` só pegava parágrafos longos e perdia preço em `<span>`); "R$" sozinho numa linha junta com o valor
+- **`services/headless_tasks.py`**: o modelo planeja (`prompts/headless_plan.md`, JSON) → validação → passo que **envia algo** (clicar em Comprar/Enviar/Cadastrar/Entrar, Enter depois de um campo que não é busca) arma confirmação por `core/pending.py` com a lista de passos marcada ⚠️ → thread daemon → o modelo responde o objetivo só com o texto da página (`prompts/headless_answer.md`, conteúdo da página é dado) → `state.announce`. Sem plano e com link na frase: abre o link e resume
+- **Web Watch**: preço que só aparece com JavaScript — `check_price` tenta o HTML renderizado pelo Edge (`headless.render_html`) antes de perguntar ao modelo
+- **Config**: `HEADLESS_TIMEOUT` (30 s por página) e `HEADLESS_VISIBLE` (depuração: abre a janela). `playwright` no `requirements.txt` e no lock (+ `greenlet`), smoke do instalador importa `playwright.sync_api`. O runtime cresce ~117 MB (driver do Playwright; o setup comprime)
+- `.gitignore`: `backend/headless_profile/`
 
-### 2. Confirmação de ação crítica centralizada (GHSA-x47w, GHSA-48jx)
+### Testado de verdade
 
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | **`core/pending.py`**: única porta de `state.pending_critical_action`, com lock. `arm()` nunca sobrescreve uma pendência válida (devolve `None`); toda pendência tem `id`; `take(id)` só executa a pendência que a pergunta mostrou (trocada → "foi substituída; nada foi feito") | `backend/core/pending.py` |
-| 2 | **Resposta estrita**: `parse_reply()` só aprova frase feita de confirmação/verbo de ação/alvo ("sim, pode encerrar"). "pode me dizer o clima?" ou "vai chover amanhã" não aprovam mais — descartam a pendência e seguem como comando. Negação continua vencendo | `backend/core/pending.py`, `backend/services/brain.py` |
-| 3 | Alerta de hardware, vigia de rede e criação de issue passam a armar por `pending.arm`; o `ConfirmScreen` repassa o `id` da pergunta até `confirm_pending_action(pending_id=)` | `backend/core/alerts.py`, `backend/services/net_guard.py`, `backend/skills/productivity/github_control.py`, `frontend/app.py` |
-
-### 3. `APP_CONTROL` sem shell e sem substring (GHSA-8j53, GHSA-p7rm)
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | **Sem injeção de shell**: saiu o fallback `Popen(target_raw, shell=True)`. Último recurso agora é `shutil.which` de um nome simples (`[\w .+-]`), executado como lista; AppsFolder também em lista | `backend/skills/automation/app_control.py` |
-| 2 | **Fechar por nome exato** do executável (antes "fechar code" pegava tudo com "code"); alvo com menos de 3 letras é recusado; processos do sistema e o próprio JARVIS nunca são encerrados | `backend/skills/automation/app_control.py`, `backend/core/processes.py` |
-| 3 | **App desconhecido pede confirmação** (snapshot de PID + nome + hora de criação; PID reaproveitado não é encerrado). App conhecido (`PROCESS_MAP`/aliases) com um único executável fecha direto. `close_now()` serve quem já confirmou (alerta de consumo crítico) | `backend/skills/automation/app_control.py`, `backend/core/processes.py`, `backend/services/net_guard.py` |
-
-### 4. Desligar sempre pede confirmação (GHSA-ph22)
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | O campo `confirmed` do LLM saiu: desligar sempre arma `pending.arm("POWER_DOWN")` e abre o `ConfirmScreen`; `shutdown`/suspender viraram `subprocess.run` em lista | `backend/skills/system/system_security.py`, `backend/prompts/skills/system_security_decision.md` |
-| 2 | **Desligar não apaga mais nada**: Lixeira e `%TEMP%` saíram do desligamento (ficam com `SYSTEM_CLEANUP`). Sem LLM, comando não reconhecido não bloqueia mais a tela por padrão | `backend/skills/system/system_security.py` |
+- Edge sem janela: Wikipédia com busca + Enter → página do Nikola Tesla (9 s); `example.com` renderizado (4 s)
+- Plano do gemma2:2b: KaBuM → `goto /busca/rtx-5060` + `extract` (7 s); fluxo completo KaBuM ~70 s com preços reais da página (R$ 4.199,99, R$ 3.599,99…)
+- Limites vistos: os nomes dos produtos vêm genéricos e o gemma2 já trocou "Tesla" por "Elon Musk" no plano (frase ambígua) — regra "mantenha os nomes" no prompt
 
 ### Testes
 
-Novos: `test_pending.py`, `test_app_control.py`, `test_system_security.py`, `test_skills_llm.py`. Ajustados: `test_mode_routing.py` (frases que não aprovam, pendência substituída, `close_now`) e `test_tui_app.py` (o `ConfirmScreen` só resolve a pendência que mostrou).
+- `tests/test_headless.py` (novo, 21): validação (tipos, limites, URL local/arquivo, campo e valor sensíveis, tecla), passos que enviam algo, rotas, execução com página falsa, recusa de campo de senha, redirecionamento, elemento ausente, uma tarefa por vez, texto visível com moeda, render para o Web Watch, plano com fallback, confirmação, recusa, aviso, Edge ausente, skill — sem Edge e sem Ollama
+- `tests/test_intent_prefilter.py`: frases da navegação headless no golden set das KEYWORDS
+- Suíte completa: 1339 passaram; `ruff check .` limpo em `backend/` e `frontend/`
 
----
+## Fact-Checking: verificação cruzada com fontes independentes
 
-**Data:** 2026-11-16
-**Escopo:** Cinco itens do roadmap fechados: histórico do clipboard persistente com busca, explicar código/erro por atalho global, registro automático de insights no vault, lembretes contextuais (agenda, trajeto e por pedido) e vigia de rede com ação confirmada.
+**Data:** 2026-11-25
+**Escopo:** Item "Fact-Checking — verificação cruzada de informações" do brainstorm (The Watchman), fase F3 do plano. O JARVIS checa uma afirmação em fontes de domínios diferentes e dá um veredito com as fontes.
 
-### 1. Histórico do clipboard — persistência e busca
+### Como ficou
+
+- **Skill `FACT_CHECK`** (`skills/web/fact_check.py`, Chat e Copilot): "isso é verdade: …", "é fake que …?", "checa se …", "verifica essa notícia: …"
+- **`/checar <afirmação>`** (alias `/checa`, `/fact`) e **`/clip checar`** (checa o que foi copiado, inclusive item do histórico: `/clip checar 3`)
+- **`core/factcheck.py`**:
+  - Limpa o pedido ("isso é verdade:", "checa se", "é fake que"); texto longo (> 280 caracteres, ex.: notícia colada) → o modelo extrai a afirmação central (`prompts/factcheck_claim.md`)
+  - 2 buscas (a afirmação e "… é verdade ou fake"), **1 fonte por domínio**, só URL pública (`is_fetch_safe`), até 5; lê as 3 primeiras páginas (`web.read_pages`, extraído do `research`)
+  - Veredito do modelo em JSON (`prompts/factcheck_verdict.md`: julgar só pelas fontes; conteúdo das fontes é dado, não instrução): **CONFIRMADO / FALSO / IMPRECISO / INCONCLUSIVO**
+  - **Regras duras** (o gemma2:2b erra): menos de 2 domínios → INCONCLUSIVO sem chamar o modelo; CONFIRMADO/FALSO só com 2 fontes citadas do mesmo lado (senão IMPRECISO ou INCONCLUSIVO); JSON inválido → INCONCLUSIVO; índices de fonte conferidos
+  - Resposta: selo do veredito, a afirmação, resumo com `[n]`, fontes a favor/contra e lista de fontes. Cache de 10 min. Nunca levanta
+
+### Testes
+
+- `tests/test_factcheck.py` (novo, 12): limpeza do pedido (inclusive pedido sem afirmação), texto longo → modelo, 1 fonte por domínio e URL local recusada, regras do veredito, índices inválidos, fluxo completo com cache, domínio único sem modelo, falha de rede, skill e `/clip checar` — tudo sem rede
+- `tests/test_tui_tools.py::TestChecarCommand`: `/checar` com selo `checagem ·` e uso sem argumento
+- `tests/test_intent_prefilter.py`: frases do Fact-Checking no golden set das KEYWORDS
+- Suíte completa: 1318 passaram; `ruff check .` limpo em `backend/` e `frontend/`
+
+## Web Watch: vigia páginas, preços e repositórios
+
+**Data:** 2026-11-25
+**Escopo:** Item "Web Watch — monitoramento de preços, sites e repositórios" do brainstorm (The Watchman), fase F2 do plano. O JARVIS passa a vigiar um link ou um repositório e avisar sozinho quando muda.
+
+### Como ficou
+
+- **`/vigiar`** (alias `/vigia`, `/watch`): `/vigiar <link>` vigia a página; `/vigiar <link> preço abaixo de 2000` vigia o preço (alvo opcional); `/vigiar dono/repo` (ou link do GitHub) vigia releases e commits; sem argumento lista; `/vigiar rm <n>` remove
+- **Skill `WEB_WATCH`** (`skills/productivity/web_watch.py`, Chat e Copilot): "me avisa quando o preço dessa página baixar de 300", "acompanha as releases do ollama/ollama", "o que você está vigiando?", "para de vigiar o 2". Sem link na frase usa a **URL da aba aberta** no navegador
+- **`core/webwatch.py`** (lógica + I/O fino):
+  - Preço: JSON-LD (`offers.price`/`lowPrice`, inclusive em `@graph`) → meta `product:price:amount` → 1º `R$ …` do texto → modelo (`prompts/webwatch_price.md`) só quando nada disso acha
+  - Página: texto útil (até 4.000 caracteres) com impressão digital que ignora hora, data e espaços; o aviso mostra até 3 linhas novas
+  - Repositório: `github_client.repo_snapshot` (nova) devolve release e commit crus para comparar
+  - Toda URL passa por `browser.is_fetch_safe` **antes e depois dos redirecionamentos** (só páginas públicas)
+- **`services/web_watch.py`**: tabela nova `web_watches` (9ª), linha de base na criação, `collect()` checa só os itens vencidos (`WEBWATCH_INTERVAL_MIN`, padrão 60) e nunca levanta; erro de rede só marca a hora. Preço que **cai** avisa; que chega no **alvo** é urgente (aparece mesmo no Não Perturbe, sem voz); subir só atualiza. Limite `WEBWATCH_MAX` = 20
+- **TUI**: `set_interval(WEBWATCH_TICK=300 s)` só com serviços → worker → `_deliver_reminder(item, meta="vigia")` (mesmo caminho e filtro dos lembretes)
+- `.env`: `WEBWATCH_INTERVAL_MIN`, `WEBWATCH_MAX` (com default no `Settings`)
+- **Limites**: só checa com a TUI aberta; página que monta o preço por JavaScript pode não ser lida (a Navegação Headless, F4, vai cobrir); repositório precisa do `GITHUB_TOKEN`
+
+### Testes
+
+- `tests/test_webwatch.py` (novo, 22): preço nos 3 formatos + `@graph` + fallback do modelo só sem marcação, `format_brl`, hash estável, linhas novas, `github_repo`, URL insegura e redirecionamento para rede local recusados, pedido → tipo/alvo (inclusive aba aberta), ciclo completo de preço/página/repositório com SQLite temporário, erro sem perder estado, duplicado, limite, lista/remoção, roteamento da skill
+- `tests/test_tui_tools.py::TestWebWatch` (4): aviso com `vigia ·` e voz, Não Perturbe (comum vai ao backlog, alvo aparece calado), sem timer sem serviços, `/vigiar`
+- `tests/test_intent_prefilter.py`: frases do Web Watch no golden set das KEYWORDS
+- Suíte completa: 1305 passaram; `ruff check .` limpo em `backend/` e `frontend/`
+
+## Classificador: confere a intenção devolvida e prompts com exemplos negativos
+
+**Data:** 2026-11-25
+**Escopo:** Pendências do brainstorm. "abre o spotify" no Chat virava `SCREEN_READ` e "qual a capital da França?" virava `WEB_SEARCH`. O fluxo continua o mesmo: **o Ollama sempre classifica a mensagem** (só "oi"/"valeu" pulam, como antes) e a intenção escolhida decide o que roda — skill (ex.: `SPOTIFY_CONTROL` no Copilot abre o Spotify e responde) ou conversa.
+
+### Como ficou
+
+- `services/intent.py`: **intenção devolvida fora das opções** do modo (skill de outro modo, desligada, inventada) → `CHAT`, nunca executa nada. Antes nada conferia o retorno. JSON que não é objeto também cai em `CHAT`
+- **Tempo do classificador no log**: `⏱️ [CLASSIFICADOR]: N s (X skills no prompt)` — para medir os 10–15 s
+- Prompts: regra 6 no `classify_intent.md` (ação que nenhuma skill da lista faz → CHAT, nunca a skill "parecida"); `screen_read.md` com "NÃO use para abrir/fechar programas e sites"; `web_search.md` com "NÃO use para conhecimento geral que não muda" + exemplo da capital
+- `env.example`: dica `OLLAMA_NUM_CTX=4096` para GPU de 4 GB (gemma2:2b 100% na GPU — conferir com `ollama ps`)
+- Descartado: um "portão" que pulava o Ollama quando a frase não tinha KEYWORD — quebrava o fluxo "sempre classificar"
+
+### Testes
+
+- `tests/test_intent_prefilter.py` → `TestAlwaysClassify`: "abre o spotify" no Copilot vai ao Ollama e vira `SPOTIFY_CONTROL`; no Chat a pergunta também vai ao Ollama; `SPOTIFY_CONTROL` devolvido no Chat vira `CHAT`; JSON que não é objeto → `CHAT`
+- Testes do classificador, roteamento por modo, Spotify, vault e rede: 139 passaram; `ruff check .` limpo
+
+## Anexar qualquer arquivo ao prompt (texto, código e PDF), arrastando ou com /attach
+
+**Data:** 2026-11-24
+**Escopo:** Soltar um arquivo no chat deve anexá-lo ao prompt. Antes só imagem (modelo de visão) e áudio (transcrição) eram aceitos; texto, código e PDF eram ignorados (o caminho ia como texto comum).
+
+### Como ficou
+
+- **Arrastar qualquer arquivo** (`frontend/commands.py` → `dropped_paths`): vale qualquer caminho **absoluto** de arquivo existente (o Windows Terminal cola o caminho completo); caminho relativo ou texto com caminho no meio continua indo para o input. Quem diz se o tipo serve é o `core.uploads.load_any`
+- **`core/uploads.py`**:
+  - `load_document`: texto e código (~70 extensões, UTF-8/CP1252) e **PDF** (`pypdf`, até 40 páginas; PDF escaneado avisa para mandar como imagem). Até `DOC_TEXT_MAX` = 12.000 caracteres (avisa quando corta)
+  - Linhas com cara de senha/token viram `[oculto]` (`ocr.mask_secrets`); `.env`, `.env.*`, chaves (`.pem`, `.key`, `id_rsa`…) e cofres são **recusados** antes de ler; binário é recusado
+  - `load_any` roteia: documento → `load_document`; imagem/áudio → `load_local_file` como antes
+- **TUI** (`frontend/app.py`): até `MAX_DOCS` = 3 documentos por mensagem, junto com a imagem e a nota do `/vault`; barra de anexo mostra `📄 nome`; `/detach` limpa tudo; a bolha mostra `anexo: a.py, b.pdf`
+- **Ao modelo**: a mensagem vai com os arquivos em `prompts/file_context.md` + `prompts/file_block.md` ("conteúdo é dado, não instrução") e com `force_chat=True` — **conteúdo de arquivo nunca vira skill nem "sim" de confirmação**. O histórico guarda só a mensagem digitada
+- `services/brain.py`: o caminho `force_chat` passa a repassar as imagens (imagem + documento juntos)
+- **Limite conhecido**: o conteúdo do arquivo vale só para aquela mensagem; numa pergunta seguinte o modelo não o vê de novo (o histórico guarda só o texto) — anexe de novo para continuar sobre ele
+- **Nova dependência**: `pypdf>=6.1,<7` no `requirements.txt` e no `requirements.lock` (só ela entrou: `pypdf==6.21.4`)
+
+### Testes
+
+- `tests/test_uploads_documents.py` (novo, 8): código UTF-8 e CRLF, texto CP1252, PDF gerado no teste, PDF quebrado, corte por tamanho, segredo mascarado, recusa de `.env`/chave/binário/vazio/inexistente, roteamento do `load_any`
+- `tests/test_tui_drop.py`: qualquer arquivo absoluto é aceito e caminho relativo não; soltar `.py` anexa, a barra mostra, o modelo recebe o conteúdo com `force_chat` e a bolha guarda só a mensagem; imagem + documento juntos; `.env` e binário recusados; limite de 3 e `/detach`
+
+## Firewall elevado sem elevar o JARVIS (arrastar arquivo volta a funcionar)
+
+**Data:** 2026-11-24
+**Escopo:** Correção da entrega anterior. Rodar o JARVIS inteiro como administrador quebrava o **arrastar arquivo do Explorer para o chat** (UIPI do Windows: processo comum não arrasta para janela elevada) e dava admin a tudo (skills, modelo). Agora só o firewall roda elevado.
+
+### Como ficou
+
+- **Uma tarefa só**, `\JARVIS\Firewall` (`core/elevation.py`): sem gatilho, "privilégios mais altos", criada com **um UAC** (instalador ou `/config` → SISTEMA → **Firewall do JARVIS**). O próprio usuário dispara sem UAC. Ela roda `agent.py --firewall-queue` e sai (limite de 2 min)
+- **Fila** (`core/firewall.py`): `run_commands` roda direto se o processo já é admin; senão grava `DIR_DATA/firewall/req-<id>.json`, dispara a tarefa e espera `res-<id>.json` (20 s). A tarefa **revalida cada comando** (`is_allowed_command`: só os formatos que o módulo monta — `add rule … action=block` com IP público ou `.exe` absoluto, `delete rule name=JARVIS bloqueio …`); pedido com qualquer outra coisa é recusado sem rodar nada. A resposta é criada com `O_EXCL`
+- **TUI, agente e ponte voltam a rodar sem admin**: sem as tarefas `\JARVIS\Agente`/`\JARVIS\TUI`, `core/autostart.py` e `installer/jarvis.cmd` voltaram ao que eram; "Iniciar com o Windows" é de novo o valor do Run, independente do firewall. Remover a tarefa também apaga as antigas, se existirem
+- `services/net_guard.py`: "dá para bloquear?" = `firewall.available()` (admin ou tarefa criada); mensagens apontam o **Firewall do JARVIS** no `/config`
+- Instalador: checkbox "Firewall do JARVIS" cria só a tarefa do firewall; desinstalar a apaga (UAC só se existir). Compila no ISCC
+
+### Testes
+
+- `tests/test_firewall.py`: só os comandos do JARVIS passam pela fila (`cmd`, `set allprofiles state off`, `action=allow`, IP de LAN e regra de outro nome são recusados), ida e volta pela fila com a tarefa simulada, pedido adulterado recusado sem rodar, tarefa ausente e tempo esgotado, XML da tarefa (sob demanda, nível mais alto, 2 min), instalar/remover, o JARVIS em si nunca é elevado
+- Suíte completa: **1262 passaram**; ruff limpo em `backend/` e `frontend/`; instalador compila no ISCC. A criação real da tarefa (UAC) e um bloqueio de verdade ainda não foram testados na máquina
+
+## Vigilância Cibernética: JARVIS como administrador, bloqueio de entrada e saída e automático
+
+**Data:** 2026-11-24
+**Escopo:** Item "Vigilância Cibernética — bloqueio de acessos suspeitos" do Brainstorm. Antes, `/rede bloquear <ip>` criava só regra de **saída** e só funcionava com o JARVIS elevado (que nunca estava).
+
+### JARVIS sempre como administrador, sem UAC a cada abertura
+
+- **`backend/core/elevation.py`** (novo): cria por XML duas tarefas agendadas com "privilégios mais altos": `\JARVIS\Agente` (no logon **só deste usuário**, sessão interativa, sem o limite de 72 h do Agendador) e `\JARVIS\TUI` (sob demanda, só instalado). O agente elevado abre a TUI e a ponte já elevadas. Com a tarefa, o valor `JARVIS` do `HKCU\…\Run` sai (senão subiriam dois agentes); remover devolve o Run
+- **Um UAC só**: checkbox nova no instalador ("Executar como administrador") ou `/config` → SISTEMA → **Executar como administrador** (pede o UAC via `ShellExecute runas`). As duas passam por `agent.py --elevation-install|--elevation-remove`, que prepara o ambiente antes de importar o `core`. Instalar também troca o agente não elevado que estiver rodando pelo da tarefa
+- **`core/autostart.py`**: com a tarefa, "Iniciar com o Windows" (bandeja e `/config`) habilita/desabilita a tarefa em vez do Run
+- **`installer/jarvis.cmd`**: não elevado e com a tarefa `\JARVIS\TUI` → `schtasks /Run` (TUI elevada, sem UAC)
+- **`installer/jarvis.iss`**: tarefa `admin`; Run e início do agente só sem ela; desinstalar apaga as tarefas (pede UAC só se existirem). Compila com o ISCC (`Successful compile`); o setup completo não foi rodado
+
+> ⚠️ **Trade-off de segurança:** com isso, tudo que o JARVIS faz roda como administrador (skills de teclado/mouse, apps, e qualquer conteúdo da web, clipboard ou e-mail que convença o modelo). Mitigações mantidas: firewall só com argv fixo, encerrar/apagar/enviar continuam pedindo confirmação, nunca texto do LLM em `shell=True`. Efeito colateral do Windows (UIPI): **arrastar arquivo do Explorer para o terminal elevado não funciona** — use `/attach <caminho>`
+
+### Firewall: entrada e saída, lista e desbloqueio
+
+- **`backend/core/firewall.py`** (novo): `validate_ip` (nunca LAN, loopback, multicast ou reservado), `block_ip_commands` (duas regras: `dir=in` e `dir=out`), `block_program_inbound_command` (entrada de um `.exe` com caminho absoluto), `delete_rule_command` (só apaga regras com o prefixo `JARVIS bloqueio`), `run_commands` (lista, sem shell, sem janela)
+- **`services/net_guard.py`**: `block_ip` cria entrada **e** saída; bloqueios ficam em `config.net_blocks`; `blocks_text` e `unblock` (`/rede bloqueios`, `/rede desbloquear <n|ip>`, com `ConfirmScreen`). Sem admin, a resposta aponta o `/config`
+- `/status` → PERÍMETRO mostra `firewall admin ✓ · N bloqueios`
+
+### Bloqueio automático
+
+- O juiz (`prompts/judge_connection.md`, agora com o caminho do executável) responde **SEGURO | SUSPEITO | PERIGOSO**. PERIGOSO = sinal forte de malware (nome que imita processo do Windows, executável em pasta temporária, ferramenta conhecida de RAT/mineração). Na dúvida, SUSPEITO
+- PERIGOSO + pref nova **`net_autoblock`** (ROTINAS → SEGURANÇA, ligada por padrão) + JARVIS elevado → bloqueia na hora (talker: IP em entrada e saída; listener: entrada do executável) e avisa com `/rede desbloquear <n>`. **Encerrar o processo continua pedindo confirmação**
+- Sem admin nunca bloqueia sozinho; avisa uma vez por sessão que falta o admin. SUSPEITO segue o fluxo antigo
+
+### Testes
+
+- `tests/test_firewall.py` (novo, 12): validação de IP, entrada+saída, programa só com caminho absoluto, só apaga regra do JARVIS, para no 1º erro, XML da tarefa (usuário, nível mais alto, sem prazo), estado da tarefa (pt-BR), instalar/remover, recusa sem admin, autostart pela tarefa
+- `tests/test_net_guard.py`: PERIGOSO bloqueia entrada e saída e ainda pede para encerrar; listener bloqueia o exe; sem admin nunca bloqueia e avisa uma vez; pref desligada; SUSPEITO nunca bloqueia; lista e desbloqueio por número/IP; erros
+- `tests/test_hotkey_agent.py`: autostart pelo Run sem tarefa
+
+## Perímetro de Rede: fabricante, nome e MAC privado de celular
+
+**Data:** 2026-11-24
+**Escopo:** Item "Perímetro de Rede — detecção de dispositivos estranhos" do Brainstorm. O vigia já avisava de aparelho novo e troca do MAC do roteador, mas só guardava `{mac: ip}` e todo celular com MAC privado virava "aparelho novo" a cada troca.
+
+### O que mudou
+
+- **`backend/core/oui.py`** (novo) + **`backend/core/data/oui.tsv.gz`** (40.554 fabricantes da IEEE, 385 KB, versionado): `vendor(mac)` com nome curto ("Intel Corporate" → "Intel"), `is_private(mac)` (bit 0x02). Nada sai do PC. Atualizar: `python tools/update_oui.py` (`backend/tools/update_oui.py`, novo; Wireshark ou IEEE)
+- **`backend/core/netwatch.py`**:
+  - Aparelho na base vira `{mac: {"ip", "vendor", "name", "private"}}`; base antiga `{mac: ip}` continua valendo (sem migração)
+  - `identify_device` (só para aparelho novo, cache por MAC): fabricante + nome por DNS reverso (prazo de 2 s) e, sem ele, `nbtstat -A` (pt/en)
+  - **MAC privado**: aparelho novo com bit 0x02 que bate com um privado da base — mesmo nome ou, sem nome dos dois lados, mesmo IP — vira `MAC_ROTATED` e só atualiza a base. MAC de fábrica nunca conta como rotação. Privado novo de verdade avisa com dica para fixar o MAC no Wi-Fi do aparelho
+  - Alerta: `Aparelho novo na rede: 192.168.0.23 — Samsung Electronics (Galaxy-S23) (mac).`; troca do roteador mostra fabricante antigo → novo e reforça a suspeita se o fabricante mudou
+- **`services/net_guard.py`**: `MAC_ROTATED` entra em silêncio; privado novo com prioridade normal (o resto segue alta; roteador, crítica); `/rede` lista IP · fabricante (nome) · MAC
+- **`frontend/app.py`**: o vigia da TUI passa `identify=identify_device` (os testes ficam sem rede)
+
+### Verificação
+
+- Na rede real, o roteador aparece como "TELLESCOM INDUSTRIA E COMERCIO EM TELECOMUNICACAO (menuvivofibra.br)"
+- Os `26.x.x.x` do ARP são pares da VPN Radmin (adaptador virtual, MAC privado) — já entravam antes; agora aparecem como "MAC privado"
+- `tests/test_oui.py` (novo, 6) e 11 testes novos em `tests/test_netwatch.py` (base antiga, nome e fabricante no alerta, rotação por nome e por IP, MAC fixo nunca é rotação, roteador com fabricante, `nbtstat` pt/en, resolução que nunca levanta, cache por MAC, vigia repassa o `identify`) + 2 em `tests/test_net_guard.py`
+
+## Consumo Energético em tempo real
+
+**Data:** 2026-11-24
+**Escopo:** Item "Consumo Energético — monitoramento em tempo real" do Brainstorm de Melhorias. Watts na linha de status e no `/status`, kWh e custo por dia e por mês, dado real no Chat e no briefing, skill `POWER_REPORT`.
+
+### Como mede
+
+Desktop não tem sensor do consumo total, então é **estimativa com a GPU medida**:
+- **GPU NVIDIA:** watts reais do `nvidia-smi --query-gpu=power.draw` (lista, sem shell, sem janela, timeout 2 s, cache 3 s). Sem `nvidia-smi`, a GPU entra como 0 e o texto diz "sem leitura"
+- **CPU:** `TDP × (15 % + 85 % × carga)`
+- **Resto do PC:** base fixa `POWER_BASE_W`
+- **Tomada:** soma dividida pela eficiência da fonte `POWER_PSU_EFF`
+
+`power.meter` integra W × tempo em kWh por dia e grava em `config.power_daily` a cada 5 min e ao fechar a TUI (guarda 31 dias). Intervalo > 60 s entre amostras (PC suspenso, TUI travada) não conta. Atravessar a meia-noite divide o consumo entre os dois dias. Só conta com a TUI aberta.
+
+### Arquivos
+
+| Arquivo | Mudança |
+|---------|---------|
+| `backend/core/power.py` | **Novo**: `gpu_watts`, `estimate`, `PowerMeter` (thread-safe), `summary_text` |
+| `backend/core/config.py`, `env.example`, `docs/variaveis-ambiente.md` | `POWER_TARIFF_KWH` (0,85), `POWER_BASE_W` (45), `POWER_CPU_TDP_W` (65), `POWER_PSU_EFF` (0,85), todas com padrão |
+| `frontend/app.py` | Telemetria soma `⚡ 142W` e alimenta o medidor por `app._power_fn` (só com `start_services`; testes injetam fake); grava o dia ao sair |
+| `frontend/screens/status.py`, `frontend/jarvis.tcss` | Medidor **ENERGIA** na largura toda (grade 2×3), escala pelo pico (mín. 200 W), detalhe "hoje X kWh · R$ · mês R$" |
+| `backend/core/SystemInfo.py` | `get_realtime_context` ganha a linha `Consumo:` → o Chat responde watts com dado real |
+| `backend/core/briefing.py` | Seção Computador: `ENERGIA → ontem X kWh (R$ Y)` quando houve contagem |
+| `backend/skills/system/power_report.py`, `backend/prompts/skills/power_report.md` | **Nova skill** `POWER_REPORT` (Copilot/voz): agora, hoje e mês com custo, sem LLM |
+
+### Testes
+
+- `tests/test_power.py` (novo, 14 testes): estimativa e saneamento, parse do `nvidia-smi`, cache, ausência e erro, integração em kWh, intervalo grande ignorado, meia-noite, gravação periódica e poda, banco quebrado não levanta, resumo e contrato da skill
+- `tests/test_tui_app.py`: `⚡` só com o medidor injetado; medidor ENERGIA no `/status`
+- `tests/test_briefing.py`: linha ENERGIA no bloco Computador
+- Suíte: 1214 passaram. `test_enter_requests_install_and_exits` falhou uma vez na suíte completa em paralelo e passou sozinho e em 3 rodadas da TUI sob `-n auto`: instabilidade de tempo, não relacionada
+
+## Documentação conferida contra o código
+
+**Data:** 2026-11-24
+**Escopo:** Revisão de toda a documentação do repositório (e do vault do Obsidian) contra o código atual da `DEV`. Nenhum código mudou.
+
+### O que estava desatualizado e foi corrigido
+
+| Arquivo | Correção |
+|---------|----------|
+| `docs/variaveis-ambiente.md` | Reescrito: agora lista **todas** as variáveis que o `Settings` lê, por área e com o padrão (faltavam 29, entre elas `TIMEOUT_LLM`, `TIMEOUT_API`, `GITHUB_*`, `SPOTIFY_*`, `*_ALLOWED_IDS`, Whisper, visão, Pomodoro). `DEFAULT_LANGUAGE` saiu da lista: é fixo no `Settings`, não vem do `.env` |
+| `env.example` | Ganhou as variáveis que faltavam (`OLLAMA_NUM_CTX`/`NUM_GPU`, visão, Whisper, `MAX_UPLOAD_SIZE_MB`, `GLOBAL_HOTKEY`, `TRANSLATE_HOTKEY`); atalhos globais numa seção própria (estavam no meio do Pomodoro); atualização descreve a assinatura Minisign |
+| `docs/tui.md` | Tabela com todos os comandos `/`, gerada de `COMMANDS` (faltavam `/rename`, `/pin`, `/regen`, `/detach`, `/gh`, `/focus`, `/silent`, `/clear`, `/quit`) |
+| `docs/estrutura.md` | `core/minisign.py` e `installer/sign_release.py`; updater confere SHA-256 **e** assinatura; CI roda também o pytest; regra do `requirements.lock` |
+| `docs/arquitetura.md` | Serviços que faltavam (lembretes, insights, clipboard, rede, Gmail, winget, ponte), skills `SOFTWARE_INSTALL` e `EMAIL_MANAGEMENT`, `/email`/`/instalar`/`/baixar`, 8 tabelas, histórico de `CHAT_HISTORY_TURNS` (não 8 mensagens) |
+| `backend/core/README.md` | `gmail`, `google_auth`, `winget`, `telegram_bot`, `discord_bot`, `messenger_ctl`, `minisign`; `database` com 8 tabelas; evento `EXPLAIN` |
+| `backend/services/README.md` | `mailbox`, `email_*`, `local_files`, `software`, `remote_chat`, `net_trust` |
+| `backend/database/README.md` | Tabelas `clipboard_history`, `reminders`, `net_trusted_apps`, `email_contacts` e as chaves da `config` que faltavam |
+| `backend/skills/README.md` | `BROWSER_TABS`, `YOUTUBE_CONTROL` e `SCREEN_READ` na tabela |
+| `frontend/README.md` | `/email`, `/instalar`, `/baixar`; `/rede mantidos` e `esquecer` |
+| `README.md` | Gmail, ponte Telegram/Discord, download pelo winget, clipboard/lembretes/ideias, vigia de rede, `Ctrl+Alt+E`, assinatura do setup; integrações completas; tirado o link para o `CLAUDE.md` (fora do git); testes com `-n auto` |
+| `AGENTS.md` | Modo Chat descrito pela lista branca (`productivity` e `web`) |
+| `docs/politica-de-privacidade.md`, `docs/termos-de-uso.md` | Atualização confere SHA-256 **e** assinatura Minisign |
+
+### Depois da feature de energia (`2d16201`)
+
+`POWER_REPORT` e `core/power.py` entraram em `docs/estrutura.md`, `docs/arquitetura.md`, `backend/core/README.md`, `backend/skills/README.md` (26 skills), `backend/database/README.md` (chave `power_daily`), `docs/tui.md` e `frontend/README.md` (watts na linha de status, medidor ENERGIA no `/status`) e `README.md`.
+
+### Vault do Obsidian
+
+- Notas novas: `E-mail — Gmail (EMAIL_MANAGEMENT)` e `Ponte Remota e Download Inteligente`.
+- Atualizadas: Intent, Brain, Database, Skills — Produtividade e Web, TUI — Comandos, Integrações, Agente Residente, Updater, Vigia de Rede, Config, Arquitetura Ponta a Ponta e a nota do projeto (funcionalidades, progresso pelos PRs #63–#82, estrutura).
+- Notas de entrega de 19 a 24/11 marcadas como concluídas, com o PR de cada uma.
+- `🧠 Brainstorms/J.A.R.V.I.S — Brainstorm de Melhorias.md`: pendências do classificador e do teste do `/clip` fechadas (PR #82), erros que sobraram, próximos passos (ponte ponta a ponta, PR `DEV` → `main`) e o andamento do consumo de energia.
+
+### Validação
+
+- `pytest tests/test_agents_doc.py tests/test_oauth_connect.py`: 27 passaram.
+
+## Correção: classificador estourando o tempo + cartucho único de e-mail
+
+**Data:** 2026-11-24
+**Escopo:** Em toda mensagem (visto pela ponte do Discord, modo Chat) o classificador passava de `TIMEOUT_API` (10 s) e caía em CHAT: skills não disparavam. Causa: gemma2:2b só ~77% na VRAM e prompt do classificador com ~3,4 mil tokens. A janela de contexto **não** foi aumentada: o gemma2:2b tem teto de 8192 e mais contexto = mais KV cache na VRAM (~104 KB/token), o que pioraria a parte que já roda na CPU.
+
+### O que mudou
+
+| Arquivo | Mudança |
+|---------|---------|
+| `backend/core/config.py` | Novo `TIMEOUT_LLM` (padrão 30 s) para as chamadas curtas ao Ollama. `TIMEOUT_API` (10 s) fica só para HTTP (GitHub, notícias, web, YouTube); os dois agora podem vir do `.env` |
+| `backend/services/intent.py` | Classificador usa `TIMEOUT_LLM`. Chat por **lista branca**: `CHAT_ALLOWED_CATEGORIES = ("productivity", "web")` no lugar de `CHAT_BLOCKED_CATEGORIES`; `classify_intent(..., allowed_categories=)` (None = todas, Copilot). Só skills ativas dessas categorias entram no prompt; categoria nova não vaza para o Chat |
+| `backend/services/brain.py` | Chat passa `allowed_categories=CHAT_ALLOWED_CATEGORIES` |
+| `backend/skills/**` | Chamadas de decisão ao Ollama (app, áudio, abas, teclado, tela, Spotify, macros, YouTube, GitHub, limpeza, segurança) usam `TIMEOUT_LLM` |
+| `backend/prompts/classify_intent.md` | Exemplos de skills saíram do prompt base (ficaram só os de MEMORY_READ/WRITE). Prompt base: 5,2 mil → 1,9 mil caracteres. Regra 4 dizia "use CHAT apenas se for saudação", contradizendo a definição de CHAT: no teste real, "me explica recursão em python" virava `SCREEN_READ`. Agora: skill só quando o pedido se encaixa no "Use quando" dela; o resto é CHAT |
+| `backend/prompts/skills/*.md` | Cada skill ganhou os seus exemplos no próprio bloco: só entram quando a skill é oferecida (no Chat não aparecem mais exemplos de APP_CONTROL, SPOTIFY, SYSTEM_SECURITY…) |
+| `backend/skills/productivity/email_management.py` | Novo cartucho **`EMAIL_MANAGEMENT`** no lugar de `EMAIL_READ`, `EMAIL_SEND`, `EMAIL_TRASH` e `EMAIL_ORGANIZE`. A ação sai da frase por regex (`action_for`, sem nova ida ao modelo): apagar → organizar → enviar/responder → ler. Comportamento igual ao de antes: mesmas confirmações (`pending` com os tipos `EMAIL_SEND`/`EMAIL_TRASH`/`EMAIL_ORGANIZE`), nada é excluído de vez |
+| `backend/prompts/skills/email_management.md` | Um bloco só (substitui os 4 `email_*.md`) |
+| `env.example` | `TIMEOUT_LLM=30` e `TIMEOUT_API=10` |
+| `backend/tests/test_tui_tools.py` | `test_clip_bad_action_and_empty_history` agora usa o banco de teste: lia o histórico de clipboard real do usuário e falhava em quem tinha histórico |
+
+### Tamanho do prompt do classificador (estimado, ~3,5 caracteres/token)
+
+| Mensagem | Modo | Antes | Depois |
+|----------|------|-------|--------|
+| "me explica recursão em python" (nenhuma KEYWORD) | Chat | ~3.440 | ~2.800 |
+| "qual minha agenda amanhã?" | Chat | ~1.660 | ~810 |
+| "leia o e-mail 2" | Chat | ~2.000 | ~945 |
+| "me explica recursão em python" | Copilot | ~5.190 | ~4.930 |
+
+### Atenção
+
+- Quem tinha desligado alguma `EMAIL_*` em `/skills` precisa desligar `EMAIL_MANAGEMENT` de novo (a chave antiga fica órfã no banco, sem efeito).
+
+### Documentação
+
+`docs/skills.md`, `docs/arquitetura.md` (seção 5.7 e classificador), `docs/fluxos.md`, `docs/estrutura.md`, `backend/skills/README.md`, `backend/services/README.md`, `backend/docs/services/brain.md`, `backend/docs/core/config.md`.
+
+### Validação
+
+- `pytest tests -q -n auto`: todos passam, inclusive o teste do `/clip` que falhava na `DEV`. Novos: lista branca (categoria inventada fica fora do Chat, skill desligada some), timeout do classificador, exemplos no bloco de cada skill, roteamento das 15 frases do cartucho de e-mail.
+- `ruff check .` limpo em `backend/` e `frontend/`.
+- Ollama real (gemma2:2b, 8192 de contexto, 23%/77% CPU/GPU), 16 frases: com KEYWORD o classificador responde em **2–4 s** (na `DEV`: 6–10 s, e a 1ª estourou os 10 s). Sem KEYWORD (todas as productivity/web): 10–15 s, dentro dos 30 s. Acertos: 14 de 16.
+- Erros que sobram (limite do gemma2:2b): "abre o spotify" no Chat vira `SCREEN_READ` (na `DEV` virava `APP_CONTROL`, bloqueado depois pelo `brain`); "qual a capital da França?" vira `WEB_SEARCH` (responde, só que pela busca).
+
+## Correção: busca no vault do Obsidian (RAG) e alucinação sobre notas
+
+**Data:** 2026-11-23
+**Escopo:** Pelo Discord, "JARVIS acesse meu obsidian e leia a nota sobre o meu projeto OHMFLOW e me diga do que que ele se trata" virou uma descrição inventada ("sistema de hidrólise em micro-ondas"). O vault estava acessível; o RAG é que nunca trazia a nota. Vale para TUI, voz e ponte Telegram/Discord (todos passam por `get_vault_context`).
+
+### Causas
+
+| # | Causa | Efeito |
+|---|-------|--------|
+| 1 | `search_scored` / `search` chamavam `GET /search/simple/`. No plugin Local REST API essa rota é **POST**; o GET dá 404, que o `_send` lê como "nota não existe" | A Camada 2 (busca no vault) **sempre** voltava vazia |
+| 2 | A consulta pegava as 4 primeiras palavras com mais de 3 letras | Virou `acesse obsidian leia nota`: o nome do projeto ficou de fora |
+| 3 | O ranking era só o score do plugin | `System Boost - CHANGES.md` (que só cita "ohmflow") vinha antes das notas do OhmFlow |
+| 4 | Sem nota no contexto, nada impedia o modelo de inventar; o prompt de sistema citava a tag `[MEMÓRIA DO VAULT — ...]`, mas o bloco real se chamava `[MEMÓRIA PESSOAL — ...]` | O modelo escreveu a tag e inventou o conteúdo |
+
+### O que mudou
+
+| Arquivo | Mudança |
+|---------|---------|
+| `backend/core/obsidian.py` | Busca por **POST** com timeout de 15 s (`SEARCH_TIMEOUT_S`; a 1ª busca com o índice frio passava de 5 s). `search_keywords()`: ignora palavras do pedido (`_REQUEST_WORDS`: acesse, leia, nota, obsidian, diga, sobre, projeto…), põe nome próprio/sigla (com maiúscula) primeiro e só ignora "jarvis" quando é chamado ("JARVIS, …"), não quando é o assunto. `_rank()`: caminho que cita as palavras > nota principal da pasta > score. `_main_note()`: se a pasta é o assunto (`🚀 Projetos/OhmFlow/…`), lê `OhmFlow.md`/`index.md`, a não ser que o nome da nota cite outra palavra da pergunta ("arquitetura" → `OhmFlow - 02 Arquitetura.md`). Busca com vários termos vazia → tenta só o principal. `asks_vault()`: detecta pedido explícito de nota/projeto/vault |
+| `backend/services/brain.py` | Passa `vault_missing=True` quando o usuário pediu uma nota e o vault não trouxe nada |
+| `backend/services/chat.py` | `vault_missing` → bloco `vault_not_found.md`. Temperatura 0,1 também quando há nota do vault ou o aviso de nota não achada |
+| `backend/prompts/vault_not_found.md` | Novo: "não encontrei essa nota, qual o nome exato?", sem inventar. Escrito como instrução simples, sem tag — o gemma2:2b copiava o bloco com tag palavra por palavra |
+| `backend/prompts/vault_memory.md` | Tag alinhada com o prompt de sistema: `[MEMÓRIA DO VAULT — nota]` |
+| `backend/prompts/system_prompt.md` | Regra 6: sem bloco do vault, não leu nota nenhuma — nunca inventar conteúdo nem escrever a tag |
+| `backend/tests/test_vault_search.py` | Novo (21 testes): POST, palavras do assunto, ranking, nota principal × nota do tema, nova tentativa, `asks_vault`, aviso e temperatura, flag no `brain` |
+
+### Documentação
+
+| Arquivo | Mudança |
+|---------|---------|
+| `backend/docs/core/obsidian.md` | Reescrito: ainda descrevia o `ObsidianMCPClient`/`uvx` (removidos em 19/11). Agora: cliente REST, busca POST e score negativo, as duas camadas do RAG passo a passo, aviso de nota não encontrada e como manter `_REQUEST_WORDS` |
+| `backend/core/README.md` | Linha do `obsidian.py` atualizada; tirado `mcp_client` do exemplo de import e o "prepara o cliente MCP" |
+| `backend/services/README.md` | `build_messages` inclui `vault_not_found.md` |
+| `backend/docs/services/brain.md` | Passo 5 do pipeline com `vault_missing` |
+| `docs/banco-de-dados.md` | Camada 2 descrita como está agora (assunto, POST, ranking, nota principal, aviso) |
+| `docs/arquitetura.md` | Fluxo do Chat cita o aviso de nota não encontrada |
+
+### Validação
+
+- `pytest tests -q -n auto`: 1192 passaram. A única falha (`test_tui_tools.py::TestClipCommand::test_clip_bad_action_and_empty_history`) já falha na `DEV` sem estas mudanças.
+- `ruff check .` limpo em `backend/` e `frontend/`.
+- Vault real: a pergunta original agora lê `🚀 Projetos/OhmFlow/OhmFlow.md`; "arquitetura do OhmFlow" lê `OhmFlow - 02 Arquitetura.md`; "projeto System Boost" lê `System Boost.md`.
+- Ollama (gemma2:2b): a resposta sobre o OhmFlow sai da nota (C99, Windows, SQLite, desfazer/refazer, instalador); nota inexistente → "Não encontrei nenhuma nota relacionada ao projeto Xyzabc no vault…".
+
+### Pendente (fora deste escopo)
+
+- O classificador estoura `TIMEOUT_API` (10 s) em toda mensagem: o gemma2:2b só cabe ~77% na VRAM e o prompt do classificador tem ~3,4 mil tokens. Toda mensagem cai em CHAT (skills não disparam pela ponte). O Ollama limita o gemma2 a 8192 de contexto, mesmo com o servidor em 32k.
+
+## Refatoração do AGENTS.md: documentação dividida em `docs/`
+
+**Data:** 2026-11-23
+**Escopo:** O `AGENTS.md` tinha 493 linhas e misturava o essencial (rodar, testar, instalar, workflow) com regras detalhadas de backend, TUI, banco e alertas. Agora ele é um arquivo de entrada de 92 linhas, e o restante mora em `docs/`, um assunto por arquivo. Nenhuma regra foi alterada: o conteúdo foi movido como estava.
+
+### O que ficou no `AGENTS.md`
+
+| Seção | Observação |
+|-------|------------|
+| O que é este projeto | Resumo, cérebro, modos, repositório e dev |
+| Mapa da documentação (`docs/`) | Tabela assunto → arquivo, com o aviso de ler o arquivo do assunto antes de alterar código |
+| Instalação de dependências | venv, `requirements.txt` + `requirements-dev.txt`, `.env` na raiz, Ollama e plugin do Obsidian |
+| Como rodar o projeto | `python main.py`, `--copilot` e `python -m services.brain` |
+| Como rodar os testes | Suíte inteira (`-n auto`), só a feature e `ruff check .` |
+| Workflow obrigatório de desenvolvimento | Os 10 passos, boas práticas e a regra de consultar o Obsidian primeiro |
+
+### Para onde foi o resto
+
+| Arquivo novo | Conteúdo que veio do `AGENTS.md` |
+|--------------|----------------------------------|
+| `docs/estrutura.md` | Árvore do repositório e "Modo instalado (`JARVIS_DATA_DIR`)" |
+| `docs/regras-backend.md` | Logging, Ollama, Prompts, Threading, Sentidos (voz), Estado global e Configurações |
+| `docs/banco-de-dados.md` | SQLite (`database.py`) e Obsidian (memória de longo prazo) |
+| `docs/skills.md` | Contrato obrigatório e "Como criar uma nova skill" |
+| `docs/tui.md` | Modos, Atalhos e comandos, Visual, Badge de skill e Testes da TUI |
+| `docs/alertas.md` | Alertas, vigia de rede e Não Perturbe |
+| `docs/agente-residente.md` | Agente residente e atualização automática |
+| `docs/fluxos.md` | Fluxo de um comando de voz e de uma mensagem no Chat |
+| `docs/variaveis-ambiente.md` | Bloco de variáveis do `.env` |
+| `docs/personalidade.md` | Tom e personalidade do JARVIS |
+| `docs/decisoes-arquiteturais.md` | Tabela de decisões e razões |
+
+### Ajustes feitos no caminho
+
+- Numeração do workflow: o passo "110" virou "10".
+- Instalação e testes: `requirements-dev.txt` (pytest, pytest-xdist, ruff), `-n auto` e `--copilot`, que antes não estavam no `AGENTS.md`.
+- Removida a lista "Principais pacotes do `requirements.txt`" (cópia parcial e desatualizada; a fonte é o próprio `requirements.txt`).
+- `docs/estrutura.md`: a linha de `docs/` na árvore lista os arquivos novos.
+- `docs/arquitetura.md`: o link para `CLAUDE.md` (arquivo local, ignorado pelo git, que não existe no CI nem em quem clona) passou a apontar para `AGENTS.md` e `regras-backend.md`. O teste `test_links_dos_docs_existem` achou esse link quebrado no CI.
+- Os arquivos novos linkam entre si e para o `AGENTS.md`; o teste abaixo confere todos os links.
+
+### Termos de Uso e Política de Privacidade (novos)
+
+| Arquivo | Conteúdo |
+|---------|----------|
+| `docs/termos-de-uso.md` | 15 seções: escopo, licença MIT, requisitos e contas de terceiros, ações no PC (com confirmação), erros da IA, uso aceitável, serviços de terceiros, atualizações, chaves, sem garantia, limitação de responsabilidade, marcas, encerramento, lei aplicável e contato |
+| `docs/politica-de-privacidade.md` | 12 seções: o que fica no PC (uma linha por dado), o que é local, o que sai do PC (uma linha por recurso e destino), recursos sensíveis, controles, retenção, segurança e direitos (LGPD) |
+
+- Escritos a partir do código, não de um modelo genérico: fluxos conferidos em `listen.py`, `speak.py`, `weather.py`, `web.py`, `secrets_store.py`, `user_prefs.py`, `database.py` e `SECURITY.md`.
+- A política diz abertamente: o **áudio de toda fala vai ao Google** com a voz ligada (antes da palavra de ativação); a **localização por IP usa `http://ip-api.com`** (HTTP, sem criptografia); os **logs não têm expurgo automático**; o `.env` e o JSON de reserva dos tokens são texto.
+- `AGENTS.md` ganhou duas linhas no mapa da documentação (92 linhas). `docs/regras-backend.md` ganhou a seção **Privacidade**: nova integração externa ou dado novo no disco exige atualizar a política.
+- Revisão jurídica: são textos-base para um projeto pessoal e de código aberto; se o JARVIS for distribuído amplamente, vale uma revisão de advogado.
+
+### Testes
+
+**Novo:** `backend/tests/test_agents_doc.py`: `AGENTS.md` com no máximo 150 linhas; seções essenciais e comandos de instalar, rodar e testar presentes; todo link do `AGENTS.md` e dos `docs/*.md` aponta para arquivo que existe; o `AGENTS.md` linka todos os 15 arquivos de `docs/`; nenhum deles está vazio.
+
+## Lixeira do Gmail por pedido e Agenda por semana, mês e ano
+
+**Data:** 2026-11-23
+**Escopo:** Duas melhorias em cima do PR #78:
+1. Pedir ao JARVIS para apagar um e-mail agora move a mensagem para a **Lixeira do Gmail**, depois de confirmação. Usa o mesmo escopo `gmail.modify`, sem mudança no Google Cloud.
+2. Correção da Agenda. "Qual compromisso eu tenho essa semana?" respondia "Agenda livre hoje.", porque a skill só entendia dias. Agora ela entende semana, fim de semana, mês e ano.
+
+### 1. E-mail para a Lixeira
 
 | # | Mudança | Arquivos |
 |---|---------|----------|
-| 1 | **Histórico no SQLite** (tabela `clipboard_history`, 200 cópias): sobrevive ao fechamento da TUI; recopiar o mesmo texto só o sobe para o topo. O que tem cara de senha/token (`looks_secret`) não é gravado; o conteúdo nunca vai para o log | `backend/services/clip_history.py`, `backend/core/database.py` |
-| 2 | **Monitor grava tudo que é texto**: `ClipboardMonitor(on_capture=)` entrega toda cópia nova (≥ 20 caracteres) ao histórico, não só o que gera sugestão. O deque em memória de 20 itens saiu | `backend/core/clipboard.py`, `frontend/app.py` |
-| 3 | **Tipo `error`** no `classify()` (Traceback do Python, `at x (arq:1:2)`, `error[E…]`, `panic:`…), testado antes de `code`; sugestão "Copiou um erro — `/clip` para eu diagnosticar" | `backend/core/clipboard.py` |
-| 4 | **`/clip`**: `hist` (numerado, com hora), `buscar <termo>`, `usar <n>` (recopia), `explicar\|traduzir\|resumir <n>` (age sobre um item) e `limpar` (com `ConfirmScreen`) | `frontend/app.py`, `frontend/commands.py` |
+| 1 | `gmail.trash(ids)`: `POST /messages/{id}/trash` por mensagem. O Gmail esvazia a Lixeira sozinho em 30 dias, então dá para desfazer. Exclusão permanente continua sem existir no JARVIS (exigiria o escopo total `https://mail.google.com/`) | `backend/core/gmail.py` |
+| 2 | Serviço `email_trash`. O que apagar vem **só da fala do usuário**: números da última lista mostrada ("apaga os e-mails 2 e 5") ou uma categoria clara ("as promoções", "as notificações de rede social"). Sem número nem categoria ("apaga meus e-mails"), pergunta quais e não arma nada. A confirmação (120 s, até 50 e-mails) lista assunto e remetente: **sim** move, **não** mantém. Depois de mover, os e-mails saem da lista vista (a numeração muda) | `backend/services/email_trash.py` (novo) |
+| 3 | Skill `EMAIL_TRASH` (productivity: Chat, Copilot e ponte), com aviso `# ⚠️ ACESSO SENSÍVEL`, prompt próprio e exemplos no classificador. `EMAIL_ORGANIZE` ganha "NÃO use para apagar e-mails específicos" | `backend/skills/productivity/email_trash.py` (novo), `backend/prompts/skills/email_trash.md` (novo), `backend/prompts/skills/email_organize.md`, `backend/prompts/classify_intent.md` |
+| 4 | `/email apagar <n…|promoções>` na TUI. A confirmação abre no `ConfirmScreen` | `frontend/app.py`, `frontend/commands.py` |
 
-### 2. Explicação de código — atalho global `Ctrl+Alt+E`
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | **Selecionar e apertar `Ctrl+Alt+E`** em qualquer app: o agente copia a seleção (devolvendo o clipboard que estava lá), grava `explain.json` e manda a TUI explicar — abrindo-a se estiver fechada. Sem copiar e sem digitar comando | `backend/agent.py`, `backend/core/selection.py`, `backend/core/presence.py` |
-| 2 | **A explicação é um turno do Chat**: fica na sessão, então dá para continuar perguntando ("e como evito isso?"). Vale também para `/clip explicar`, que antes era um tiro único fora do histórico | `frontend/app.py` |
-| 3 | **`force_chat`** em `execute_command_stream`: o trecho vai direto ao LLM, sem classificador, sem vault e sem responder a ação pendente — o conteúdo de um trecho não pode virar skill nem um "ok" de confirmação | `backend/services/brain.py` |
-| 4 | **Prompt próprio para erro**: o que aconteceu, causa provável, onde olhar, como corrigir e como confirmar; código segue com linguagem + até 3 pontos de atenção | `backend/prompts/explain_error.md`, `backend/prompts/explain_code.md` |
-| 5 | Variável **`EXPLAIN_HOTKEY`** (padrão `ctrl+alt+e`, vazio desliga), item na bandeja | `backend/core/config.py`, `env.example` |
-
-### 3. Registro de insights — ideias vão sozinhas para `🧠 Brainstorms`
+### 2. Agenda por período
 
 | # | Mudança | Arquivos |
 |---|---------|----------|
-| 1 | **Detecção pós-turno**: depois de uma conversa (sem skill), uma thread pergunta ao modelo se o usuário trouxe uma ideia, decisão ou brainstorm; se sim, anexa em `🧠 Brainstorms/J.A.R.V.I.S — Insights AAAA-MM.md` e mostra um toast. Mensagem curta, comando ou trecho de código nem chegam ao modelo | `backend/services/insights.py`, `backend/prompts/extract_insight.md`, `frontend/app.py` |
-| 2 | **Nunca reescreve a nota**: `ObsidianClient.append_note()` usa POST (append) e `note_exists()` separa "não existe" de "Obsidian fora do ar". Fora do ar, o registro vai para a fila `insights_pending` e é gravado depois, na ordem. O mesmo resumo não entra duas vezes em 7 dias | `backend/core/obsidian.py`, `backend/services/insights.py` |
-| 3 | **`/ideia <texto>`** e skill **`INSIGHT_SAVE`** ("anota essa ideia: …") gravam na hora, no Chat e no Copilot | `frontend/app.py`, `frontend/commands.py`, `backend/skills/productivity/insight_note.py` |
-| 4 | Preferência **Registro de insights** em `/config` → ROTINAS (padrão ligado) | `backend/services/user_prefs.py`, `frontend/screens/settings.py` |
-
-### 4. Lembretes contextuais
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | **O JARVIS avisa sozinho antes dos compromissos** do Google Agenda: `LEAD` (padrão 2 h antes — "em 2 horas o senhor tem a prova…"), `LEAVE` (evento com local e rota: avisa 15 min antes da hora de sair, com os minutos de trajeto) e `FINAL` (sem rota: 15 min antes do início). Cada aviso sai uma vez (`id\|início\|tipo`); mudar o horário do evento rearma; evento de dia inteiro é ignorado | `backend/services/reminders.py` |
-| 2 | **Frase viva, fatos fixos**: o LLM reescreve o aviso no tom do JARVIS (`reminder.md`, timeout de 8 s); se a resposta não trouxer o horário certo, ou o modelo falhar, sai o texto determinístico | `backend/services/reminders.py`, `backend/prompts/reminder.md` |
-| 3 | **Tempo de deslocamento**: de casa até o local salvo com `/rota` citado no evento, ou até o endereço do evento (geocodificação com cache); reunião online não tem trajeto | `backend/services/reminders.py` |
-| 4 | **Agenda**: `parse_event` guarda `id` e `location`; `upcoming(hours)` lê as próximas horas atravessando a meia-noite, com cache de 5 min | `backend/core/google_calendar.py` |
-| 5 | **Lembrete por pedido**: `/lembrete em 30 min tirar a roupa`, `/lembrete às 18h …`, `/lembrete` (lista), `/lembrete rm <n>`; skill **`REMINDER`** ("me lembra em 30 min de…"). Tabela `reminders`; os que venceram com a TUI fechada saem num resumo na próxima abertura | `backend/services/reminders.py`, `backend/skills/productivity/reminder.py`, `backend/core/database.py`, `frontend/app.py`, `frontend/commands.py` |
-| 6 | **Entrega**: tick próprio de 30 s numa thread (a agenda é HTTP). Aviso comum respeita Não Perturbe/reunião/tela cheia (vai para o backlog); hora de sair, início iminente e lembrete pedido sempre aparecem, sem voz no silêncio | `frontend/app.py` |
-| 7 | Preferências **Lembretes da agenda**, **Antecedência do lembrete** (30/60/120/180 min) e **Aviso final** em `/config` → ROTINAS | `backend/services/user_prefs.py`, `frontend/screens/settings.py` |
-
-### 5. Monitoramento de rede
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | **Vigia de rede** (thread daemon, a cada 60 s): fotografa as portas TCP expostas desta máquina, os processos falando com IPs públicos e os aparelhos da rede local (tabela ARP). A primeira foto e os 10 min seguintes só aprendem a linha de base; depois, o que for novo vira achado. Só leitura, sem administrador | `backend/core/netwatch.py` |
-| 2 | **Julgamento e ação**: processo novo é julgado pelo LLM (`judge_connection.md`, cache de 1 h). Seguro entra na base em silêncio; suspeito gera alerta falado + `ConfirmScreen` para **encerrar o processo** (por PID, conferindo nome e hora de criação). "Manter" passa a tratá-lo como conhecido; deixar o tempo esgotar não | `backend/services/net_guard.py`, `backend/prompts/judge_connection.md` |
-| 3 | **Aparelho novo na rede** e **troca do MAC do roteador** (sinal de ARP spoofing — prioridade crítica, passa pelo Não Perturbe) avisam sem ação automática | `backend/services/net_guard.py` |
-| 4 | **`/rede`**: varredura na hora; `confiar <n>`; `bloquear <ip>` (regra de saída no Firewall do Windows — só com o JARVIS elevado; sem isso devolve o comando) e `reset`, os dois com confirmação. Skill **`NETWORK_SCAN`** ("tem alguém na minha rede?") no Copilot | `frontend/app.py`, `frontend/commands.py`, `backend/skills/system/network_guard.py` |
-| 5 | **`/status`** ganha o bloco PERÍMETRO; preferência **Vigia de rede** em `/config` → ROTINAS | `frontend/screens/status.py`, `frontend/jarvis.tcss`, `backend/services/user_prefs.py` |
-| 6 | **`on_decline`** nas ações críticas: `confirm_pending_action(approved, explicit_decline)`. Na voz, a negação vence — "não, pode manter" recusa (antes o "pode" aprovava) | `backend/services/brain.py` |
-| 7 | **Correção — velocidade da rede**: `get_network_speed` dividia pelo tempo desde o boot (o valor encolhia com o uso) e a telemetria da TUI e o contexto do chat zeravam a janela um do outro. Agora tem relógio e cache próprios e devolve `errin/errout/dropin/dropout` da janela, que o `analyze_semantic_state` já lia (e recebia sempre 0) | `backend/core/SystemInfo.py` |
-
-**Limites conhecidos:** o vigia de rede detecta mudança em relação à linha de base — não é um IDS; celular com MAC aleatório aparece como aparelho novo a cada rede "esquecida". O bloqueio por firewall exige rodar o JARVIS como administrador. Lembretes e insights só rodam com a TUI aberta (o agente da bandeja não avisa sozinho).
-
-**Testes novos:** `test_clip_history.py`, `test_insights.py`, `test_reminders.py`, `test_netwatch.py`, `test_net_guard.py`; casos novos em `test_clipboard.py`, `test_selection.py`, `test_hotkey_agent.py`, `test_mode_routing.py` e `test_tui_tools.py` (explicar, `/clip` com histórico, `/ideia`, `/lembrete`, `/rede`, entrega de lembretes com e sem Não Perturbe, bloco PERÍMETRO).
-
-### 6. Correções achadas no teste real (17/11/2026)
-
-A TUI rodou de verdade (Ollama, Google Agenda, GitHub, DuckDuckGo, Nominatim/OSRM, Obsidian, clipboard e rede reais; banco temporário) para gerar as fotos dos posts. O teste achou:
-
-| # | Problema | Correção | Arquivos |
-|---|---|---|---|
-| 1 | **Acentos sumiam do clipboard**: `clipboard.read()` lia pelo PowerShell, na página de código do console ("relatório" virava "relatrio") — e o histórico persistente gravava o texto estragado | Lê pela API Win32 (Unicode); PowerShell forçado a UTF-8 só como reserva | `backend/core/clipboard.py` |
-| 2 | **Timeout do Nominatim virava "endereço inexistente" para sempre** no cache de geocodificação dos lembretes (o evento ficava sem trajeto) | Só o acerto entra no cache; a nova tentativa já é limitada pelo cache de 10 min do trajeto | `backend/services/reminders.py` |
-| 3 | **Frase do lembrete perdia o essencial**: o modelo trocava "em 2 horas" por "está agendada", sumia com o "saia" e chegou a inventar "Sai em 15 minutos" num aviso de 2 h | A frase do LLM só vale se mantiver horário, tempo relativo ("em 2 horas"), a ordem de sair (no aviso de saída) e nenhum número fora dos fatos; senão sai o texto fixo | `backend/services/reminders.py`, `backend/prompts/reminder.md` |
-| 4 | **Título de insight ruim**: a skill usava a 1ª frase crua ("Estive pensando: o JARVIS podia…") e o modelo às vezes respondia "INSIGHT: Modo viagem" | A skill pede o título ao modelo e guarda o texto nas palavras do usuário; prefixos tipo "INSIGHT:" são removidos | `backend/skills/productivity/insight_note.py`, `backend/services/insights.py` |
-| 5 | **`/rede` quebrava** com IP que não fosse IPv4 numérico na tabela de aparelhos | Ordenação tolerante (`_ip_key`) | `backend/services/net_guard.py` |
-| 6 | **`/web` falhava ~1 em 3 vezes** nesta rede: o `ddgs` resolve DNS por conta própria e dá `DNSError` intermitente | Até 3 tentativas, com buscadores fixos na 2ª e pausa de 0,8 s | `backend/core/web.py` |
-
-**Testes novos:** `test_clipboard.py::TestRead`, `test_reminders.py` (cache sem falha, tempo relativo, ordem de sair, número inventado), `test_insights.py` (título do modelo, prefixo), `test_net_guard.py` (IP estranho), `test_web.py` (nova tentativa).
-
-### 7. Versão (`VERSION`)
-
-| # | Mudança | Arquivos |
-|---|---|---|
-| 1 | **O `VERSION` estava parado em `1.0.0`** enquanto os Releases iam até v1.0.5: a versão calculada pelo CI só existia na tag e no instalador. Agora, depois de publicar o Release, o CI grava a versão no `VERSION` da `main` e da `DEV` pela API do GitHub (commit do `github-actions[bot]`, `[skip ci]`; falha aqui só gera aviso, não desfaz o Release) | `.github/workflows/release.yml` |
-| 2 | **Este PR sai como v1.1.0** (5 features novas = minor). Regra: o patch continua subindo sozinho pela última tag; para subir minor/major, edite o `VERSION` para `X.Y.0` no PR | `VERSION`, `AGENTS.md` |
-
-Depois de cada release, dê `git pull` na `DEV` antes do próximo push (o commit do bot entra lá).
-
-**Fora do código:** `posts_linkedin_JARVIS/` (no `.gitignore`) guarda os 7 posts de 08/11 a 16/11 com 25 screenshots reais da TUI.
-
-**Pendente (manual):** apertar `Ctrl+Alt+E` com o agente rodando e receber o aviso de um evento de verdade do Google Agenda.
-
----
-
-**Data:** 2026-11-13 (4)
-**Escopo:** Fecha duas dívidas achadas na revisão da documentação: prompts do chat ainda em string Python e fallback de tokens fora do `.gitignore`.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | **Prompts do chat em `.md`**: as instruções que estavam no `services/chat.py` viraram arquivos — `mode_voice.md` (regras de áudio do modo voz standalone), `memory_read.md` (instrução crítica de memória pessoal, agora sem o nome "Felipe" fixo), `hardware_context.md` (`$hardware`), `live_data.md` (`$live_data`) e `vault_memory.md` (`$note`, `$content`) | `backend/prompts/*.md` |
-| 2 | **`build_messages()`** junta a montagem que estava duplicada em `ask_local_ai` e `ask_local_ai_stream` (mesma ordem: system + modo + HARDWARE/MEMORY_READ, telemetria, nota do vault, `live_context`, histórico, pergunta). `MODE_PROMPTS` mapeia `voice`/`chat`/`copilot`; `_temperature()` mantém 0.1 com dado real e 0.7 no resto. Comportamento igual ao anterior | `backend/services/chat.py` |
-| 3 | **`.gitignore`**: `backend/database/*.json` (fallback `integrations_secrets.json` e o antigo `spotify_token.json`) e os arquivos WAL do SQLite (`*.db-wal`, `*.db-shm`) | `.gitignore` |
-| 4 | Docs: `SECURITY.md` (fallback agora ignorado), `backend/services/README.md` (prompts do chat) | `SECURITY.md`, `backend/services/README.md` |
-
-**Testes novos:** `test_chat_prompts.py` — arquivos de prompt existem, nenhum texto de instrução sobrou no `chat.py`, `memory_read.md` sem nome fixo, ordem e conteúdo das mensagens, prompt por modo (voz/chat/copilot), instruções de HARDWARE e MEMORY_READ só no intent certo, nota do vault com `$` preservada, `ask_local_ai` limpa `*`/`#` e o stream usa o modo e a temperatura certos.
-
-**Fora do repositório:** nota do projeto no Obsidian (`🚀 Projetos/J.A.R.V.I.S/J.A.R.V.I.S.md`) reescrita com a stack, a arquitetura e o progresso atuais (sem `boot.bat` nem frontend JS).
-
----
-
-**Data:** 2026-11-13 (3)
-**Escopo:** Documentação do projeto revisada contra o código: guia ponta a ponta novo, READMEs reescritos (a maioria ainda descrevia React/PyWebView, `boot.bat` e `execute(entity)` de 1 argumento) e docs por módulo corrigidas.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | **Novo `docs/arquitetura.md`**: como o JARVIS funciona do boot à resposta — diagrama dos dois processos (TUI e agente), boot, fluxo Chat/Copilot, ações críticas, tabela de todos os módulos (frontend, services, core, skills), rotinas (briefing, manchetes, foco/DND/apresentação, alertas, trânsito), comandos e atalhos, dados, agente/atualização/instalador e testes | `docs/arquitetura.md` |
-| 2 | **README da raiz** reescrito: o que faz, instalação, rodar do código (sem `boot.bat`, que não existe mais), testes, instalador e índice da documentação | `README.md` |
-| 3 | **READMEs de pasta** reescritos com os módulos atuais: backend (estrutura, entradas `main.py`/`agent.py`/`services.brain`), core (todos os ~40 módulos por grupo), services (pipeline e os 14 módulos), skills (contrato de 2 argumentos, Chat × Copilot por categoria, as 17 skills, confirmação de ação crítica), database (colunas `attachment_*`/`mode`, chaves da tabela `config`, local dev/instalado), frontend (modos, telas, comandos, linha de status) | `backend/README.md`, `backend/core/README.md`, `backend/services/README.md`, `backend/skills/README.md`, `backend/database/README.md`, `frontend/README.md` |
-| 4 | **Docs por módulo**: `main_orchestrator.md`, `brain.md` e `speak.md` reescritas (eram da era PyWebView/React); `config.md` (modo instalado `JARVIS_DATA_DIR`, grupos de variáveis), `listen.md` (mic lazy, janela de atenção configurável), `database.md`, `obsidian.md`, `skill_loader.md`, `SystemInfo.md` e `system_clear.md` sem referências a frontend web | `backend/docs/**` |
-| 5 | **CLAUDE.md / AGENTS.md**: estrutura com os módulos que faltavam (briefing, news, weather, github_client, spotify, web, clipboard, window_utils, ollama_server, boot, wt_profile, utils, user_prefs, skills productivity/web), `docs/`, `tests/`, CI `main.yml`; caminho real das memórias (`🚀 Projetos/…/Memória`); skill nova em productivity/web roda no Chat. AGENTS.md mantém o workflow e as boas práticas próprias e recebe o resto do CLAUDE.md (antes descrevia React/PyWebView) | `CLAUDE.md`, `AGENTS.md` |
-| 6 | **CONTRIBUTING.md**: sem Node/npm/`boot.bat`; checks iguais ao CI (`ruff` em backend e frontend, `compileall`, pytest); contrato de skill atualizado | `CONTRIBUTING.md` |
-| 7 | **SECURITY.md**: tokens no Cofre do Windows (fallback `integrations_secrets.json`, não ignorado pelo `.gitignore`), link do `env.example` corrigido | `SECURITY.md` |
-| 8 | Docstrings: `agent.py` (TUI fecha com Esc//quit, não Ctrl+Q) e `news.py` | `backend/agent.py`, `backend/core/news.py` |
-
-**Verificação:** todos os links relativos dos `.md` resolvem; afirmações conferidas no código (eventos do `presence`, cache do updater, limites do `SystemInfo`, chaves da tabela `config`, menu da bandeja, caminho das memórias).
-
-**Achados para depois (não alterados aqui):** `services/chat.py` tem instruções de prompt em string Python (regra do projeto pede `.md`); o `.gitignore` não cobre `backend/database/*.json` (fallback de tokens).
-
----
-
-**Data:** 2026-11-13 (2)
-**Escopo:** Briefing em seções fixas (um tema por bloco, cada item na sua linha), sem "arquivos mexidos", com GPU e internet, e manchetes filtradas — a notícia mais relevante de cada portal.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | **Briefing em seções**: saudação, depois **Clima**, **Computador**, **GitHub**, **Agenda**, **Trânsito** (dias úteis) e **Manchetes e últimas notícias**, cada uma num bloco com o título em negrito e o conteúdo na linha de baixo (quebra dura `BR`). Seção sem dado não aparece | `backend/core/briefing.py` |
-| 2 | **O LLM não reescreve mais o corpo**: o texto montado vai igual para a tela; o Ollama só escreve **uma frase de fecho** (texto puro, ≤ 25 palavras, sem emojis). Sem Ollama, sai só o corpo | `backend/core/briefing.py`, `backend/prompts/briefing.md` |
-| 3 | **Computador**: `CPU → x%`, `RAM → x%`, `GPU → carga · temperatura` (some sem GPU dedicada), `INTERNET → ↓ download · ↑ upload` (amostra própria de 1 s com `psutil`, sem mexer nos contadores do `SystemInfo`) e `BATERIA` só em notebook | `backend/core/briefing.py` |
-| 4 | **Sem "Arquivos mexidos"**: sai a varredura de Desktop/Documentos/Downloads (`recent_files`, `briefing_dirs`) e a variável `BRIEFING_DIRS` | `backend/core/briefing.py`, `backend/core/config.py`, `env.example`, `backend/prompts/skills/daily_briefing.md` |
-| 5 | **Uma notícia por portal, a mais relevante**: G1, BBC, NYT, WSJ e CNN Brasil leem o **RSS oficial** (`FEEDS`) em vez da busca, que devolvia o título da página inicial ("g1 – O portal de notícias da Globo"). Entre as 15 mais novas das últimas 48 h, ganha a de maior peso (`relevance`: morte, guerra/ataque/desastre, bolsa/dólar/juros, queda/disparada/recorde, eleição/governo); empate → a mais nova. Item de feed sem data é ignorado (feed parado cai na busca). Fontes sem RSS usam a busca, descartando títulos de portal (`_is_portal_title`) e tirando o sufixo " - WSJ" (`clean_title`). Fontes em paralelo; cada linha diz a fonte (`- **G1:** …`) | `backend/core/news.py`, `backend/core/briefing.py` |
-
-**Testes:** `test_briefing.py` — ordem e formato das seções, linhas do Computador, sem bateria/arquivos, manchetes uma por linha, fecho do LLM anexado (e corpo intacto sem LLM ou com erro), `format_rate`, `_computer` com/sem GPU, rede e bateria. `test_news.py` — pesos de relevância, mais relevante/empate/notícia velha, títulos de portal, sufixo do portal, parse de RSS, feed primeiro e busca como reserva (feed sem data ou velho), fonte que falha, DOI.
-
-**Pendente (manual):** abrir a TUI no 1º boot do dia (ou `/briefing`) e conferir o visual; o RSS da CNN internacional está parado desde 2023, então "CNN" usa a busca e pode não trazer manchete (use "CNN Brasil" para RSS).
-
----
-
-**Data:** 2026-11-13
-**Escopo:** Tela "ATUALIZAÇÃO DISPONÍVEL!!" ao abrir o JARVIS (logon, Win+J, bandeja, menu Iniciar) com instalação por qualquer tecla; versão nova substitui a antiga sem sobras; Modo Apresentação automático com Canva, Google Slides e PowerPoint aberto.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | **`updater.check_available()`**: o Release do GitHub é **mais novo** que o `VERSION` instalado? (diferente mas mais velho não conta, sem downgrade). Nunca levanta; cache em `%APPDATA%\JARVIS\updates\available.json` por 6 h (`CACHE_TTL_S`) para Win+J/bandeja não consultarem o GitHub toda vez; cache de outra versão instalada é ignorado. Dev e "Atualização automática" desligada continuam sem nada | `backend/core/updater.py` |
-| 2 | **Tela de atualização** (canvas "16 · Atualização disponível"): orb do JARVIS parada no centro, "ATUALIZAÇÃO DISPONÍVEL!!", `instalada vX ──▶ nova vY` e "Clique qualquer tecla para prosseguir". Aparece depois do boot (ou por cima do Copilot no boot silencioso do Win+J). Atalhos da conversa ficam desligados nela; o sinal SUMMON do agente não a fecha | `frontend/screens/update.py`, `frontend/screens/__init__.py`, `frontend/app.py`, `frontend/jarvis.tcss`, `backend/main.py` |
-| 3 | **Qualquer tecla instala já**: a TUI chama `updater.request_install()` → evento novo `presence.INSTALL_UPDATE` para o agente (sem agente rodando, sobe um com `--install-update`) e fecha com o CRT. O agente espera a TUI fechar (até 60 s), baixa, confere SHA-256 e roda o setup `/UPDATE` (fluxo já existente). Falha no pedido = aviso e a TUI fica aberta | `backend/core/updater.py`, `backend/core/presence.py`, `backend/core/autostart.py`, `backend/agent.py` |
-| 4 | **Logon**: o agente com `--logon` não instala mais em silêncio: verifica (mesmas tentativas 15/45/90/180 s) e, havendo versão nova, abre a TUI no Chat, que mostra a tela | `backend/agent.py` |
-| 5 | **Versão nova "apaga" a antiga**: o `PrepareToInstall` (e o desinstalador) fecham `python.exe` **e** `pythonw.exe` do runtime (antes só o agente; uma TUI aberta travava arquivos e o `[InstallDelete]` deixava pedaços da versão antiga). Após atualizar, o setup baixado e o cache são apagados na hora (antes ficavam até o próximo logon). AppId fixo + `[InstallDelete]` de `{app}\app` e `{app}\runtime` seguem garantindo uma instalação só | `installer/jarvis.iss`, `backend/core/updater.py` |
-| 6 | **Modo Apresentação automático**: além de PowerPoint/PDF em tela cheia, conta `Canva.exe` em tela cheia e navegador (Chrome, Edge, Firefox, Opera, Brave, Vivaldi) em tela cheia numa aba de slides (título com "Canva", "Google Slides", "Apresentações Google" ou "PowerPoint"). Pref nova **"Apresentação c/ PowerPoint aberto"** (ROTINAS, padrão ligado): o PowerPoint em foco já silencia, mesmo em janela | `backend/core/window_utils.py`, `backend/services/notify_filter.py`, `backend/services/user_prefs.py`, `backend/services/presentation.py`, `frontend/screens/settings.py` |
-| 7 | `python main.py --update-preview 9.9.9` mostra a tela sem rede e sem instalar (dev) | `backend/main.py` |
-| 8 | Documentação | `CLAUDE.md` |
-
-**Testes novos:** `test_updater.py` — `check_available` (mais nova, igual/mais velha, cache e TTL, cache de outra versão, nunca levanta, dev/desligado, tentativas no logon), `install_latest` espera a TUI fechar, `request_install` (agente, sobe agente, falha), sucesso apaga setup e cache, agente no logon abre a TUI / adia / fica quieto, `run_install` só fecha o agente com o setup aberto. `test_tui_app.py` — tela aparece com as versões e orb parada, sem versão nova não aparece, qualquer tecla (até Shift+Tab) pede a instalação e fecha, falha mantém a TUI, prévia não instala. `test_presentation.py` — Canva app/navegador, Google Slides, PowerPoint Online, YouTube em tela cheia não conta, pref de PowerPoint aberto.
-
-**Pendente (manual):** compilar o setup e testar de verdade (instalar versão antiga, publicar Release nova, logon → tela → tecla → versão nova em `/config` → SISTEMA, sem sobras em `{app}`); conferir no Canva ("Apresentar" em tela cheia) se o título da aba contém "Canva".
-
----
-
-**Data:** 2026-11-10 (3)
-**Escopo:** Fontes de notícias do briefing, Modo Apresentação, /config sem a caixa do JARVIS, skills de consulta no Chat, `/rota` com locais livres e Esc para sair.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | **Fontes de notícias**: `/config` → SISTEMA ganha o campo "Fontes de notícias do briefing" (texto separado por vírgula) com botão **Salvar alterações** (Enter também salva; o texto volta limpo, sem repetidos). Padrão: G1, BBC, CNN, New York Times, Wall Street Journal, SciELO, Google Acadêmico, DOI. Cada fonte vira `site:<domínio>` (nomes conhecidos ou domínio digitado), "DOI" busca artigos de periódico publicados desde ontem no Crossref; nome desconhecido vira busca livre. Uma manchete por fonte, começando por uma fonte diferente a cada dia. Guardado na tabela `config` (`news_sources`), sem variável nova no `.env` | `backend/core/news.py`, `backend/core/briefing.py`, `frontend/screens/settings.py`, `frontend/jarvis.tcss` |
-| 2 | **Modo Apresentação**: `/silent [on\|off]`, skill **PRESENTATION_MODE** ("vou apresentar", "acabou a apresentação") ou automático com PowerPoint/leitor de PDF em tela cheia (pref "Modo apresentação auto" em ROTINAS). Enquanto ativo: alertas não-críticos vão para o backlog (críticos passam), o TTS não fala nem com `force=True`, o ouvido não abre o microfone e a linha de status mostra `[SILENT]`. Ao sair, resumo dos alertas guardados | `backend/services/presentation.py`, `backend/skills/productivity/presentation_mode.py`, `backend/prompts/skills/presentation_mode.md`, `backend/services/notify_filter.py`, `backend/services/speak.py`, `backend/services/listen.py`, `backend/core/window_utils.py`, `backend/core/state.py`, `backend/services/user_prefs.py`, `frontend/commands.py`, `frontend/app.py` |
-| 3 | **/config sem a caixa do JARVIS** (rosto + fala): a fala vira uma linha no pé do painel (`#cfg-quip`), com as mesmas mensagens (ajustes, integrações, fontes salvas) | `frontend/screens/settings.py`, `frontend/jarvis.tcss` |
-| 4 | **Skills no Chat**: o Chat passa a rodar as skills de `productivity` e `web` (agenda, trânsito, GitHub, busca, briefing, foco, apresentação) com o selo `[INTENT]`; `automation` e `system` seguem só no Copilot/voz (`CHAT_BLOCKED_CATEGORIES`). Ações que pedem confirmação (ex.: issue no GitHub) também funcionam no Chat. Briefing pela skill no Chat também é falado | `backend/services/intent.py`, `backend/services/brain.py`, `backend/prompts/mode_chat.md`, `frontend/app.py` |
-| 5 | **`/rota <local> <endereço>` só cadastra** qualquer local fixo (casa, trabalho, faculdade, escola, academia…; apelidos como "facul", "colégio", "home"); `/rota` sem argumento lista os locais. Quem calcula é a skill **TRAFFIC**, por decisão do classificador: entende origem e destino na frase ("quanto tempo até a faculdade?", "da escola pra casa"), usa casa/trabalho pelo horário quando só um ponto é citado e avisa como cadastrar um local que não existe. Casa/trabalho mantêm as chaves antigas (briefing e aviso de saída inalterados) | `backend/core/traffic.py`, `backend/skills/productivity/traffic_commute.py`, `backend/prompts/skills/traffic.md`, `frontend/commands.py`, `frontend/app.py` |
-| 6 | **Rodapé mais limpo e Esc para sair**: saem o nome do modelo e o "^q Sair" da linha de status; `Ctrl+Q` deixa de existir. Na conversa, `Esc` cancela a edição → interrompe a resposta → sem nada em andamento, sai com o CRT (Esc de novo sai na hora). Nas telas cheias o Esc continua sendo "Voltar" | `frontend/app.py`, `frontend/screens/shutdown.py`, `frontend/commands.py` |
-| 7 | Documentação das regras novas | `CLAUDE.md` |
-
-**Testes novos:** `test_news.py` (parse, mapeamento das fontes, rodízio diário, Crossref, fonte que falha, briefing usa as fontes), `test_presentation.py` (detecção PowerPoint/PDF, filtro + `[SILENT]`, resumo ao sair, TTS mudo com `force`, mic fechado, skill e `/silent`), `test_intent_chat_skills.py` (Chat oferece só productivity/web, cache separado por modo); ampliados `test_mode_routing.py` (skills por categoria no Chat, confirmação no Chat), `test_traffic.py` (locais livres, `places_text`, `trip_text`, origem/destino da skill), `test_tui_phase34.py` (/config sem caixa, campo de fontes em SISTEMA, ←→ no campo, Esc sai/para/volta), `test_tui_app.py` (rodapé sem modelo nem Sair).
-
-**Pendente (manual):** abrir `/config` → SISTEMA, salvar fontes e rodar `/briefing` com "Manchetes no briefing" ligado; `/rota faculdade <endereço>` e perguntar "quanto tempo até a faculdade?"; apresentar no PowerPoint (F5) e conferir `[SILENT]`.
-
----
-
-**Data:** 2026-11-10 (2)
-**Escopo:** Atualização automática do app instalado, verificada só quando o JARVIS inicia com o Windows.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | **`core/updater.py`**: compara o `VERSION` instalado com o último Release do GitHub (`UPDATE_REPO`); se houver versão nova, baixa o `JARVIS-Setup.exe` para `%APPDATA%\JARVIS\updates`, confere tamanho e SHA-256 (`digest` do asset; sem digest ou URL fora do repositório = não instala) e roda o setup com `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SKIPOLLAMA /UPDATE`. Sem rede logo após o logon: tenta de novo (15/45/90/180 s) e desiste em silêncio. TUI aberta adia para o próximo logon. Dev (sem `JARVIS_DATA_DIR`) nunca atualiza. Setups antigos são apagados | `backend/core/updater.py` |
-| 2 | **Só no logon**: o valor `JARVIS` do `HKCU\…\Run` passa a levar `--logon`; só com ele o agente verifica (bandeja, Win+J e menu Iniciar não). `autostart.ensure_logon_flag()` regrava valores antigos. Com `installing`, o agente fecha a bandeja e sai (libera o runtime); toasts "Baixando…", "Instalando…" e, na volta, "Atualizado para a versão X" | `backend/agent.py`, `backend/core/autostart.py` |
-| 3 | **Instalador**: Run com `--logon`; `/UPDATE` (`EhAtualizacao`) reabre o agente ao fim do setup silencioso (sem `--logon`, não verifica de novo). O `PrepareToInstall` já fechava o pythonw antigo | `installer/jarvis.iss` |
-| 4 | **`/config` → SISTEMA**: opção "Atualização automática" (registro `HKCU\Software\JARVIS\AutoUpdate`; padrão `AUTO_UPDATE`) e linha com a versão instalada | `frontend/screens/settings.py` |
-| 5 | Novas variáveis com default: `AUTO_UPDATE=True`, `UPDATE_REPO` (vazio = repositório oficial) | `backend/core/config.py`, `env.example`, `CLAUDE.md` |
-
-**Testes novos:** `test_updater.py` — versões, Release (404, sem asset, prerelease, URL estranha, sem digest), download (hash/tamanho errado apagam o arquivo), fluxo (dev, desligado, em dia, sem rede com novas tentativas, rede voltando, TUI aberta, instalação com `/UPDATE` e marcador, download adulterado nunca roda o setup), aviso pós-atualização, agente só verifica no logon e sai ao instalar, migração do `--logon`.
-
-**Pendente (manual):** compilar o setup (ISCC) e testar de verdade: instalar uma versão antiga, fazer logoff/logon e ver o toast + a versão nova em `/config` → SISTEMA.
-
----
-
-**Data:** 2026-11-10
-**Escopo:** Login de contas de verdade no Google Agenda e no Spotify (OAuth pelo navegador com escolha de conta), conexão salva entre reinícios e chaves **pessoais** documentadas.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | **Chaves pessoais**: cada usuário cria o próprio app no Google Cloud (client "App para computador") e no Spotify Developer e preenche `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` e `SPOTIFY_CLIENT_ID` no `.env`. Guia passo a passo com tabela de erros comuns; aviso no README e no `env.example`. Sem chave, o card diz qual variável falta, abre o painel do serviço e aponta o guia | `docs/integracoes-oauth.md`, `README.md`, `env.example`, `core/config.py`, `core/google_calendar.py`, `services/integrations.py`, `skills/automation/spotify_control.py` |
-| 2 | **Escolha de conta no navegador**: Google abre em "Escolha uma conta" (`prompt=select_account consent`); Spotify sempre mostra login/consentimento (`show_dialog=true`). Página de retorno no visual do JARVIS (CONECTADO / NEGADO) | `core/google_calendar.py`, `core/spotify.py`, `core/oauth.py` |
-| 3 | **Spotify usa o OAuth comum** (`oauth.authorize` com porta e caminho fixos do redirect cadastrado); some o servidor de callback próprio. Depois do login busca o nome da conta (`/v1/me`) e o card mostra "conta: …" | `core/spotify.py`, `services/integrations.py` |
-| 4 | **Conexão salva**: token do Spotify vai para o Cofre do Windows (o `spotify_token.json` antigo é migrado e apagado); Google já estava lá. Access token renova sozinho; Enter num card já conectado não abre o login de novo ("Del para trocar de conta"). Só pede reconexão se o serviço revogar (`invalid_grant`); erro de rede mantém a conta | `core/spotify.py`, `core/google_calendar.py`, `services/integrations.py` |
-| 6 | **Chat consulta a agenda de verdade**: no modo Chat as skills não rodam, então "o que tenho amanhã?" ia direto ao LLM, que inventava compromissos. `services/live_context.py` detecta pergunta de agenda (palavras-chave, sem LLM), resolve o dia (hoje, amanhã, dia da semana), busca os eventos reais no Google Agenda e injeta no prompt (`prompts/calendar_context.md`) com a regra de não inventar; agenda desconectada ou com erro vira instrução de dizer isso. Temperatura 0.1 quando há dados reais. `resolve_day` foi para `core/google_calendar.py` (skill CALENDAR reusa). Validado com a agenda real + Ollama | `services/live_context.py`, `prompts/calendar_context.md`, `services/chat.py`, `services/brain.py`, `core/google_calendar.py`, `skills/productivity/calendar_agenda.py` |
-| 5 | /config: a fala do JARVIS quebra linha (instrução longa não some na borda) e o aviso no canto só aparece quando um card muda de estado (antes empilhava o mesmo texto a cada Enter) | `frontend/screens/settings.py`, `frontend/jarvis.tcss` |
-
-**Testes novos:** `test_live_context.py` (detecção da pergunta, eventos reais do dia pedido, agenda livre/desconectada/com erro, contexto chega ao modelo); `test_oauth_connect.py` — loopback de verdade com socket (código, porta/caminho fixos, página de negado), escolha de conta, fluxo do Spotify com conta, token sobrevivendo a reinício, migração do arquivo antigo, renovação sem login, revogação × erro de rede (Google e Spotify), card conectado não reabre login, card sem chave aponta o `.env` e o guia, docs citam as chaves pessoais. Cofre em memória nos testes (nunca o Cofre real).
-
-**Pendente (manual):** criar os apps seguindo `docs/integracoes-oauth.md`, preencher as variáveis já cadastradas (vazias) no `.env` local, reiniciar e conectar pelos cards.
-
----|---------|----------|
-| 1 | **Client IDs do projeto embutidos**: o JARVIS lê `backend/oauth_clients.json` (Google: client "App para computador" + secret; Spotify: client ID). O arquivo não vai para o repositório: o `release.yml` grava a partir dos GitHub Secrets `JARVIS_GOOGLE_CLIENT_ID`, `JARVIS_GOOGLE_CLIENT_SECRET` e `JARVIS_SPOTIFY_CLIENT_ID` antes do build. `.env` continua sobrescrevendo. O usuário não cadastra nada | `core/config.py`, `.github/workflows/release.yml`, `.gitignore`, `backend/oauth_clients.example.json` |
-| 2 | **Escolha de conta no navegador**: Google abre em "Escolha uma conta" (`prompt=select_account consent`); Spotify sempre mostra login/consentimento (`show_dialog=true`). Página de retorno no visual do JARVIS (CONECTADO / NEGADO) | `core/google_calendar.py`, `core/spotify.py`, `core/oauth.py` |
-| 3 | **Spotify usa o OAuth comum** (`oauth.authorize` com porta e caminho fixos do redirect cadastrado); some o servidor de callback próprio. Depois do login busca o nome da conta (`/v1/me`) e o card mostra "conta: …" | `core/spotify.py`, `services/integrations.py` |
-| 4 | **Conexão salva**: token do Spotify vai para o Cofre do Windows (o `spotify_token.json` antigo é migrado e apagado); Google já estava lá. Access token renova sozinho; Enter num card já conectado não abre o login de novo ("Del para trocar de conta"). Só pede reconexão se o serviço revogar (`invalid_grant`); erro de rede mantém a conta | `core/spotify.py`, `core/google_calendar.py`, `services/integrations.py` |
-| 5 | Mensagens de "sem client" falam do build (não pedem mais para o usuário editar o .env); guia de cadastro dos apps para o mantenedor, incluindo o aviso de que app do Google "Em teste" expira o token em 7 dias | `services/integrations.py`, `skills/automation/spotify_control.py`, `docs/integracoes-oauth.md` |
-
-**Testes novos:** `test_oauth_connect.py` — client embutido (BOM, vazio, .env vence), loopback de verdade com socket (código, porta/caminho fixos, página de negado), escolha de conta, fluxo do Spotify com conta, token sobrevivendo a reinício, migração do arquivo antigo, renovação sem login, revogação × erro de rede (Google e Spotify), card conectado não reabre login. Os testes usam cofre em memória (nunca o Cofre real).
-
-**Pendente (manual):** cadastrar os apps (ver `docs/integracoes-oauth.md`), pôr os IDs no `.env` para testar em dev e nos GitHub Secrets para o instalador; colocar o app do Google **Em produção** para o login não expirar em 7 dias.
-
----
-
-**Data:** 2026-11-10
-**Escopo:** TUI aberta pelo agente (Win+J / bandeja) abre direto na interface do Copilot, sem a tela de boot.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | `--copilot` (usado só pelo agente) liga `quiet_boot`: a conversa já aparece no Copilot e as checagens do boot rodam num worker de thread; etapas com `warn`/`fail` viram notificação "Boot". A etapa do microfone fica de fora (o Copilot já abre o mic e duas threads no PortAudio derrubam o processo); a saúde roda ao fim, como no boot normal. Aberto à mão (`jarvis.cmd` / `python main.py`) continua com a tela de boot | `frontend/app.py`, `backend/main.py`, `backend/core/boot.py` (`MIC_STEP`) |
-
-**Testes novos:** `test_quiet_boot_skips_screen_and_notifies_problems` em `test_tui_phase34.py`.
-
----
-
-**Data:** 2026-11-09 (4)
-**Escopo:** /config → INTEGRAÇÕES (canvas 15), Google Agenda, trânsito antes de sair, tradução do texto selecionado e filtro inteligente de notificações.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | **INTEGRAÇÕES no /config** (entre ROTINAS e SISTEMA): cards Google Agenda, GitHub, Spotify e Trânsito com LED, selo (CONECTADO / AGUARDANDO / DESCONECTADO / CONFIGURAR), detalhe e dica de tecla. Setas andam na grade; Enter conecta em worker de thread (card fica AGUARDANDO enquanto o navegador espera); Del desconecta com confirmação. `ConfirmScreen` aceita título/botões próprios | `services/integrations.py`, `frontend/screens/integrations_panel.py`, `frontend/screens/settings.py`, `frontend/widgets.py`, `frontend/jarvis.tcss` |
-| 2 | **OAuth genérico + cofre**: PKCE e callback num servidor efêmero do loopback (porta livre, valida `state`); refresh tokens no Cofre de Credenciais do Windows via `keyring` (fallback JSON). O Spotify passa a reusar o PKCE daqui | `core/oauth.py`, `core/secrets_store.py`, `core/spotify.py`, `requirements.txt`, `installer/build_runtime.ps1` |
-| 3 | **Google Agenda** (só leitura, REST com `requests`): cada usuário usa o próprio client "App para computador" (`GOOGLE_CLIENT_ID/SECRET`); sem client, o card abre o Google Cloud Console. Agenda entra no briefing; skill **CALENDAR** ("o que tenho amanhã?", "próxima reunião", dias da semana) | `core/google_calendar.py`, `skills/productivity/calendar_agenda.py`, `prompts/skills/calendar.md`, `core/briefing.py`, `prompts/briefing.md` |
-| 4 | **Trânsito**: `/rota casa|trabalho <endereço>` (Nominatim) e `/rota` mostra o tempo agora; OSRM grátis ou TomTom (`TOMTOM_API_KEY`) com trânsito ao vivo; sentido inverte depois das 15 h. Entra no briefing em dias úteis; skill **TRAFFIC**; **aviso de saída** (ROTINAS → horário) com clima + trânsito + agenda, 1×/dia no tick da telemetria | `core/traffic.py`, `skills/productivity/traffic_commute.py`, `frontend/commands.py`, `frontend/app.py`, `services/user_prefs.py` |
-| 5 | **Tradução do texto selecionado**: `Ctrl+Alt+T` (`TRANSLATE_HOTKEY`) no agente copia a seleção (Ctrl+C sintético depois de soltar o atalho), traduz no Ollama (pt → inglês; resto → pt-BR), põe no clipboard (Win32, sem PowerShell) e mostra toast da bandeja. `GlobalHotkey` ganhou id por atalho | `agent.py`, `core/selection.py`, `core/clipboard.py`, `core/hotkey.py`, `prompts/translate_selection.md` |
-| 6 | **Filtro de notificações**: prioridade do alerta (crítico = disco CRÍTICO, bateria crítica, GPU superaquecendo) × contexto (Não Perturbe, reunião na agenda, app em tela cheia). Crítico sempre fala; o resto vai para o backlog e é resumido quando o silêncio acaba. Prefs "Silenciar em reunião/tela cheia" em ROTINAS; selo `☾ REUNIÃO` / `☾ TELA CHEIA`. Janela só maximizada não conta como tela cheia | `services/notify_filter.py`, `core/alerts.py`, `core/window_utils.py`, `core/state.py`, `frontend/app.py` |
-| 7 | Novas variáveis com default: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `TOMTOM_API_KEY`, `TRANSLATE_HOTKEY`; docs atualizadas | `core/config.py`, `env.example`, `CLAUDE.md` |
-
-**Testes novos:** `test_oauth.py`, `test_integrations.py`, `test_google_calendar.py`, `test_traffic.py`, `test_selection.py`, `test_notify_filter.py`; ampliados `test_briefing.py`, `test_hotkey_agent.py`, `test_alerts_cache.py`, `test_tui_phase34.py` (cards de integrações e aviso de saída).
-
-**Pendente (manual):** criar o client OAuth Desktop no Google Cloud (ativar Calendar API, seu e-mail como usuário de teste) e conectar pelo card; `/rota casa …` e `/rota trabalho …`; reiniciar o agente para o `Ctrl+Alt+T`; conferir o silêncio em tela cheia (F11 num vídeo).
-
----
-
-**Data:** 2026-11-09 (3)
-**Escopo:** Issue #29 — "Memorizado no vault" respondido mesmo quando a nota já existia e o valor novo era descartado.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | `ObsidianClient.save_memory` devolve `MEMORY_SAVED` (nota criada), `MEMORY_KEPT` (nota já existia; vault mantido, valor novo descartado) ou `None` (falha ao gravar), em vez de `True` para os dois primeiros casos | `backend/core/obsidian.py` |
-| 2 | `extract_fact_to_memory` só diz "Memorizado" quando gravou; nota existente com o mesmo valor → "Já estava memorizado"; com valor diferente → avisa que manteve a versão do vault (mostra o valor atual) e pede para editar a nota no Obsidian; falha de gravação deixa de cair no genérico "não consegui extrair" | `backend/services/memory.py` |
-
-**Testes novos:** `test_memory_save.py` (retornos de `save_memory` e as 4 respostas). 408 testes passando, ruff limpo.
-
----
-
-**Data:** 2026-11-09 (2)
-**Escopo:** Correções de interface: crash intermitente no boot, rodapé, logo na aba do Windows Terminal, VU de voz, fim do `/help` e `/skills` por categoria.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | **Crash `0xC0000005` no boot.** Causa: o poll de saúde disparava no `on_mount` e enumerava o microfone (`PyAudio()`/`terminate()`) ao mesmo tempo que a etapa `services.listen` do boot — PortAudio não é thread-safe. `check_microphone()` agora roda sob lock e com cache (PortAudio é tocado uma vez; o boot força a releitura); o 1º poll de saúde só sai quando a tela de boot fecha. `faulthandler` grava o stack de crashes nativos em `logs/crash.log`. O `jarvis.cmd` desliga rastreio de mouse/tela alternativa depois que a TUI sai (o lixo `[555;89;14M…` no prompt) | `backend/core/health.py`, `backend/core/boot.py`, `frontend/app.py`, `backend/main.py`, `installer/jarvis.cmd` |
-| 2 | Selos `OLL● OBS● MIC● DB●` saem do rodapé; a saúde segue no `/status` e falha nova vira notificação | `frontend/app.py` |
-| 3 | Logo do JARVIS na aba: `core/wt_profile.py` grava um fragment do Windows Terminal com o perfil `JARVIS` (ícone `jarvis.ico`); launcher do agente e `jarvis.cmd` abrem com `-p JARVIS`; o desinstalador apaga o fragment. O `+`/`⌄` do WT não podem ser escondidos por janela (limitação do WT) | `backend/core/wt_profile.py`, `backend/core/launcher.py`, `backend/main.py`, `installer/jarvis.cmd`, `installer/jarvis.iss` |
-| 4 | VU de voz fiel: o tap mede **todos** os blocos do microfone e avisa o pico de cada janela (antes media 1 bloco a cada 125 ms e descartava o resto); escala em dBFS com piso no limiar de energia do recognizer (barra zerada = JARVIS não está te ouvindo); barra sobe na hora e desce suave; sai a onda falsa inicial | `backend/services/listen.py`, `frontend/widgets.py` |
-| 5 | `/help` removido: `Ctrl+K` lista tudo; `/`, `/help`, `/h` e `/?` abrem a paleta; placeholder vira "(Ctrl+K menu)" | `frontend/commands.py`, `frontend/app.py`, `frontend/README.md`, `CLAUDE.md` |
-| 6 | `/skills`: cartuchos agrupados por categoria (título colorido + grade, linha separando uma categoria da outra) numa área rolável; o foco leva a rolagem junto | `frontend/screens/skills.py`, `frontend/jarvis.tcss` |
-
-**Testes novos:** `test_wt_profile.py`; `test_health.py` (cache e serialização do mic); `test_tui_phase34.py` (dBFS, limiar, pico da janela, release do VU); `test_tui_app.py::test_skills_screen_groups_by_category_and_scrolls`; `test_tui_commands.py` (`/help` → paleta); `test_hotkey_agent.py` (`-p JARVIS`). 401 testes passando, ruff limpo.
-
-**Pendente (manual):** abrir/fechar a TUI várias vezes para confirmar que o crash sumiu; ver a logo na aba (vale a partir da 2ª abertura, depois que o fragment existe); conferir o VU falando baixo/normal/alto.
-
----
-
-**Data:** 2026-11-09
-**Escopo:** Pendências de 08/11 (ícone, testes do WORK_MACRO), arrastar arquivo para a TUI e briefing sempre falado.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | Arrastar imagem/áudio para o Windows Terminal = `/attach`: `dropped_paths()` (pura) aceita o texto colado só quando **todo** pedaço é arquivo existente de imagem/áudio (com/sem aspas, vários arquivos); `PromptInput` intercepta o `Paste` e emite `FilesDropped`; sem bracketed paste, enviar só o caminho também anexa. Uma imagem por mensagem (fica a primeira, com aviso); áudios são todos transcritos. Dica no `/help` | `frontend/commands.py`, `frontend/widgets.py`, `frontend/app.py` |
-| 2 | Ícone `installer/assets/jarvis.ico` (16–256 px) gerado do `frontend/assets/Logo.jpg` (orb do `/status` em 8 bits): instalador, atalhos e bandeja do agente passam a usá-lo — nenhum código mudou, os `#if FileExists` e o `_tray_image()` já o procuravam | `installer/assets/jarvis.ico`, `frontend/assets/Logo.jpg` |
-| 3 | `test_work_macros_spotify.py` → `test_work_macros.py`: saem os casos de `_sanitize_spotify_uri`/`_is_playing_title` (moraram para `core/spotify.py`, já cobertos por `test_spotify_client.py`); ficam os das cenas e entra `TestStartPlaylist` (Web API autorizada, fallback para o app local quando a API falha ou sem autorização). Fim das 11 falhas antigas | `backend/tests/test_work_macros.py` |
-| 4 | Briefing sempre falado, em qualquer modo: automático (1º boot do dia), `/briefing` e skill `DAILY_BRIEFING`. `speak(..., force=True)` fala só pelo TTS mesmo com a voz desligada (microfone segue fechado); com a voz ligada o ouvido pausa durante a fala. No Copilot, a skill fala mesmo se o modo mudar no meio do turno. As outras ferramentas (`/web`, `/gh`…) seguem caladas | `backend/services/speak.py`, `frontend/app.py` |
-
-**Testes novos:** `test_tui_drop.py` (parse dos caminhos + colar/enviar na TUI com Pilot) e `test_tui_tools.py::TestBriefingIsSpoken` (/briefing e automático falam com a voz desligada, skill no Copilot força a fala, /web segue calado).
-
-**Pendente (manual):** Win+J com a TUI real, toasts somindo pelo registro, build do instalador com o ícone, arrastar PNG do Explorer para o Windows Terminal.
-
----
-
-**Data:** 2026-11-08
-**Escopo:** Atalho global (Win+J), agente residente na bandeja e início com o Windows.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | `backend/agent.py`: agente leve (pythonw, ~30 MB, instância única por mutex `Local\JARVIS_AGENT`) que segura o atalho global e fica na bandeja (Abrir · Iniciar com o Windows · Sair). Win+J com a TUI fechada abre a TUI já no Copilot; com a TUI aberta fora de foco, foca a janela e manda ao Copilot; com ela em foco, volta ao Chat. Fechar a TUI não fecha o agente. Carrega só os submódulos de `core` que usa (pacote `core` vazio em `sys.modules`), sem banco, skills nem MCP | `backend/agent.py` |
-| 2 | `core/hotkey.py` (`parse_hotkey` + `GlobalHotkey` com `RegisterHotKey` e laço de mensagens numa thread daemon), `core/presence.py` (`tui.json` com pid/hwnd em `DIR_DATA` + eventos nomeados `Local\JARVIS_SUMMON`/`JARVIS_TO_CHAT`), `core/autostart.py` (valor `JARVIS` em `HKCU\…\Run`, detecção e início do agente), `core/launcher.py` (abre a TUI no Windows Terminal ou num console novo), `window_utils.find_terminal_window()` | `backend/core/` |
-| 3 | TUI: `main.py --copilot` → `JarvisApp(start_mode="copilot")`; a TUI anuncia a presença ao subir e escuta os sinais (SUMMON fecha telas cheias/paleta e entra no Copilot, nunca fecha o `ConfirmScreen`); `/config` ganha o grupo **SISTEMA** (Iniciar com o Windows ◀ ▶ e Agente em 2º plano, que o inicia) | `backend/main.py`, `frontend/app.py`, `frontend/screens/settings.py` |
-| 4 | Instalador: tarefa "Iniciar o J.A.R.V.I.S com o Windows" (marcada), valor Run com `uninsdeletevalue`, sobe o agente no fim da instalação e o fecha antes de atualizar (`PrepareToInstall`) e de desinstalar (`[UninstallRun]`); `jarvis.cmd` repassa os argumentos (`--copilot`); `build_runtime.ps1` exige `pythonw.exe` e importa `pystray` no smoke | `installer/` |
-| 5 | `GLOBAL_HOTKEY=win+j` (vazio desliga) e `pystray` nas dependências | `backend/core/config.py`, `env.example`, `backend/requirements.txt` |
-
-**Contexto:** a TUI vive no terminal e o X do Windows Terminal mata o processo, então o "2º plano" é um processo separado. Ícone da bandeja/instalador (`installer/assets/jarvis.ico`) ainda não existe: a geração via nano-banana falhou (Gemini CLI recusou o cliente) e o agente usa um marcador liso até lá.
-
-**Testes novos:** `test_hotkey_agent.py` (parse do atalho, presença com pid vivo/morto, autostart com winreg falso, comando do launcher dev/instalado, decisão do Win+J) e `test_tui_features.py::TestSummon`.
-
----
-
-**Data:** 2026-11-08
-**Escopo:** Command palette (Ctrl+K) estilo seletor de cartucho.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | `CommandPalette` ("▶ SELECT"): filtro, lista agrupada (COMANDOS, MODO, FOCO, SKILLS) com glifo da skill, ↑↓/Enter/Esc. Comandos que exigem argumento (`/rename`, `/attach`, `/web`) só preenchem o input e somem no Copilot; skills alternam ON/OFF | `frontend/screens/palette.py`, `frontend/jarvis.tcss` |
-| 2 | Lógica pura: `palette_entries()`, `fuzzy_score()` (prefixo > início de palavra > subsequência) e `filter_entries()` | `frontend/commands.py` |
-| 3 | `Ctrl+K` com `priority=True` (o `Input` do Textual usa Ctrl+K para "apagar até o fim") e `/menu` | `frontend/app.py`, `frontend/commands.py` |
-
-**Testes novos:** `test_tui_features.py::TestPaletteLogic` e `TestPaletteScreen` (abre com o prompt focado sem apagar o texto, "sta"+Enter abre o `/status`, prefill do `/rename`, skill alterna, `/menu`).
-
----
-
-**Data:** 2026-11-08
-**Escopo:** Não Perturbe + Pomodoro (por voz, `/focus` e `/dnd`).
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | `services/focus.py` (`FocusManager`): Pomodoro 25/5, pausa longa de 15 depois de 4 focos (POMODORO_* no `.env`); foco liga o Não Perturbe, pausa desliga; trocas de fase anunciadas (texto + voz). DND manual com ou sem prazo. Guarda o valor anterior dos toasts (`dnd_restore` no banco) e restaura ao sair, no X do terminal e no próximo boot se o app cair | `backend/services/focus.py`, `backend/core/config.py`, `env.example` |
-| 2 | `core/notifications.py`: toasts de todos os apps via `winreg` (HKCU, sem admin) no lugar do `os.system(powershell)` do `WORK_MACRO`, que agora não mexe nas notificações com o DND ligado | `backend/core/notifications.py`, `backend/skills/automation/work_macros.py` |
-| 3 | Alertas proativos com DND ligado vão para `state.dnd_backlog` (máx. 20) sem fala, notificação nem pedido de confirmação; são resumidos ao fim do foco | `backend/core/alerts.py`, `backend/core/state.py` |
-| 4 | Skill `FOCUS_MODE` ("inicia um pomodoro", "foco de 50 minutos", "não perturbe por 1 hora", "quanto falta?"): frases óbvias sem LLM, resto via `query_ollama` (JSON) | `backend/skills/productivity/focus_mode.py`, `backend/prompts/skills/focus_mode*.md`, `backend/prompts/classify_intent.md` |
-| 5 | TUI: `/focus [min\|stop\|skip\|status]`, `/dnd [on\|off\|min]` (num worker) e selo na linha de status (`◷ FOCO 24m 1/4`, `☕ PAUSA 4m`, `☾ DND`) em minutos, no polling de 3 s | `frontend/app.py`, `frontend/commands.py`, `frontend/screens/skills.py` |
-
-**Testes novos:** `test_focus.py` (ciclo completo com relógio/timer falsos, restauração dos toasts, backlog, crash, skill) e `test_tui_features.py::TestFocusCommands`.
-
----
-
-**Data:** 2026-11-08
-**Escopo:** Health check vivo na linha de status (Ollama, Obsidian, microfone, SQLite).
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | `core/health.py`: checagens rápidas sem efeito colateral (`ok`/`warn`/`fail`), `run_all()`, `status_line()` e `newly_failed()`; o boot passa a usá-las (sem lógica duplicada) | `backend/core/health.py`, `backend/core/boot.py` |
-| 2 | TUI: worker a cada `HEALTH_INTERVAL` (15 s) e bloco `OLL● OBS◐ MIC○ DB●` na linha de status (forma do glifo legível sem cor; verde/âmbar/vermelho no tema); notificação quando algo que estava de pé cai; painel "saúde" no `/status` | `frontend/app.py`, `frontend/widgets.py`, `frontend/screens/status.py`, `frontend/jarvis.tcss`, `backend/core/config.py` |
-
-**Testes novos:** `test_health.py` e `test_tui_features.py::TestHealthStatus`.
-
----
-
-**Data:** 2026-11-08
-**Escopo:** Wake word configurável via `.env`.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | `WAKE_WORDS` (vírgula separa; vazio = lista padrão) em `Settings`, normalizado por `parse_word_list()` | `backend/core/config.py`, `env.example` |
-| 2 | `find_wake_word()` / `clean_phrase()`: palavra inteira, mais longas primeiro, `re.escape`, pontuação vira espaço (`sexta-feira` do `.env` casa com `sexta feira` do STT) | `backend/services/listen.py` |
-
-**Testes novos:** `test_wake_words.py`.
-
-**Pendência conhecida (anterior a estas mudanças):** `test_work_macros_spotify.py` tem 11 falhas porque chama `_sanitize_spotify_uri`/`_is_playing_title`, que não existem mais em `work_macros.py`.
-
----
-
-**Data:** 2026-11-08
-**Escopo:** GitHub com listas vazias — `/gh prs` e `/gh issues` quebravam com `list index out of range`.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | No PyGithub 2.x fatiar uma `PaginatedList` vazia (`[:8]`) lança `IndexError`: sem PR aberto ou issue atribuída, a resposta era "O GitHub não colaborou". `_take()` usa `itertools.islice`; `last_commit` trata repositório sem commits e mensagem vazia | `backend/core/github_client.py` |
-
-**Contexto:** achado no 1º teste real com o token do `.env` (PyGithub 2.10.0): último commit e CI funcionavam, PRs e issues (ambos vazios) falhavam. Os testes usavam listas Python, que aceitam o fatiamento.
-
-**Testes novos:** `test_github.py` (`_Paginated` imita a lista do PyGithub: `test_empty_paginated_lists_do_not_break`, `test_paginated_list_is_limited`).
-
----
-
-**Data:** 2026-11-08
-**Escopo:** Busca no vault (RAG) quebrada — `Erro ao processar resultado: Expecting value`.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | O `mcp-obsidian` usa HTTPS quando `OBSIDIAN_PROTOCOL` não vem no ambiente, mas a porta 27123 do plugin Local REST API é HTTP: toda busca falhava com `SSL WRONG_VERSION_NUMBER` e voltava como texto, que o `json.loads` não entende. `mcp_endpoint()` tira protocolo, host e porta do `OBSIDIAN_HOST` (sem esquema, 27124 = HTTPS e o resto = HTTP) e o cliente MCP passa `OBSIDIAN_PROTOCOL` | `backend/core/obsidian.py` |
-| 2 | Resposta não-JSON da busca vira aviso "Busca indisponível: …" com o motivo real, uma vez por sessão (depois só no arquivo de log), em vez de ERROR a cada mensagem | `backend/core/obsidian.py` |
-
-**Contexto:** apareceu ao testar a voz (Copilot), mas valia para todo turno do Chat/Copilot que consulta o vault: o contexto do Obsidian nunca era injetado.
-
-**Testes novos:** `test_obsidian_endpoint.py` (protocolo por esquema/porta, padrões, texto de erro avisa 1× e devolve vazio sem ERROR).
-
----
-
-**Data:** 2026-11-08
-**Escopo:** Voz online (edge-tts) recusada com 403.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | `edge-tts` fixado em `>=7.3.1`: a 7.2.8 recebe `403 Invalid response status` no handshake com `speech.platform.bing.com` (a Microsoft passou a recusar a versão do Edge que a lib antiga anuncia) e a voz caía no fallback offline. A 7.3.1 gera o áudio normalmente | `backend/requirements.txt` |
-
-**Contexto:** teste da voz no Copilot exibiu `Falha na voz online (403, ...)`. Reproduzido com a 7.2.8 e resolvido com a 7.3.1 (síntese de teste OK).
-
----
-
-**Data:** 2026-11-08
-**Escopo:** Clipboard inteligente — monitor opt-in que sugere e skill `CLIPBOARD` (explicar / traduzir / resumir).
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | `core/clipboard.py`: `read()` (PowerShell `Get-Clipboard -Raw`, sem janela), `classify()` heurístico (`url` / `code` / `english` / nada), `act()` com prompts próprios (link → `web.fetch_text` + `web.summarize`) e `ClipboardMonitor` (thread daemon, polling 1,5 s, hash do último conteúdo, histórico de 20). O que já estava copiado ao ligar não gera aviso; o conteúdo copiado nunca vai para o log | `backend/core/clipboard.py`, `backend/prompts/clipboard_*.md` |
-| 2 | Skill `CLIPBOARD` ("explica/traduz/resume o que eu copiei") | `backend/skills/automation/clipboard_assistant.py`, `backend/prompts/skills/clipboard.md`, `backend/prompts/classify_intent.md` |
-| 3 | TUI: preferência **Monitor de clipboard** (desligada por padrão) no grupo novo `ROTINAS` do `/config`, que liga/desliga o monitor na hora (`on_pref_changed`); aviso discreto na conversa no máximo a cada 30 s; `/clip [explicar\|traduzir\|resumir\|hist]` | `frontend/app.py`, `frontend/commands.py`, `frontend/screens/settings.py`, `backend/services/user_prefs.py` |
-| 4 | `KEYBOARD_CONTROL` passa a ler o clipboard por `core.clipboard.read` | `backend/skills/automation/keyboard_control.py` |
-
-**Testes novos:** `test_clipboard.py` (classificação, monitor 1× por conteúdo novo, start/stop idempotente com thread daemon, ações com LLM mockado, skill) e `test_tui_tools.py::TestClipCommand`.
-
----
-
-**Data:** 2026-11-08
-**Escopo:** Briefing diário automático (1º boot do dia) e sob pedido — skill `DAILY_BRIEFING` e `/briefing`.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | `core/briefing.py`: `collect()` junta saudação, clima, CPU/RAM/bateria, arquivos modificados nas últimas 24 h (Desktop/Documentos/Downloads ou `BRIEFING_DIRS`, profundidade 2, teto de 4000 itens), resumo do GitHub e manchetes opcionais — cada fonte isolada em `try`. `build()` pede o texto ao Ollama (`prompts/briefing.md`) e cai numa lista Markdown sem LLM. `should_run_today()/mark_ran()` usam a chave `briefing_last_date` da tabela `config` | `backend/core/briefing.py`, `backend/prompts/briefing.md` |
-| 2 | Clima e saudação saíram da skill `SYSTEM_REPORT` para `core/weather.py` (reuso no briefing, sem uma skill importar outra) | `backend/core/weather.py`, `backend/skills/system/status_report.py` |
-| 3 | Skill `DAILY_BRIEFING` ("bom dia, Jarvis", "resumo do dia") | `backend/skills/productivity/daily_briefing.py`, `backend/prompts/skills/daily_briefing.md` |
-| 4 | TUI: briefing sozinho no 1º boot do dia (falado se a voz estiver ligada), `/briefing` força; prefs **Briefing no 1º boot do dia** (ligado) e **Manchetes no briefing** (desligado) no grupo `ROTINAS` | `frontend/app.py`, `frontend/commands.py`, `frontend/screens/settings.py`, `backend/services/user_prefs.py` |
-| 5 | `.env`: `BRIEFING_DIRS` (default vazio) | `backend/core/config.py`, `env.example` |
-
-**Testes novos:** `test_briefing.py` (1× por dia, arquivos recentes em pasta temporária, fonte com erro isolada, manchetes só quando pedidas, fallback sem LLM, skill) e `test_tui_tools.py::TestBriefingCommand` (sem serviços nada roda sozinho; automático respeita pref e data).
-
----
-
-**Data:** 2026-11-08
-**Escopo:** Integração com o GitHub (PyGithub) — skill `GITHUB` e `/gh`; confirmação genérica de ação crítica.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | `core/github_client.py`: PRs abertos, issues atribuídas, último commit, CI (Actions), `summary()` para o briefing e `create_issue`. Import tardio do `github`, erros 401/404 viram mensagem amigável | `backend/core/github_client.py` |
-| 2 | Skill `GITHUB`: frases óbvias sem LLM (`parse_fast`), o resto via `skills/github_decision.md` (JSON). Criar issue nunca executa direto: pergunta e espera o "sim" (voz) ou o `ConfirmScreen` (30 s) | `backend/skills/productivity/github_control.py`, `backend/prompts/skills/github*.md` |
-| 3 | `confirm_pending_action` aceita `pending['on_confirm']` (callable) — qualquer skill pode pedir confirmação; sem ele segue encerrando o processo (APP_CONTROL). A TUI abre o `ConfirmScreen` ao fim do turno quando a skill deixou uma ação pendente | `backend/services/brain.py`, `frontend/app.py` |
-| 4 | `/gh [prs\|issues\|commit\|ci] [dono/repo]` (só leitura) | `frontend/app.py`, `frontend/commands.py` |
-| 5 | `.env`: `GITHUB_TOKEN`, `GITHUB_DEFAULT_REPO` (default vazio = desligado). `PyGithub` no `requirements.txt` e no smoke do setup | `backend/core/config.py`, `env.example`, `backend/requirements.txt`, `installer/build_runtime.ps1` |
-
-**Testes novos:** `test_github.py` (sem token, resolução do repo, listagens, erro 401, criação, `parse_fast`, fallback do LLM, issue só após confirmação / negada / sem título) e `test_tui_tools.py::TestGitHubCommand`.
-
----
-
-**Data:** 2026-11-08
-**Escopo:** Pesquisa web com sumarização local — skill `WEB_SEARCH` e `/web` (pasta `skills/web/` deixa de estar vazia).
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | `core/web.py`: busca no DuckDuckGo (`ddgs`, sem chave), leitura das 3 primeiras páginas em paralelo com extração por `html.parser` (sem lxml), resumo no Ollama com citações `[n]` e lista de fontes; cache de 10 min por pergunta; sem LLM devolve os trechos | `backend/core/web.py`, `backend/prompts/web_summarize.md` |
-| 2 | Skill `WEB_SEARCH` | `backend/skills/web/web_search.py`, `backend/prompts/skills/web_search.md`, `backend/prompts/classify_intent.md` |
-| 3 | TUI: `/web <pergunta>` e `tool_reply()` — bolha do JARVIS preenchida por um worker de thread (reusada por `/gh`, `/briefing` e `/clip`) | `frontend/app.py`, `frontend/commands.py` |
-| 4 | `/skills`: cores das categorias `web` e `productivity` e ícones das 4 skills novas | `frontend/jarvis.tcss`, `frontend/screens/skills.py` |
-| 5 | `ddgs` no `requirements.txt` e no smoke do setup | `backend/requirements.txt`, `installer/build_runtime.ps1` |
-
-**Testes novos:** `test_web.py` (extração de HTML, busca mockada, erros de rede, fluxo completo com cache, fallback sem LLM, skill) e `test_tui_tools.py::TestWebCommand`.
-
-**Gate local (4 entregas juntas):** 307 passam; `ruff check .` limpo em `backend/` e `frontend/`. **Pré-existente:** os 11 testes de `test_work_macros_spotify.py` já falham no `HEAD` (`_sanitize_spotify_uri` / `_is_playing_title` não existem em `work_macros.py`; nenhum dos dois arquivos foi tocado aqui).
-
----
-
-**Data:** 2026-11-07
-**Escopo:** Selo da tela de boot que podia nunca aparecer (2ª falha do gate do Release) e ensaio do Release fora da `main`.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | Boot: cada linha de checagem era criada vazia e pintada por `call_after_refresh` uma única vez; se a montagem ainda não tinha terminado nesse refresh (PC/runner lento), `is_mounted` era falso e o selo `[ FAIL ]`/`[  OK  ]` nunca aparecia. Agora a linha já nasce com o estado e as atualizações usam os labels guardados, sem depender do momento da montagem | `frontend/screens/boot.py` |
-| 2 | `release.yml` rodado por `workflow_dispatch` fora da `main` vira ensaio: gera e testa o setup e guarda como artifact (`JARVIS-Setup-ensaio`, 7 dias), sem criar tag nem Release | `.github/workflows/release.yml` |
-| 3 | O 1º ensaio parou no ISCC (`The system cannot find the path specified`): a raiz do runner tem ~105 caracteres e arquivos do onnxruntime em `dist\runtime` têm ~156, passando do MAX_PATH (260) que o Inno Setup aceita. O workflow mapeia a raiz em `J:\` (`subst`) para build, setup e teste; o `build_runtime.ps1` falha cedo com mensagem clara se algum caminho passar do limite | `.github/workflows/release.yml`, `installer/build_runtime.ps1` |
-
-**Contexto:** o Release do merge do PR #37 parou de novo no gate: `test_boot_screen_shows_checks_then_closes` esperou 10 s por um `[ FAIL ]` que nunca foi pintado no runner do GitHub.
-
-**Testes novos:** `test_tui_phase34.py` (`test_boot_row_has_status_without_waiting_for_mount`: selo e classe corretos logo ao criar/atualizar a linha, antes de montar — falha com o código antigo). Gate local: 237 passam.
-
----
-
-**Data:** 2026-11-07
-**Escopo:** Ordem das sessões nos save slots com empate de horário — destrava o 1º Release automático.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | `get_recent_sessions` ordenava só por `MAX(timestamp)`, que no SQLite tem resolução de segundo: duas conversas no mesmo segundo apareciam em ordem aleatória nos save slots. Agora desempata pela mensagem mais nova (`MAX(id) DESC`) | `backend/services/sessions.py` |
-
-**Contexto:** o workflow de Release do merge do PR #36 parou no gate de testes — `test_session_picker_focuses_current_slot_card` falhava no runner do GitHub (rápido o bastante para gravar as duas sessões do teste no mesmo segundo). Nenhuma tag/Release foi criada; o próximo merge na `main` gera a `v1.0.0`.
-
-**Testes novos:** `test_sessions_service.py` (`test_recent_sessions_same_second_newest_first`: três sessões com o mesmo timestamp saem da mais nova para a mais velha — falha sem a correção).
-
----
-
-**Data:** 2026-11-06
-**Escopo:** Instalador completo `JARVIS-Setup.exe` (mesmo processo do OhmFlow: Inno Setup + teste do setup) e Release automático a cada merge na `main`, com o instalador como único asset.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | Instalador Inno Setup 6: Python 3.11 embutido com todas as libs do `requirements.txt` + código; sem admin por padrão (`%LOCALAPPDATA%\Programs\JARVIS`), atalhos, opção de PATH (`jarvis`), atualização limpa por cima (AppId fixo) e desinstalador que pergunta se apaga os dados | `installer/jarvis.iss` (novo) |
-| 2 | Página "Ollama necessário": se o Ollama não for encontrado, mostra o link oficial `https://ollama.com/download`, trava o Avançar e verifica a cada 2 s (pasta padrão, PATH do processo e do registro); ao detectar, avança sozinho | `installer/jarvis.iss` |
-| 3 | Página "Modelo de IA": dropdown com llama3.2 (padrão), llama3.1:8b, qwen2.5:7b, mistral, gemma2:9b, phi3 ou "não baixar"; marca os já instalados (`ollama list`); opção do modelo de visão moondream. No fim, `ollama pull` em janela visível e `OLLAMA_MODEL` gravado no `.env` | `installer/jarvis.iss` |
-| 4 | Montagem do conteúdo do setup: pacote NuGet oficial `python` 3.11.9 → `dist/runtime`, `pip install`, limpeza, bytecode pré-compilado e smoke test das libs; código sem testes/dados → `dist/app` | `installer/build_runtime.ps1` (novo) |
-| 5 | Launcher: abre no Windows Terminal quando existir (`--here` roda no terminal atual) e define `JARVIS_DATA_DIR=%APPDATA%\JARVIS` | `installer/jarvis.cmd` (novo) |
-| 6 | Modo instalado no config: com `JARVIS_DATA_DIR`, `.env`, logs, banco, uploads, áudio do TTS e token do Spotify vão para essa pasta (a pasta do programa pode ser só leitura). Sem a variável (dev) nada muda. `VERSION` lido do arquivo `VERSION` | `backend/core/config.py`, `VERSION` (novo) |
-| 7 | Defaults para rodar sem `.env` completo: `SPEECH_RATE` (180), `MIC_INDEX` (0), `OLLAMA_HOST`, `OLLAMA_MODEL` (llama3.2) e `OBSIDIAN_HOST` — antes `int(None)` / `None.replace` derrubavam o import | `backend/core/config.py` |
-| 8 | Teste do setup: instala em silêncio (`/SKIPOLLAMA`), confere arquivos, importa o JARVIS com o Python instalado em modo instalado (dados fora da pasta do programa), chave de desinstalação, desinstala e confere que nada ficou | `installer/test_setup.ps1` (novo) |
-| 9 | Workflow de Release: no push da `main` (merge) roda ruff + pytest, calcula a versão (major.minor do `VERSION`, patch = última tag `vX.Y.*` + 1), monta o runtime, gera e testa o setup e publica o Release `vX.Y.Z` só com `JARVIS-Setup.exe` | `.github/workflows/release.yml` (novo) |
-| 10 | README com a seção "Instalar" e como gerar o setup localmente | `README.md` |
-
-**Decisões:** Python embutido em vez de PyInstaller, para o `SkillLoader` continuar carregando skills por arquivo (plug-and-play) e evitar hidden-imports de pycaw/ctranslate2. O modelo escolhido é **acrescentado** no fim do `.env` (o python-dotenv usa o último valor) para não reescrever nem recodificar o arquivo do usuário. O GitHub sempre anexa "Source code (zip/tar.gz)" ao Release; o único asset enviado é o `JARVIS-Setup.exe`. Ícone próprio fica para depois (o `.iss` usa `installer/assets/jarvis.ico` se existir; sem ele, o ícone do Python).
-
-**Testes novos:** `test_config_paths.py` (modo instalado com `JARVIS_DATA_DIR`: dados e `.env` na pasta de dados, pastas criadas; modo dev inalterado; defaults sem `.env`); `installer/test_setup.ps1` (25 verificações). Tamanho: ~479 MB instalado, setup de ~130 MB.
-
----
-
-**Data:** 2026-11-06
-**Escopo:** Falso "PROTOCOLO CRÍTICO" corrigido e telas `/status` (canvas "6 · Dashboard de sistema") e `/log` (canvas "9 · Log de atividade") refeitas para ficarem iguais ao canvas.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | Protocolo crítico: o disco entrava em "cheio" por **porcentagem** livre (< 10%), então um C: de 222 GB com 20,9 GB sobrando deixava a TUI vermelha sem motivo. Agora usa **GB livres** (< 10 GB), o mesmo critério do aviso falado. Lógica extraída para `critical_reasons()` (testável) | `backend/core/SystemInfo.py` |
-| 2 | O topo mostra o motivo (`⚠ PROTOCOLO CRÍTICO · disco C:\ com 8.2 GB livres`) e a entrada/saída do estado vai para o log | `backend/core/SystemInfo.py` (`critical_reasons`), `frontend/app.py` |
-| 3 | `/status`: painéis com nome e valor no topo, gráfico de **barras espaçadas** que ocupa o painel inteiro com cada barra na cor da sua carga (ciano/âmbar/vermelho), detalhe embaixo em pt-BR (`8 núcleos · 3,6 GHz`, `22,7 / 32 GB`, `RTX 3060 · VRAM 7,1 / 12 GB`, `↓ 1,1 · ↑ 0,1 MB/s`). Lateral: núcleo pixel-art 16×16, faixa de carga, top processos por memória (`ollama · 2,1 GB`) e o limiar crítico. Topo `últimos N s` e `uptime HH:MM:SS`; `p` pausa | `frontend/screens/status.py`, `frontend/sprites.py` (`core_orb`, `spaced_bar_chart`, `bar_slots`), `backend/core/SystemInfo.py` (`get_dashboard_details`), `frontend/jarvis.tcss` |
-| 4 | Rede do `/status` usa a última amostra da telemetria (antes uma 2ª chamada a `get_network_speed` zerava o contador e mostrava ~92 B/s) | `frontend/app.py` (`last_net`) |
-| 5 | `/log`: topo com o arquivo do dia (`backend/logs/jarvis_AAAA-MM-DD.log · seguindo`), filtros com borda, timeline em caixa (título + passos em blocos ligados por fio, `✓ SPOTIFY ABERTO`, `FALA` tracejado), horário com milissegundos, módulo com pacote (`services.listen`), linha de erro com fundo vermelho, emojis tirados da exibição e `/` para buscar | `frontend/screens/log.py`, `backend/core/logger.py` (`dotted_module`, `file_path`), `frontend/jarvis.tcss` |
-| 6 | Linha de status das telas cheias aceita uma dica própria, como no canvas: `/status` → `atualiza a cada 3 s`, `/log` → `N linhas · N avisos · N erros`, `/skills` → `skills só rodam no Copilot (voz)` | `frontend/screens/base.py` (`status_hint`), `frontend/screens/status.py`, `frontend/screens/log.py`, `frontend/screens/skills.py` |
-
-**Decisões:** a orb e o rótulo da carga ficam ciano em BAIXA/MODERADA (como no canvas) e só ficam vermelhos em ALTA; as barras é que mostram a faixa. "Encerrar processo" (`k` no rodapé do canvas) ficou de fora: é ação destrutiva e pediria confirmação própria.
-
-**Testes novos:** `test_tui_dashboard.py` (`critical_reasons` com disco em GB, CPU/RAM/GPU/bateria; `dotted_module`; barras espaçadas; números pt-BR, janela e uptime; textos do dashboard e processos; emojis, contagem, filtro com busca e timeline do `/log`); `test_tui_app.py` (motivo no topo crítico).
-
----
-
-**Data:** 2026-11-06
-**Escopo:** Ajustes de interface para ficar igual ao canvas "JARVIS TUI": tabela do `/help`, save slots em tela cheia (canvas "11 · Histórico — save slots") e cartuchos retrô no `/skills` (canvas "8 · Skills — cartuchos").
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | `/help`: o `\|` de `/mode [chat\|copilot]` e `/skills [on\|off <skill\|categoria>]` quebrava a coluna da tabela Markdown; agora é escapado e a linha fica com 2 células | `frontend/commands.py` |
-| 2 | Save slots (`Ctrl+O` / `/sessions`) viram tela cheia `CARREGAR` · "Escolha um save · N sessões", com grade de 2 colunas de cartões: nº do slot, título, `★` fixada, `hoje · 14:03 · 48 msgs · copilot`, última fala do JARVIS entre aspas e barra `▰` do tamanho da conversa. Foco começa na sessão aberta; setas navegam, Enter carrega, `p` fixa, `Del Del` apaga, `/` busca por título ou trecho | `frontend/screens/save_slots.py` (novo), `frontend/widgets.py` (sai o modal; `format_slot_when` substitui `format_when`), `frontend/app.py`, `frontend/jarvis.tcss` |
-| 3 | Modo de cada mensagem gravado no histórico (coluna `mode`, com migração `PRAGMA`/`ALTER TABLE`); `get_recent_sessions` devolve `mode` e `last_reply` | `backend/core/database.py`, `backend/services/sessions.py`, `frontend/app.py` |
-| 4 | `/skills`: cartucho retrô com aba na cor da categoria, etiqueta com ícone + INTENT, linha `■ categoria  ON/OFF` e contatos dourados; desligado fica apagado e 1 linha abaixo. Setas navegam a grade e Enter também alterna | `frontend/screens/skills.py`, `frontend/jarvis.tcss` (`$j-contact`) |
-| 5 | Ícones dos cartuchos iguais ao canvas e cobrindo os INTENTs reais: SPOTIFY `♫`, KEYBOARD `⌨`, MACRO `⚙`, REPORT `≡`, CLEANUP `✕`, SECURITY `⛨` (antes SPOTIFY/CLEANUP/REPORT caíam no `◆`) | `frontend/screens/skills.py` |
-| 6 | Telas cheias: `esc Voltar` passa para o fim do rodapé, como no canvas | `frontend/screens/base.py` |
-
-**Decisões:** o picker deixou de ser modal para ter a barra do topo e a linha de status das outras telas cheias (o `dismiss(id)` segue igual para o `app`). A busca saiu do topo e foi para baixo da grade (`/` foca), porque `p` e `Del` são atalhos dos cartões. Sessões antigas sem modo gravado aparecem como `chat`.
-
-**Testes novos:** `test_tui_commands.py` (tabela do `/help` com 2 células e `\|` preservado, `format_slot_when`, ícones dos INTENTs reais e glifos de 1 célula); `test_sessions_service.py` (`mode`/`last_reply`, migração da coluna `mode`); `test_tui_app.py` (save slots: selo, contagem, foco na sessão atual, setas, busca, meta `· chat`, prévia, ★, apagar; cartucho com ícone, nome, ON/OFF e contatos). Observação: `test_work_macros_spotify.py` já falhava antes desta mudança (11 testes; funções que não existem em `work_macros.py`).
-
----
-
-**Data:** 2026-11-05
-**Escopo:** Boot verifica o servidor Ollama e o inicia (`ollama serve`) se estiver offline, antes de carregar a TUI.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | `ensure_ollama_running()`: sonda `GET /api/version` (2 s, sem proxy). Offline + host local → acha o `ollama` (PATH ou `%LOCALAPPDATA%\Programs\Ollama`), roda `ollama serve` sem janela, em outro grupo de processo e com a saída descartada, e espera a API por até `OLLAMA_START_TIMEOUT` s. Retorna `running` / `started` / `failed` e nunca derruba o boot | `backend/core/ollama_server.py` (novo) |
-| 2 | `main.py` chama a checagem logo após o sanity check, antes de importar a TUI | `backend/main.py` |
-| 3 | Etapa "core.llm / Ollama" da tela de boot mostra `[ FAIL ]` se o servidor seguir offline (e não dispara o warm-up à toa) | `backend/core/boot.py` |
-| 4 | Novas variáveis `OLLAMA_AUTOSTART` (padrão `True`) e `OLLAMA_START_TIMEOUT` (padrão `30`) | `backend/core/config.py`, `env.example` |
-
-**Decisões:** o servidor fica desacoplado e continua rodando depois que o JARVIS fecha (mesmo comportamento do app oficial do Ollama; evita recarregar o modelo a cada boot). Host remoto no `OLLAMA_HOST` não é iniciado — só avisa. Se o `ollama serve` morrer (ex.: outra instância já pegou a porta), uma última sonda decide. O `boot.bat` mantém a própria checagem; com ele, a do Python só confirma que está online.
-
-**Testes novos:** `test_ollama_server.py`: normalização do host, host local × remoto, sonda (200 e conexão recusada), fallback do executável no `%LOCALAPPDATA%`, `Popen` com `serve` e saída descartada, espera (responde depois de N sondas, para se o processo morrer) e `ensure_ollama_running` (já online, offline → inicia, não instalado, sem resposta, `OSError` no `Popen`, host remoto, autostart desligado).
-
----
-
-**Data:** 2026-11-05
-**Escopo:** Fases 3 e 4 de 4 das novas telas 16-bit: `/vault`, `/config`, nível real do microfone na barra de voz, tela de boot, desligamento CRT e o easter egg "House Party Protocol".
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | Nível real do microfone: `_LevelTap` envolve o stream do mic e calcula o RMS de cada bloco (sem `audioop`, removido no 3.13), avisando no máx. 8×/s. `listen(on_level=)` repassa para a TUI | `backend/services/listen.py` |
-| 2 | Barra de voz do Copilot mostra o espectro real (24 amostras ▁…█) e um VU de 15 blocos; zera fora do estado "ouvindo", sem timer | `frontend/widgets.py` (`VoiceBar.set_level`), `frontend/app.py` (`_listen_with_level`) |
-| 3 | `/vault [termo]`: árvore do vault carregada pasta a pasta, busca com radar pixel-art girando só durante a busca, prévia em Markdown e "▶ usar no chat" — a nota vai como contexto da próxima mensagem (o histórico guarda só a pergunta) | `frontend/screens/vault.py` (novo), `backend/core/obsidian.py` (`list_dir`, `search_results`), `backend/prompts/vault_note_context.md` (novo), `frontend/app.py` (`pending_note`) |
-| 4 | `/config`: menu estilo RPG (VOZ, MICROFONE, MODELO, SOBRE) com cursor ▶, opções ◀ ▶ e barra de blocos, e caixa de diálogo com o rosto pixel-art do JARVIS | `frontend/screens/settings.py` (novo), `backend/services/user_prefs.py` (novo) |
-| 5 | Preferências persistidas na tabela `config`: voz neural, velocidade e volume do TTS; limiar do mic e janela de atenção | `backend/services/user_prefs.py`, `backend/services/speak.py`, `backend/services/listen.py` |
-| 6 | Tela de boot: checagens estilo BIOS (`[  OK  ]`/`[ WARN ]`/`[ FAIL ]`), logo montado por scanline a 8 fps e barra de progresso; fecha sozinha (ou `Esc`). Warm-up do Ollama e scan de hardware seguem em threads daemon | `backend/core/boot.py` (novo), `frontend/screens/boot.py` (novo), `backend/main.py` |
-| 7 | Desligamento CRT no `Ctrl+Q`/`/quit`: 3 linhas `[  OK  ]` e 5 quadros (tela cheia → faixa → linha → ponto); `Ctrl+Q` de novo sai na hora | `frontend/screens/shutdown.py` (novo), `frontend/app.py` (`shutdown_jarvis`) |
-| 8 | Easter egg: digitar "house party" no Chat abre 8 armaduras genéricas em pixel art entrando 1 por quadro; não vai ao modelo | `frontend/screens/house_party.py` (novo), `frontend/app.py` |
-| 9 | Comandos novos `/vault` e `/config` no `/help` | `frontend/commands.py` |
-
-**Decisões:** o nível do mic é lido no próprio stream que o `speech_recognition` usa (nada de abrir um 2º dispositivo). A janela de boot não espera o Ollama (pode levar até 120 s): ele aquece em segundo plano. Labels com `[  OK  ]` usam `markup=False` — o Textual lia o selo como tag e o apagava. O modelo do Ollama segue só no `.env` (o `/config` mostra, não troca).
-
-**Testes novos:** `test_tui_phase34.py`: RMS (silêncio, cheio, meio), `_LevelTap` (áudio intacto, limite de 8×/s, repasse do resto do stream), `user_prefs` (padrão, passo com limite, lixo no banco), `run_boot` (etapas, falha, fim), barra de voz com nível, `/config` persistindo, `/vault` (busca, radar parado, nota indo ao modelo sem sujar o histórico), boot fechando sozinho, CRT antes do `exit`, `Ctrl+Q` duplo e o easter egg.
-
----
-
-**Data:** 2026-11-05
-**Escopo:** Fase 2 de 4 das novas telas 16-bit: telas de dados (`/status`, `/skills`, `/log` e save slots) + ajustes da Fase 1 após comparar capturas reais da TUI com o canvas "JARVIS TUI".
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | Base das telas cheias: barra do topo com selo, corpo e linha única telemetria + atalhos; `Esc` volta. Atalhos da conversa (modo, nova, sessões, regenerar, voz) somem dentro delas | `frontend/screens/base.py` (novo, `JarvisScreen`), `frontend/app.py` (`check_action`) |
-| 2 | `/status`: CPU, RAM, GPU e REDE com gráfico de barras dos últimos 2 min (cor muda com a carga), mini-orb pixel-art recolorida pela carga, top processos e uptime em worker | `frontend/screens/status.py` (novo), `frontend/sprites.py` (`bar_chart`, `load_level`), `frontend/app.py` (`telemetry_history`), `backend/core/SystemInfo.py` (`upload_bps`/`download_bps`) |
-| 3 | `/skills` sem argumento abre a grade de cartuchos: ícone, INTENT, categoria e ON/OFF; desligado fica "fora do slot". Enter/clique alterna a skill, `c` a categoria inteira. `/skills on|off X` continua | `frontend/screens/skills.py` (novo), `frontend/app.py` |
-| 4 | `/log`: buffer em memória dos últimos 500 registros, filtros TODOS/DEBUG/INFO/WARN/ERROR (`f` cicla), pausa no espaço, linhas novas mais claras e a timeline do último turno com skill (VOZ → INTENT → SKILL → ✓ → FALA) | `frontend/screens/log.py` (novo), `backend/core/logger.py` (`RingBufferHandler`, `stacklevel=2` p/ registrar o módulo de origem), `frontend/app.py` (`last_skill_turn`) |
-| 5 | Save slots no `Ctrl+O`: cada sessão em 2 linhas, com barra do tamanho, nº de mensagens e prévia da última fala; `p` fixa, `Del Del` apaga (não apaga a aberta) | `frontend/widgets.py` (`SessionPicker`), `backend/services/sessions.py` (`msg_count`, `last_message`, `delete_session`) |
-| 6 | Ajustes da Fase 1: `[  OK  ]` verde; barras ▰▱ da linha de status em ciano (vermelho no crítico); títulos do Markdown brancos e em negrito; bloco de código com filete ciano e o nome da linguagem no topo; selo de skill colorido (`■ [INTENT] [ OK ]` / `[ FAIL ]` / `[ ▚▚ ]`); véu vermelho no protocolo crítico (o hatch de scanline "furava" a barra do topo) | `frontend/widgets.py` (`StatusLine`, `CodeFence`, `JarvisMarkdown`, `MessageView`), `frontend/jarvis.tcss` |
-| 7 | O app passa a procurar seus widgets sempre na tela da conversa (`main_screen`): telemetria e alertas não quebram com uma tela cheia aberta | `frontend/app.py` |
-
-**Decisões:** as telas cheias são `Screen` (não modal) para terem a própria linha de status. Animação de encaixe do cartucho ficou como deslocamento de 1 linha (sem timer). O save slot continua em lista (1 coluna) para manter o filtro por título e a navegação por setas.
-
-**Testes novos:** em `test_tui_app.py`, `/status` (histórico, faixa de carga, `Esc` volta, atalhos da conversa desativados), `/skills` (clique alterna o cartucho), `/log` (filtro WARN e timeline do turno de voz) e save slots (tamanho, prévia, fixar, apagar); `test_sessions_service.py` (`msg_count`, `last_message`, `delete_session`); `test_tui_sprites.py` (`bar_chart`, `load_level`). Espera dos testes de voz subiu para 10 s (rodando a suíte inteira, o turno de voz passava dos 5 s).
-
----
-
-**Data:** 2026-11-05
-**Escopo:** Fase 1 de 4 das novas telas 16-bit: base de sprites/efeitos e as telas atuais harmonizadas com o canvas "JARVIS TUI" (telas 1–4 revisadas).
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | Base de sprites pixel-art (alerta, mini-orb, rosto, armadura, radar com 8 quadros) no mesmo formato do `orb.py`, mais efeitos de texto: barra de blocos `▰▱`, sparkline `▁…█`, quadros do desligamento CRT e revelar por scanline | `frontend/sprites.py` (novo) |
-| 2 | Widget `PixelSprite`: pinta qualquer grade em meio-bloco com cores `px--*` do tema; timer a 8 fps só com `animated=True`. Pintura em meio-bloco extraída para `paint_grid`, reaproveitada pela `JarvisOrb` | `frontend/widgets.py`, `frontend/jarvis.tcss` |
-| 3 | Linha de status com barras de bloco (`CPU ▰▰▱▱▱ 41%`) e `▚ pensando…` | `frontend/app.py` |
-| 4 | Selo de skill estilo cartucho: `▚ [INTENT] executando…` → `■ [INTENT] ✓/✗`; saudação começa com `[  OK  ]` | `frontend/app.py` |
-| 5 | Protocolo crítico: ícone de alerta em pixel art, título `AÇÃO CRÍTICA`, contagem regressiva em 30 blocos, scanlines vermelhas atrás do diálogo (`hatch`), borda dupla e `▶` no botão de encerrar | `frontend/widgets.py` (`ConfirmScreen`), `frontend/jarvis.tcss` |
-| 6 | Trocar sessão: borda dupla ciano, título em caixa alta, número de slot (`01`, `02`…) e `▶` na sessão atual | `frontend/widgets.py` (`SessionPicker`), `frontend/jarvis.tcss` |
-| 7 | Bordas duplas no input, na barra de voz e no painel da orb do Copilot; estado da orb com `▶` | `frontend/jarvis.tcss`, `frontend/widgets.py` (`CopilotHero`) |
-
-**Decisões:** novas cores entram como variáveis `$j-ok`, `$j-warn`, `$j-deep`, `$j-pale`, `$j-scanline`. Sprites ficam em lógica pura (testável) e o widget só mapeia código → cor. Fases seguintes: telas de dados (status, skills, log, save slots), depois vault/config/voz (RMS real) e por fim boot, shutdown CRT e easter egg.
-
-**Testes novos:** `test_tui_sprites.py` (sprites com linhas pares e códigos válidos, recolor, radar com 8 quadros distintos, `block_bar`, `sparkline`, CRT colapsando até 1 ponto, scanline) e, em `test_tui_app.py`, ícone 16×6 e barra de 30 blocos no `ConfirmScreen`, telemetria com barras e `▶ 01` na sessão atual do picker.
-
----
-
-**Data:** 2026-11-04
-**Escopo:** Copilot passa a ser **só por voz**, com orb pixel-art 16×16 (ouvindo / pensando / respondendo); telemetria e atalhos numa **linha só**. Segue a revisão do canvas "JARVIS TUI".
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | Copilot só voz: o input dá lugar à barra de voz; entrar no Copilot liga a voz, voltar ao Chat desliga. `Ctrl+T`/`/voice` alternam entre Chat e Copilot | `frontend/app.py`, `frontend/widgets.py` (`VoiceBar`) |
-| 2 | Voz usa o mesmo pipeline de stream do Copilot (`_run_turn`): selo `[SKILL] ✓`, resposta em tempo real, fala no fim. Grava na sessão atual (aparece no `Ctrl+O`), com cabeçalho `voz · HH:MM` | `frontend/app.py` |
-| 3 | Orb pixel-art: grade 16×16 em meio-bloco (16×8 células). Ouvindo = bola azul + anel branco parado; pensando = tudo branco pulsando em degraus; respondendo = falha percorrendo o anel. Timer só roda nos estados animados | `frontend/orb.py` (novo), `frontend/widgets.py` (`JarvisOrb`, `CopilotHero`), `frontend/jarvis.tcss` |
-| 4 | Rodapé em 1 linha: `Footer` dentro do `#statusbar` (telemetria à esquerda, atalhos à direita); `^t` some no Copilot; `Sair` volta a ser o último | `frontend/app.py`, `frontend/jarvis.tcss` |
-| 5 | Protocolo crítico: a classe `-critical` agora vai para a tela da conversa (antes caía no modal se ele já estivesse aberto); modal tem a mesma linha única com `s`/`n` e foca "Manter"; barra de voz pede "sim" ou "não" | `frontend/app.py`, `frontend/widgets.py`, `frontend/jarvis.tcss` |
-| 6 | Voz injetável (`JarvisApp(voice=...)`) e loop de voz encerra junto com o app | `frontend/app.py` |
-
-**Decisões:** comandos `/` só existem no Chat (no Copilot não há campo de texto). "Ouvindo" cobre todo o tempo com o microfone aberto: o `listen()` não avisa quando a fala começa.
-
-**Testes novos:** `test_tui_orb.py` (grade 16×16 simétrica, pensando só branco e pulsando, falha do anel percorre os 8 oitavos, meio-bloco 16×8) e, em `test_tui_app.py`, Copilot só voz, `Ctrl+T`, turno de voz completo (stream + selo + fala + sessão), orb pensando até a 1ª saída, rodapé em 1 linha e crítico com modal aberto.
-
----
-
-**Data:** 2026-11-03
-**Escopo:** Interface trocada por uma TUI de terminal (Textual), na nova pasta `frontend/` (pacote Python). Frontend React/PyWebView removido. Modos **Chat** e **Copilot** alternados com `Shift+Tab`; voz opcional. Visual segue o canvas de design "JARVIS TUI".
-
----
-
-## Resumo
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | TUI Textual: chat em Markdown com streaming, sessões, anexos, telemetria em 1 linha, alertas | `frontend/app.py`, `frontend/widgets.py`, `frontend/commands.py`, `frontend/jarvis.tcss` (novos), `backend/main.py` |
-| 2 | Modos Chat (sem skills) e Copilot (skills + confirmação de ação crítica) | `services/brain.py`, `services/chat.py`, `prompts/mode_chat.md`, `prompts/mode_copilot.md` (novos) |
-| 3 | Voz opcional e lazy: mic/pyttsx3/pygame só abrem com `/voice` | `services/listen.py`, `services/speak.py`, `core/alerts.py`, `core/state.py` |
-| 4 | SQL de sessões e toggles de skills saíram da bridge | `services/sessions.py`, `services/skill_settings.py` (novos) |
-| 5 | Logger não escreve no stdout com a TUI ativa | `core/logger.py` |
-| 6 | Remoção do HUD: React/Vite em `frontend/`, `core/bridge.py`, `escape_js`, `pywebview` | `core/__init__.py`, `core/utils.py`, `core/uploads.py`, `requirements.txt`, CI, dependabot |
-| 7 | `frontend/` reaproveitada para a TUI + design aprovado aplicado | `frontend/*`, `services/brain.py` (`on_route`), `services/sessions.py` (hora local), `backend/tests/__init__.py`, `pyproject.toml` |
-
----
-
-## 7. Pasta `frontend/` e design aplicado
-
-**Pasta:** a TUI saiu de `backend/tui/` para `frontend/` na raiz, como pacote Python `frontend`. `backend/main.py` põe a raiz no `sys.path` e importa `frontend.app`; `boot.bat` não muda. `backend/tests/__init__.py` faz o mesmo para os testes. `frontend/pyproject.toml` herda o ruff do backend (com `known-first-party` para `core`, `services`, `frontend`...), e o CI passou a rodar `ruff check ../frontend` e `compileall` nela.
-
-**Design (canvas "JARVIS TUI"):**
-- Barra superior em 4 partes: marca, selo do modo (CHAT branco / COPILOT escuro sobre ciano), título da sessão e info à direita: "sessão N de M" no Chat, "skills ativas: N" no Copilot, "⚠ PROTOCOLO CRÍTICO" no estado crítico.
-- Cabeçalhos com hora (`você › 14:02`); no Copilot a resposta ganha o selo da skill: `[AUDIO_CONTROL] executando…` → `✓` (ou `✗` em erro). Para isso `execute_command_stream` ganhou `on_route(intent)`, chamado quando a mensagem vira skill.
-- Paleta revisada para contraste (cinza `#8593ab`, azul do usuário `#6aa8ff`), barra de status dividida (telemetria à esquerda, dica à direita) e footer com teclas em ciano.
-- **Trocar sessão:** campo de filtro por título (Enter abre o primeiro, ↓ vai para a lista), `●` atual, `★` fixada e coluna de quando (`HH:MM`, `ontem`, `dd/mm`).
-- **Confirmação crítica:** botões reais `s · Encerrar` / `n · Manter` e contagem "Expira em N s"; sem resposta, fecha como "não" no prazo da ação.
-
-**Bugs corrigidos no caminho:**
-- O badge `[APP_CONTROL]` sumia do cabeçalho: o markup do Textual lê colchetes em MAIÚSCULAS como tag e o `escape` dele não cobre esse caso. O cabeçalho agora é montado com `Content.assemble`.
-- Horários vinham em UTC (o SQLite grava `CURRENT_TIMESTAMP` em UTC): `sessions.to_local()` converte para a hora local no histórico e na lista de sessões.
-
-**Testes novos:** selo da skill no Copilot (e ausência no Chat), barra superior (selo, "sessão N de M", "skills ativas", crítico), filtro do seletor de sessões, confirmação que expira como "não" e que aceita `s`, `format_when`, `to_local`.
-
----
-
-## 1. TUI (Textual)
-
-**Por quê:** o HUD (React 19 + Three.js + Framer Motion dentro do WebView2) pesava demais em RAM/GPU. A TUI roda no próprio terminal, 100% Python.
-
-**Layout:** barra superior (modo + título da sessão + aviso crítico), log de mensagens (JARVIS em Markdown), barra de anexo, input, barra de status (CPU/RAM/GPU, voz, modelo) e footer com atalhos.
-
-**Atalhos:** `Shift+Tab` modo · `Ctrl+N` nova sessão · `Ctrl+O` sessões · `Ctrl+R` regenerar · `Ctrl+T` voz · `Esc` interrompe o stream · `↑` (input vazio) edita a última mensagem · `Ctrl+Q` sair.
-
-**Comandos:** `/help`, `/new`, `/sessions`, `/rename`, `/pin`, `/regen`, `/edit`, `/attach <caminho>`, `/detach`, `/mode`, `/voice`, `/skills [on|off X]`, `/clear`, `/quit`. `//texto` envia mensagem começando com barra.
-
-**Streaming:** worker em thread consome `execute_command_stream` e re-renderiza a bolha no máximo a cada 50 ms. Histórico salvo no SQLite igual ao HUD antigo (sessões antigas continuam abrindo).
-
-**Anexos:** `/attach` de imagem vai junto com a próxima mensagem (modelo de visão); áudio é transcrito pelo Whisper e cai no input, como no HUD.
-
-**Telemetria:** polling a cada 3 s (`TELEMETRY_INTERVAL`) numa linha — sai o stream push delta-gated da bridge.
-
-**Fora do escopo:** KaTeX (o terminal mostra LaTeX em bloco de código), reator animado, legendas.
-
-## 2. Modos Chat e Copilot
-
-- `execute_command_stream(..., mode="chat"|"copilot")`. **Chat** classifica com `skip_skills=True` e nunca executa skill (antes o chat do HUD executava skills sem querer). **Copilot** libera as skills.
-- Prompt do modo saiu de string Python para `prompts/mode_chat.md` / `prompts/mode_copilot.md`.
-- Ação crítica (ex: matar processo pesado) abre um modal `s/n` na TUI → `brain.confirm_pending_action()`. A lógica duplicada de confirmação em `execute_command`/`execute_command_stream` virou uma função só.
-
-## 3. Voz opcional e lazy
-
-- `state.voice_enabled` (começa `False`). `/voice` ou `Ctrl+T` liga o loop de voz antigo do `main.py`, agora numa thread daemon que espelha transcrição e resposta no log.
-- `services/listen.py`: `Ear()` não é mais criado no import (`get_ear()` lazy); `ear_pause/resume` são no-op sem ouvido.
-- `services/speak.py`: pyttsx3/pygame/edge-tts inicializados na 1ª fala; `speak()` só exibe o texto (via `state.announce`) quando a voz está desligada. Removido `typewriter_effect` (escrevia no stdout e corromperia a TUI).
-- `core/alerts.py` e `services/brain.py`: import tardio dos sentidos; `scan_system_hardware()` saiu do import do brain e roda em thread no boot.
-
-## 4–5. Serviços extraídos e logger
-
-- `services/sessions.py`: histórico, editar/regenerar, título, pin e sessões recentes (todas as conexões fecham em `finally`).
-- `services/skill_settings.py`: listar e ligar/desligar skills/categorias.
-- `core/logger.py`: `log.use_tui(handler)` remove o handler de console; WARNING+ vira notificação na TUI; arquivo de log continua.
-
-## 6. Removido
-
-O app React/Vite inteiro de `frontend/` (a pasta agora guarda a TUI), `core/bridge.py` (+ `docs/core/bridge.md`), `core.utils.escape_js` (+ `tests/test_utils.py`), `read_upload_as_data_url`, `pywebview` do `requirements.txt`, stub `webview` dos testes, job `frontend` do CI e o bloco npm do dependabot. Settings `TELEMETRY_*_DELTA` removidos.
-
-## Testes
-
-- Novos: `test_tui_app.py` (Pilot: Shift+Tab, stream + log no banco, Copilot, `/new` e `Ctrl+N`, regenerar, comando desconhecido), `test_tui_commands.py`, `test_mode_routing.py`, `test_sessions_service.py`, `test_lazy_imports.py`.
-- `test_alerts_cache.py` passou a mockar `alerts._announce`.
-- Resultado: **152 passam**; 11 falhas em `test_work_macros_spotify.py` já existiam antes desta mudança (funções `_sanitize_spotify_uri`/`_is_playing_title` ausentes) — por isso o `pytest` segue comentado no CI. `ruff check` limpo em `backend/` e `frontend/`.
-- **Não medido:** consumo de RAM/CPU antes × depois. **Não testado ao vivo:** voz, Ollama real e skills reais na TUI (testes usam stream fake).
-
----
-
-## Mudança anterior
-
-**Data:** 2026-09-28
-**Escopo:** Multimodalidade no Chat Mode — upload de imagem (análise via modelo de visão local) e upload de áudio (transcrição local via Whisper).
-
----
-
-## Resumo
-
-| # | Feature | Arquivos |
-|---|---------|----------|
-| 1 | Upload de imagem no chat → resposta via modelo de visão Ollama (Moondream) | `core/config.py`, `core/llm.py`, `services/chat.py`, `services/brain.py`, `core/bridge.py`, `core/database.py`, `core/uploads.py` (novo), `prompts/vision_context.md` (novo) |
-| 2 | Upload de áudio no chat → transcrição local via faster-whisper, preenchendo a caixa de texto | `core/config.py`, `core/transcription.py` (novo), `core/uploads.py` (novo), `core/bridge.py` |
-| 3 | Frontend: anexar/arrastar imagem ou áudio, preview real de imagem, botão de clipe único | `ChatInput.jsx`, `ChatPanel.jsx`, `MessageList.jsx`, `AttachmentPreview.jsx` (novo), `BridgeAPI.js` |
-
----
-
-## 1. Upload de imagem — análise via modelo de visão
-
-**O quê:** usuário anexa/arrasta uma imagem no Chat Mode e faz uma pergunta sobre ela (ex: "o que é isso?", "descreve o erro nessa screenshot"). A resposta é gerada por um modelo de visão local via Ollama (**Moondream** por padrão, configurável) e streamada na UI exatamente como uma resposta de texto normal.
-
-**Backend:**
-- `core/config.py`: novos settings `OLLAMA_VISION_MODEL` (default `moondream`), `OLLAMA_VISION_KEEP_ALIVE` (default `5m` — não fica residente na VRAM como o modelo de chat principal), `TIMEOUT_VISION`, `DIR_UPLOADS`, `MAX_UPLOAD_SIZE_MB`, `ALLOWED_IMAGE_MIME`/`ALLOWED_AUDIO_MIME`.
-- `core/llm.py`: `query_ollama`/`query_ollama_stream` ganharam `model=` e `keep_alive=` opcionais (default preserva comportamento atual).
-- `core/uploads.py` (novo): `save_base64_upload()` valida mime/tamanho e grava o anexo em `backend/uploads/<kind>/`; `read_upload_as_data_url()` relê um anexo salvo pra reconstruir preview ao reabrir sessão antiga.
-- `prompts/vision_context.md` (novo): instrução curta e dedicada pro modelo de visão — não reusa o system prompt completo do JARVIS (personalidade/telemetria/histórico), já que modelos pequenos como Moondream degradam com contexto irrelevante.
-- `services/chat.py`: `ask_local_ai_stream()` ganhou parâmetro `images=None`; quando presente, monta uma lista de mensagens mínima (`vision_context.md` + pergunta + imagem) e chama `query_ollama_stream(model=OLLAMA_VISION_MODEL, keep_alive=OLLAMA_VISION_KEEP_ALIVE)`.
-- `services/brain.py`: `execute_command_stream()` ganhou passthrough `images=None`.
-- `core/bridge.py`: `chat_message(text, session_id, images=None)` — salva a(s) imagem(ns) recebida(s) (base64) em disco, loga a interação com referência ao anexo, e repassa pro pipeline de streaming existente (zero mudança no lado de recebimento do frontend).
-- `core/database.py`: tabela `history` ganhou colunas `attachment_type`/`attachment_path` (migração automática via `PRAGMA table_info` + `ALTER TABLE`, retrocompatível com bancos existentes). `get_chat_history` (bridge.py) relê imagens do disco como data URL pra reconstruir o preview ao reabrir uma sessão.
-
-**Frontend:**
-- `ChatPanel.jsx`: `handleFileChange` reescrito como `processFiles()` — agora lê o `File` de verdade via `FileReader` (base64), em vez de descartá-lo (comportamento anterior só guardava nome/ícone). `handleSend` monta o payload de imagem e chama `chat_message(text, sessionId, imagePayload)`.
-- `ChatInput.jsx`: `accept="image/*,audio/*"` no input de arquivo; adicionado drag-and-drop na área do input (spring transition, sem duplicar lógica — reusa `processFiles`).
-- `MessageList.jsx` / `AttachmentPreview.jsx` (novo): imagens anexadas agora renderizam thumbnail real (`<img>`) na bolha da mensagem, não só um chip com nome de arquivo.
-
----
-
-## 2. Upload de áudio — transcrição local via Whisper
-
-**O quê:** usuário anexa um arquivo de áudio no chat. Ao enviar, o áudio **sempre** intercepta o envio (mesmo com texto já digitado) e é transcrito localmente via **faster-whisper** (modelo `base`, PT-BR). O texto preenche a caixa de input — **não é enviado automaticamente**, o usuário revisa e aperta Enviar.
-
-**Backend:**
-- `core/config.py`: `WHISPER_MODEL_SIZE` (default `base`), `WHISPER_DEVICE` (`auto`/`cpu`/`cuda`), `WHISPER_COMPUTE_TYPE` (`int8`), `TIMEOUT_TRANSCRIPTION`.
-- `core/transcription.py` (novo): `transcribe_audio_file()` — singleton lazy do `WhisperModel` (carrega só na 1ª transcrição, não trava o boot).
-- `core/bridge.py`: novo método `transcribe_audio(audio_b64, mime_type, filename)` — síncrono do ponto de vista do frontend (`await callApi(...)`), roda a transcrição numa thread própria com `.join()` internamente (segue a convenção do projeto de I/O pesado rodar em thread). Retorna `{"success": bool, "text"/"error": ...}`. Não loga no histórico nem passa pelo LLM — é uma ação isolada de transcrição.
-
-**Frontend:**
-- `ChatPanel.jsx`: `handleSend` — qualquer arquivo de áudio anexado sempre dispara `transcribe_audio(...)` em vez de `chat_message(...)`; resultado é concatenado no `inputValue`.
-- `BridgeAPI.js`: mock fallback pra `transcribe_audio` (modo browser-dev sem pywebview).
-
----
-
-## Dependências novas
-
-`backend/requirements.txt`: `faster-whisper`, `Pillow`.
-
-**Passos manuais necessários antes de testar:**
-```bash
-ollama pull moondream
-cd backend && pip install -r requirements.txt
-```
-
----
-
-## Limitações conhecidas / follow-ups não implementados
-
-- Sem OCR dedicado (Tesseract) — decisão explícita do usuário, só modelo de visão puro (Moondream).
-- Envio de múltiplas imagens numa mesma mensagem: só a primeira é persistida com `attachment_path` no histórico (todas são enviadas ao modelo de visão, mas só uma fica referenciada pra preview ao reabrir sessão).
-- Sem pré-aviso de "modelo de visão não baixado" — se `ollama pull moondream` nunca rodou, o erro cai no tratamento genérico já existente (`query_ollama_stream`).
-- Sem redimensionamento client-side de imagens grandes antes do envio (mitigado por `MAX_UPLOAD_SIZE_MB=15` no backend).
-
----
-
-# Otimização de performance do frontend — Fase 1: streaming do chat
-
-**Data:** 2026-09-29
-**Escopo:** reduzir re-renders e re-parse de markdown/KaTeX durante o streaming de respostas no Chat Mode.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | `MessageItem` com `React.memo`; `MarkdownBody` memoizado por texto; plugins do ReactMarkdown como constantes de módulo | `CHAT/MessageList.jsx` |
-| 2 | Chunks do stream acumulados num buffer e aplicados 1x por frame (`requestAnimationFrame`); `isDone` faz flush síncrono | `ChatPanel.jsx` |
-| 3 | Scroll `auto` durante o streaming (antes: um `smooth` novo por chunk) | `CHAT/MessageList.jsx` |
-| 4 | Handlers de editar/regenerar estáveis (leem `messagesRef`), não trocam identidade a cada chunk | `ChatPanel.jsx` |
-| 5 | Último-mensagem-do-usuário por loop reverso em `useMemo` (antes: cópia + reverse do array a cada render) | `CHAT/MessageList.jsx` |
-| 6 | `JarvisPixelAvatar` memoizado; `animate-pulse` só fora de `idle` (avatares de mensagens antigas ficam estáticos) | `CHAT/JarvisPixelAvatar.jsx` |
-| 7 | App passa `hasMessages` (boolean) ao orb em vez de ler `chatMessages.length` várias vezes; `console.log` removido dos listeners quentes (`receiveStatus`, `updateHudState`) | `App.jsx` |
-| 8 | Vitest + Testing Library (dev): testes de batching do stream, flush no `isDone`, markdown e scroll | `vite.config.js`, `package.json`, `components/__tests__/chatStreaming.test.jsx` |
-
-**Decisão:** `chatMessages` permanece no `App` (não foi movido para o `ChatPanel`) porque o histórico precisa sobreviver à troca de modo — `ChatPanel` desmonta em talk/code.
-
-**Como testar:** `cd frontend && npm test && npm run lint && npm run build`.
-
----
-
-# Simplificação da interface e redução de RAM — Fase 2
-
-**Data:** 2026-09-29
-**Escopo:** remover a tela CODE e dependências mortas, achatar a UI (sem blur) e deixar o chat minimalista.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | **Removido o modo CODE** e a tela de seleção de modo (boot entra direto em `talk`; troca só pelo header Copilot/Chat) | `App.jsx`, `HeaderNavigation.jsx`, `CORE/NavIcons.jsx`; removidos `CodePanel`, `CODE/*`, `JarvisPixelReactor`, `ModeSelectionScreen` |
-| 2 | **Removidas deps sem uso:** `@react-three/postprocessing`, `animejs`, `path`, `@tailwindcss/postcss` | `package.json` |
-| 3 | **Orb reescrito:** 1 canvas (antes 2 + `mix-blend-screen`), 140 partículas (antes 320), sem linhas de conexão, sem `blur(60px)`, sem lente com `backdrop-filter`, 10fps em idle / 30fps ativo, pausa com a janela oculta, DPR limitado a 2, `React.memo` | `LiquidAuraReactor.jsx`; removido `ReactorCoreLens` |
-| 4 | **Zero `backdrop-filter`** no app (havia ~20 camadas, incluindo a janela inteira) | `App.jsx`, `index.css`, `SkillsSidebar`, `JarvisSubtitles`, `LiveTelemetry`, `StartupScreen`, header, chat |
-| 5 | **Chat simplão:** sem avatar, sem bolha do Jarvis (texto direto), bolha simples do usuário, ações em texto (Copiar/Editar/Regenerar), "Pensando…" em vez de bolha animada, input e sidebar chapados | `CHAT/MessageList.jsx`, `ChatInput.jsx`, `ChatSidebar.jsx`, `ChatPanel.jsx`; removido `JarvisPixelAvatar` |
-| 6 | `ChatPanel` (markdown + KaTeX) carregado sob demanda com `React.lazy`; `manualChunks` com match exato (antes `includes('react')` puxava react-markdown e lucide) | `App.jsx`, `vite.config.js` |
-| 7 | CSS: removidos `@import` do Google Fonts (fonte do sistema, funciona offline), scanline/glitch/tech-grid sem uso, `App.css` órfão; `.hud-critical-mode` anima só `opacity` | `index.css` |
-| 8 | CLAUDE.md atualizado: sem modo `code`; Lei 2 agora proíbe `backdrop-filter` | `CLAUDE.md` |
-
-**Bundle (JS carregado no startup):** ~870KB → ~380KB (index 34KB + framer 136KB + react 211KB). O chat (449KB) só carrega ao abrir o modo Chat.
-
-**Observação de RAM:** não foi medida com profiler. As mudanças atacam as maiores fontes prováveis de memória no WebView2 (superfícies de compositing de `backdrop-filter`, canvases com blend, camadas com blur). Comparar antes/depois no Gerenciador de Tarefas (processos `msedgewebview2`).
-
----
-
-# Ollama: opções de VRAM (`num_ctx` / `num_gpu`) com fallback
-
-**Data:** 2026-09-29
-**Escopo:** permitir empurrar o modelo para a VRAM sem risco de derrubar o chat.
-
-| # | Mudança | Arquivos |
-|---|---------|----------|
-| 1 | Novas settings opcionais `OLLAMA_NUM_CTX` e `OLLAMA_NUM_GPU` (vazio = não repassa; comportamento atual preservado). `0` é respeitado (tudo na CPU) | `core/config.py` |
-| 2 | `_build_options()` centraliza `options`; `query_ollama`, `query_ollama_stream` e `warm_up_ollama` usam as mesmas opções (evita reload do modelo por opções divergentes) | `core/llm.py` |
-| 3 | **Fallback:** se o Ollama recusar `num_gpu` (VRAM insuficiente), a opção é desativada para o processo todo e a chamada repete 1x sem ela. No stream, só repete se nada foi emitido ainda | `core/llm.py` |
-| 4 | Testes: opções padrão/configuradas, `num_gpu=0`, fallback normal e stream, sem retry após saída parcial | `tests/test_llm_options.py` |
-
-**Não incluído (a discutir):** as 7 skills que chamam `/api/generate` direto via `requests` (sem `keep_alive`/`options`) ainda não usam essas opções. Enquanto isso, se `OLLAMA_NUM_CTX`/`OLLAMA_NUM_GPU` forem ativados, uma chamada de skill pode causar reload do modelo por divergência de opções.
-
-**Servidor (variáveis do Windows, reiniciar o Ollama):** `OLLAMA_MAX_LOADED_MODELS=1`, `OLLAMA_NUM_PARALLEL=1`, `OLLAMA_FLASH_ATTENTION=1`.
+| 1 | `resolve_period(texto)` devolve o tipo de período (dia, intervalo ou próxima reunião), início, fim e rótulo. Períodos entendidos: **semana** (de hoje até domingo), **fim de semana**, **mês** (de hoje até o fim do mês), **ano** (de hoje até 31/12) e os próximos ("próxima semana", "semana que vem", "próximo mês", "mês que vem", "próximo ano"), que pegam o período inteiro. Palavras dentro de outras não contam ("ano" em "anota"). Sem período, vale o `resolve_day` de antes | `backend/core/google_calendar.py` |
+| 2 | `events_range(início, fim)` pagina a API (`pageToken`, até 250 eventos); `events(dia)` passa a usá-la | `backend/core/google_calendar.py` |
+| 3 | `format_range` agrupa por dia: `- **qua 25/11** · 09:00 Daily · 14:00 Dentista`, com o intervalo no cabeçalho ("3 eventos nesta semana (25/11 a 29/11)"). Um evento que começou antes do período (férias) entra no primeiro dia. Acima de 40 eventos, mostra "… e mais N" | `backend/core/google_calendar.py` |
+| 4 | Skill `CALENDAR` usa o período; as palavras-chave do pré-filtro ganham mês, ano, fim de semana e marcado | `backend/skills/productivity/calendar_agenda.py` |
+| 5 | O contexto da Agenda no Chat usa o mesmo período, com o dia em cada linha (`- qui 26/11 10:00–11:00 Reunião`). O prompt passa a dizer "Período consultado" | `backend/services/live_context.py`, `backend/prompts/calendar_context.md` |
+| 6 | Prompt da skill e exemplos do classificador com semana e mês | `backend/prompts/skills/calendar.md`, `backend/prompts/classify_intent.md` |
+
+### Documentação
+
+- `AGENTS.md`: `google_calendar` com períodos, `gmail.trash`, `email_trash`, `/email apagar`.
+- `docs/arquitetura.md`: Lixeira em 5.7 e nova seção 5.7.1, Agenda por período.
+- `docs/integracoes-oauth.md`: Lixeira no Gmail e aviso para **não** marcar `https://mail.google.com/`.
+- `backend/skills/README.md`: `EMAIL_TRASH` e o `CALENDAR` com períodos.
+
+### Testes
+
+**Novos:**
+- `test_calendar_periods.py`: semana, próxima semana, fim de semana, mês, próximo mês, ano, próximo ano, dias como antes, "ano" dentro de "anota"; paginação e limite do `events_range`; agrupamento por dia, evento em andamento, lista vazia e longa; o caso do print ("qual compromisso eu tenho essa semana?") na skill e no contexto do Chat.
+- `test_email_trash.py`: seleção por números e por categoria; frase vaga não apaga nada; só move depois do "sim"; "não" mantém; lista vazia busca antes; confirmação ocupada; erro do Gmail; não conectado; contrato da skill.
+
+**Ajustados:**
+- `test_gmail.py`: `trash` move cada mensagem e nunca chama exclusão; `delete` continua sem existir.
+- `test_tui_tools.py`: `/email apagar 2 3`.

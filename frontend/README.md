@@ -42,7 +42,7 @@ Comandos `/` só existem no Chat.
 |---|---|---|
 | Boot (BIOS, `[  OK  ]`) | início | `screens/boot.py` |
 | Atualização disponível | início, se houver Release novo | `screens/update.py` |
-| Dashboard (CPU, RAM, GPU, rede, processos, saúde) | `/status` | `screens/status.py` |
+| Dashboard (CPU, RAM, GPU, rede, energia, processos, saúde) | `/status` | `screens/status.py` |
 | Cartuchos das skills | `/skills` | `screens/skills.py` |
 | Log de atividade + timeline do último turno | `/log` | `screens/log.py` |
 | Memória (vault do Obsidian) | `/vault` | `screens/vault.py` |
@@ -71,9 +71,11 @@ Todas herdam de `JarvisScreen` (`screens/base.py`): topo com selo, corpo e a lin
 | `/rota [<local> <endereço>]` | Cadastra um local fixo; sem argumento lista |
 | `/clip [explicar\|traduzir\|resumir] [n]` | Age sobre o clipboard (ou sobre o item `n` do histórico). Explicar vira um turno do Chat |
 | `/clip hist`, `/clip buscar <termo>`, `/clip usar <n>`, `/clip limpar` | Histórico persistente do clipboard: listar, buscar, recopiar, apagar |
+| `/email [ler <n> \| responder <n> <texto> \| novo <para> <texto> \| apagar <n…\|promoções> \| organizar \| vip <e-mail> \| contato <apelido> <e-mail> \| assinatura <texto>]` | Gmail: sem argumento lista por prioridade; enviar, apagar (Lixeira) e organizar pedem confirmação |
+| `/instalar <programa>`, `/baixar <programa>` | Download inteligente pelo winget: instala ou baixa o instalador para Downloads (pede confirmação) |
 | `/ideia <texto>` | Anota uma ideia em 🧠 Brainstorms no Obsidian |
 | `/lembrete [<quando> <assunto> \| rm <n>]` | Lembrete com horário (`em 30 min …`, `às 18h …`); sem argumento lista |
-| `/rede [confiar <n> \| bloquear <ip> \| reset]` | Perímetro de rede: aparelhos, portas expostas, programas na internet |
+| `/rede [confiar <n> \| bloquear <ip> \| mantidos \| esquecer <n> \| reset]` | Perímetro de rede: aparelhos, portas expostas, programas na internet |
 | `/focus [min\|stop\|skip\|status]`, `/dnd [on\|off\|min]`, `/silent [on\|off]` | Pomodoro, Não Perturbe, Modo Apresentação |
 | `/clear` | Limpa a tela (`Ctrl+L`), sem apagar o histórico |
 | `/quit` | Sai (`Esc`) |
@@ -82,7 +84,7 @@ Todas herdam de `JarvisScreen` (`screens/base.py`): topo com selo, corpo e a lin
 
 ## Linha de status
 
-Uma única linha: telemetria (CPU, RAM, GPU, rede a cada 3 s) · selo de foco (`◷ FOCO 24m 1/4`, `☾ DND`, `[SILENT]`) · voz, e os atalhos à direita. Estado crítico pinta a conversa de vermelho (classe `-critical`); o Copilot usa a classe `-copilot`.
+Uma única linha: telemetria (CPU, RAM, GPU, rede e watts a cada 3 s) · selo de foco (`◷ FOCO 24m 1/4`, `☾ DND`, `[SILENT]`) · voz, e os atalhos à direita. Estado crítico pinta a conversa de vermelho (classe `-critical`); o Copilot usa a classe `-copilot`.
 
 ## Testes
 

@@ -692,12 +692,23 @@ class SystemInfo:
                 f"- Rede: ↓{net['download_speed']} | ↑{net['upload_speed']}\n"
                 f"- Disco: {disk_str}\n"
                 f"- Energia: {batt['percent']}% ({'AC' if batt['plugged'] else 'Bateria'})\n"
+                f"{self._power_line()}"
             )
             return context_str
             
         except Exception as e:
             log.critical(f"⚠️ Erro ao ler sensores: {e}")
             return "[ERRO: Sensores offline. Impossível ler status do sistema]"
+
+    @staticmethod
+    def _power_line():
+        """Consumo estimado (core/power.py) — o Chat responde "quantos watts" com dado real."""
+        try:
+            from core import power
+            return f"- Consumo: {power.reading_text(power.current())}\n"
+        except Exception as e:
+            log.debug(f"Consumo indisponível: {e}")
+            return ""
 
     def get_detailed_hardware_context(self):
         """Busca os dados estáticos do banco e formata para o Prompt."""

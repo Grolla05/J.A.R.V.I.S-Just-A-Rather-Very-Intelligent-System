@@ -12,8 +12,8 @@ COMMANDS = {
     "pin":      ("/pin", "fixa/desafixa a sessão atual"),
     "regen":    ("/regen", "regenera a última resposta (Ctrl+R)"),
     "edit":     ("/edit", "edita a última mensagem e reenvia (↑ com input vazio)"),
-    "attach":   ("/attach <caminho>", "imagem → modelo de visão; áudio → transcreve no input"),
-    "detach":   ("/detach", "remove o anexo pendente"),
+    "attach":   ("/attach <caminho>", "imagem → modelo de visão; áudio → transcreve; texto/código/PDF → vai junto da mensagem"),
+    "detach":   ("/detach", "remove os anexos pendentes"),
     "mode":     ("/mode [chat|copilot]", "troca o modo (Shift+Tab)"),
     "voice":    ("/voice", "liga/desliga wake word + voz (Ctrl+T)"),
     "skills":   ("/skills [on|off <skill|categoria>]", "cartuchos das skills (ou alterna direto)"),
@@ -21,15 +21,23 @@ COMMANDS = {
     "log":      ("/log", "log de atividade com filtros e o último turno do Copilot"),
     "vault":    ("/vault [termo]", "memória no Obsidian: árvore, busca e nota no chat"),
     "web":      ("/web <pergunta>", "pesquisa na internet e resume com fontes"),
+    "checar":   ("/checar <afirmação>", "Fact-Checking: cruza fontes independentes e dá o veredito (confirmado, falso, impreciso)"),
+    "formulario": ("/formulario [link]", "preenche o formulário (link ou aba aberta) com seus dados e só envia com \"sim\""),
     "gh":       ("/gh [prs|issues|commit|ci] [dono/repo]", "GitHub: PRs, issues, último commit e CI"),
     "briefing": ("/briefing", "briefing do dia: clima, agenda, trânsito, máquina e GitHub"),
     "rota":     ("/rota [<local> <endereço>]", "cadastra um local fixo (casa, trabalho, faculdade…); sem argumento lista"),
-    "clip":     ("/clip [explicar|traduzir|resumir] [n] · hist · buscar <termo> · usar <n> · limpar",
+    "clip":     ("/clip [explicar|traduzir|resumir|checar] [n] · hist · buscar <termo> · usar <n> · limpar",
                  "age sobre o que você copiou ou sobre o histórico (monitor no /config)"),
+    "email":    ("/email [ler <n> | responder <n> <texto> | novo <para> <texto> | apagar <n…|promoções> | organizar | vip <e-mail> | contato <apelido> <e-mail> | assinatura <texto>]",
+                 "Gmail: e-mails por prioridade, ler, responder, escrever e organizar (envio sempre confirmado)"),
+    "instalar": ("/instalar <programa>", "procura no winget e instala (pede confirmação)"),
+    "baixar":   ("/baixar <programa>", "baixa o instalador pelo winget para Downloads (pede confirmação)"),
     "ideia":    ("/ideia <texto>", "anota uma ideia em 🧠 Brainstorms no Obsidian (a conversa também registra sozinha)"),
     "lembrete": ("/lembrete [<quando> <assunto> | rm <n>]",
                  "lembrete com horário (em 30 min…, às 18h…); sem argumento lista os pendentes"),
-    "rede":     ("/rede [confiar <n> | bloquear <ip> | reset]",
+    "vigiar":   ("/vigiar [<link> [preço abaixo de N] | dono/repo | rm <n>]",
+                 "Web Watch: avisa quando a página muda, o preço cai ou sai release/commit; sem argumento lista"),
+    "rede":     ("/rede [confiar <n> | bloquear <ip> | bloqueios | desbloquear <n> | mantidos | esquecer <n> | reset]",
                  "perímetro de rede: aparelhos, portas expostas e programas na internet (vigia no /config)"),
     "focus":    ("/focus [min|stop|skip|status]", "pomodoro 25/5 (liga o Não Perturbe no foco)"),
     "dnd":      ("/dnd [on|off|min]", "Não Perturbe: silencia notificações do Windows e alertas"),
@@ -40,7 +48,7 @@ COMMANDS = {
 }
 
 # /help saiu (a paleta Ctrl+K lista tudo); quem digitar por hábito cai na paleta.
-ALIASES = {"net": "rede", "network": "rede", "lembretes": "lembrete", "lembrar": "lembrete", "remind": "lembrete", "idea": "ideia", "insight": "ideia", "q": "quit", "exit": "quit", "help": "menu", "h": "menu", "?": "menu", "s": "sessions", "n": "new"}
+ALIASES = {"net": "rede", "network": "rede", "lembretes": "lembrete", "lembrar": "lembrete", "remind": "lembrete", "idea": "ideia", "vigia": "vigiar", "watch": "vigiar", "checa": "checar", "fact": "checar", "factcheck": "checar", "form": "formulario", "formulário": "formulario", "insight": "ideia", "q": "quit", "exit": "quit", "help": "menu", "h": "menu", "?": "menu", "s": "sessions", "n": "new"}
 
 
 @dataclass(frozen=True)
@@ -114,6 +122,32 @@ def parse_rota_arg(arg):
     return "set", word.lower(), rest
 
 
+# Botões do ConfirmScreen por tipo de ação pendente (core/pending.py). Sem entrada:
+# Confirmar/Cancelar. "Encerrar/Manter" é só para processo (vigia de rede, alertas).
+CONFIRM_LABELS = {
+    "KILL_PROCESS": ("Encerrar", "Manter"), "NET_KILL_PROCESS": ("Encerrar", "Manter"),
+    "APP_CLOSE": ("Fechar", "Manter"), "BROWSER_CLOSE_OTHERS": ("Fechar", "Manter"),
+    "BROWSER_CLOSE_ALL": ("Fechar", "Manter"), "EMAIL_SEND": ("Enviar", "Não enviar"),
+    "FORM_SUBMIT": ("Enviar", "Não enviar"), "EMAIL_TRASH": ("Lixeira", "Manter"),
+    "EMAIL_ORGANIZE": ("Organizar", "Cancelar"), "SOFTWARE_INSTALL": ("Instalar", "Cancelar"),
+    "POWER_DOWN": ("Desligar", "Cancelar"), "GITHUB_CREATE_ISSUE": ("Criar", "Cancelar"),
+    "HEADLESS_TASK": ("Executar", "Cancelar"),
+}
+_MD_BOLD_RE = re.compile(r"\*\*(.+?)\*\*|__(.+?)__")
+_MD_ITALIC_RE = re.compile(r"(?<![\w*])[_*]([^_*\n]+?)[_*](?![\w*])")
+
+
+def confirm_labels(kind):
+    """(sim, não) dos botões para o tipo da pendência."""
+    return CONFIRM_LABELS.get(str(kind or ""), ("Confirmar", "Cancelar"))
+
+
+def plain_confirm_text(text):
+    """A pergunta vem em Markdown (bolha do chat); o modal mostra texto puro."""
+    text = _MD_BOLD_RE.sub(lambda m: m.group(1) or m.group(2), text or "")
+    return _MD_ITALIC_RE.sub(r"\1", text).replace("`", "")
+
+
 def unescape(text):
     """'//texto' → '/texto' (mensagem que começa com barra)."""
     return text[1:] if text.startswith("//") else text
@@ -132,22 +166,28 @@ def is_image_path(path):
     return Path(path).suffix.lower() in IMAGE_EXTS
 
 
+def _is_dropped_file(path):
+    """Caminho absoluto de um arquivo que existe (o Windows Terminal cola caminho completo)."""
+    return path.is_absolute() and path.is_file()
+
+
 def dropped_paths(text):
     """Caminhos de arquivos soltos no terminal, ou [] se o texto não for só isso.
 
-    Só aceita quando **todo** pedaço é um arquivo existente de imagem/áudio —
+    Só aceita quando **todo** pedaço é um caminho absoluto de arquivo existente —
     assim texto comum colado (mesmo com um caminho no meio) segue para o input.
+    Qualquer tipo: quem anexa (`core.uploads.load_any`) diz se dá para usar.
     """
     if not text or not text.strip():
         return []
     whole = Path(text.strip().strip('"').strip("'")).expanduser()
-    if whole.suffix.lower() in IMAGE_EXTS | AUDIO_EXTS and whole.is_file():
+    if _is_dropped_file(whole):
         return [str(whole)]  # um caminho com espaço que chegou sem aspas
     paths = []
     for match in _PATH_TOKEN.finditer(text.strip()):
         token = next(g for g in match.groups() if g)
         path = Path(token).expanduser()
-        if path.suffix.lower() not in IMAGE_EXTS | AUDIO_EXTS or not path.is_file():
+        if not _is_dropped_file(path):
             return []
         paths.append(str(path))
     return paths
@@ -155,7 +195,7 @@ def dropped_paths(text):
 
 # ------------------------------------------------------------ paleta (Ctrl+K)
 # Comandos que não fazem sentido sem argumento: a paleta só preenche o input.
-NEEDS_ARG = {"rename", "attach", "web", "ideia"}
+NEEDS_ARG = {"rename", "attach", "web", "checar", "ideia", "instalar", "baixar"}
 # Fora da paleta: ela mesma e os que já têm entrada própria (modo/foco).
 _PALETTE_SKIP = {"menu", "mode", "focus", "dnd"}
 

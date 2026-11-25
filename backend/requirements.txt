@@ -13,7 +13,7 @@
 # ============================================================================
 
 # --- CORE / INTELIGÊNCIA ARTIFICIAL ---
-ollama>=0.6,<0.7            # Cliente Python para comunicação com servidor Ollama (LLM)
+ollama>=0.6.3,<0.7            # Cliente Python para comunicação com servidor Ollama (LLM)
 faster-whisper>=1.2,<2      # Transcrição local de áudio (Whisper via CTranslate2 — rápido em CPU/GPU)
 Pillow>=12,<13              # Validação/normalização de imagem antes de enviar ao modelo de visão; captura de tela
 
@@ -23,8 +23,8 @@ winrt-runtime>=4.2,<5
 winrt-Windows.Media.Ocr>=4!10.0,<4!11
 winrt-Windows.Graphics.Imaging>=4!10.0,<4!11
 winrt-Windows.Storage.Streams>=4!10.0,<4!11
-winrt-Windows.Globalization>=4!10.0,<4!11
-winrt-Windows.Foundation>=4!10.0,<4!11
+winrt-Windows.Globalization>=4!10.0.28000.2957,<4!11
+winrt-Windows.Foundation>=4!10.0.28000.2957,<4!11
 
 # --- CONFIGURAÇÃO E AMBIENTE ---
 python-dotenv>=1.2.4,<2       # Gerenciamento de variáveis de ambiente (.env)
@@ -41,7 +41,7 @@ pygame-ce>=2.5,<3           # Reprodução de arquivos de áudio MP3 (usando a C
 # --- CONTROLE DE SISTEMA & AUTOMAÇÃO ---
 pyautogui>=0.9.54,<0.10     # Controle programático de Teclado e Mouse (Atalhos, Clicks)
 comtypes>=1.5.0,<2            # Biblioteca COM para interação com APIs do Windows
-pycaw>=20251023             # Python Core Audio Windows - Controle de volume, dispositivos de áudio
+pycaw>=20260927             # Python Core Audio Windows - Controle de volume, dispositivos de áudio
 
 # --- INTERFACE (TERMINAL) ---
 textual>=8.2,<9             # TUI no terminal (chat/copilot) - substitui o HUD React/PyWebView
@@ -49,6 +49,9 @@ textual>=8.2,<9             # TUI no terminal (chat/copilot) - substitui o HUD R
 # --- MONITORAMENTO DE SISTEMA ---
 psutil>=7.2,<8              # Informações de CPU, RAM, Disco, Rede, Processos
 GPUtil>=1.4,<2              # Monitoramento de GPUs NVIDIA (temperatura, carga, memória)
+
+# --- ANEXOS ---
+pypdf>=6.1,<7               # Texto de PDF anexado no chat (core/uploads.py, arrastar ou /attach)
 
 # --- REQUISIÇÕES HTTP ---
 requests>=2.34,<3           # Cliente HTTP para APIs externas e comunicação
@@ -58,9 +61,11 @@ ddgs>=9.16,<10              # Busca no DuckDuckGo sem chave de API (skill WEB_SE
 PyGithub>=2.10,<3           # API do GitHub (skill GITHUB / /gh) — token no .env
 keyring>=25.7,<26           # Cofre de Credenciais do Windows (tokens OAuth das integrações)
 pystray>=0.19.5,<0.20       # Ícone na bandeja do agente residente (agent.py, Win+J)
+discord.py>=2.4,<3          # Ponte do Discord (messenger.py) — Telegram usa só requests
+playwright>=1.50,<2         # Navegação headless no Edge do Windows (core/headless.py, channel="msedge" — sem playwright install)
 
 # --- SEGURANÇA ---
-cryptography>=48,<51        # Ed25519: confere a assinatura Minisign do setup na atualização (core/minisign.py)
+cryptography>=50.0.2,<51        # Ed25519: confere a assinatura Minisign do setup na atualização (core/minisign.py)
 
 # --- MODEL CONTEXT PROTOCOL ---
 

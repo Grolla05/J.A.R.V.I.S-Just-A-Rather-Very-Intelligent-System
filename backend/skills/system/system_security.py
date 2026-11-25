@@ -28,7 +28,7 @@ def _ask_ollama_security(user_text):
     # core.llm normaliza OLLAMA_HOST e trata erro (devolve None).
     return query_ollama([{"role": "system", "content": SECURITY_DECISION_PROMPT},
                          {"role": "user", "content": user_text}],
-                        format="json", temperature=0.1, timeout=settings.TIMEOUT_API)
+                        format="json", temperature=0.1, timeout=settings.TIMEOUT_LLM)
 
 
 # --- HELPERS DE HARDWARE ---

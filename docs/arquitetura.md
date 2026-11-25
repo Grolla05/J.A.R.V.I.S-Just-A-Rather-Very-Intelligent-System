@@ -1,6 +1,6 @@
 # Arquitetura do J.A.R.V.I.S — ponta a ponta
 
-Este documento explica como o J.A.R.V.I.S funciona do boot à resposta, módulo a módulo. Para regras de código (o que é proibido, onde cada coisa deve morar), veja o [`CLAUDE.md`](../CLAUDE.md).
+Este documento explica como o J.A.R.V.I.S funciona do boot à resposta, módulo a módulo. Para regras de código (o que é proibido, onde cada coisa deve morar), veja o [`AGENTS.md`](../AGENTS.md) e [`regras-backend.md`](regras-backend.md).
 
 ## 1. Visão geral
 
@@ -80,10 +80,10 @@ Nenhuma etapa trava a TUI. Depois do boot:
 3. `db.log_interaction` grava a mensagem do usuário (com anexo, se houver `/attach`).
 4. `services/brain.execute_command_stream(texto, session_id, images, mode="chat", on_route=…)`:
    - Se existe uma ação pendente (`core.pending.active()`), a mensagem é a resposta a ela: `parse_reply` só aprova frase de confirmação ("sim, pode encerrar"); negação recusa; qualquer outra frase descarta a pendência e segue como comando normal.
-   - `classify_intent(texto, exclude_categories=("automation", "system"))`: mensagem trivial ("oi", "valeu") vira `CHAT` sem LLM; senão o pré-filtro por `KEYWORDS` escolhe as skills candidatas (nenhuma casou → todas) e o Ollama devolve um JSON `{intent, entity, confidence}`. As skills desligadas são lidas uma vez (cache em `services/skill_settings.disabled_sets`, invalidado no toggle). Resultado fica em cache (TTL 30 s, 64 entradas); prompt acima de 70% do `num_ctx` gera um aviso no log.
+   - `classify_intent(texto, allowed_categories=("productivity", "web"))` no Chat (Copilot: todas): mensagem trivial ("oi", "valeu") vira `CHAT` sem LLM; senão o pré-filtro por `KEYWORDS` escolhe as skills candidatas (nenhuma casou → todas as oferecidas no modo) e o Ollama devolve um JSON `{intent, entity, confidence}`. As skills desligadas são lidas uma vez (cache em `services/skill_settings.disabled_sets`, invalidado no toggle). Resultado fica em cache (TTL 30 s, 64 entradas); prompt acima de 70% do `num_ctx` gera um aviso no log.
    - `MEMORY_WRITE` → `services/memory.extract_fact_to_memory` → nota nova no Obsidian.
    - Skill ligada e permitida no Chat (categorias `productivity` e `web`) → `on_route(intent)` (selo `[INTENT]` na bolha) → `skill.execute(entity, texto)`.
-   - Qualquer outra coisa (`CHAT`, `HARDWARE`, `MEMORY_READ`) → `services/chat.ask_local_ai_stream` com histórico da sessão, contexto do vault (`get_vault_context`) e dados reais (`services/live_context.build`).
+   - Qualquer outra coisa (`CHAT`, `HARDWARE`, `MEMORY_READ`) → `services/chat.ask_local_ai_stream` com histórico da sessão, contexto do vault (`get_vault_context`; pedido de nota sem resultado → `vault_not_found.md`, para não inventar) e dados reais (`services/live_context.build`).
 5. A TUI re-renderiza o Markdown a cada 50 ms (`STREAM_FLUSH_S`) e grava a resposta no fim.
 
 ### 3.2 Modo Copilot (voz)
@@ -130,8 +130,8 @@ Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub
 | Módulo | Papel |
 |---|---|
 | `brain.py` | Roteador. `execute_command_stream` (TUI, por modo) e `execute_command` (voz standalone); `confirm_pending_action` |
-| `intent.py` | `classify_intent` (atalho trivial, pré-filtro `KEYWORDS`, Ollama em JSON, cache TTL), `is_skill_enabled`, `CHAT_BLOCKED_CATEGORIES` |
-| `chat.py` | Monta o prompt (system + live data + vault + live_context + histórico de 8 mensagens) e chama o Ollama |
+| `intent.py` | `classify_intent` (atalho trivial, pré-filtro `KEYWORDS`, Ollama em JSON, cache TTL), `is_skill_enabled`, `CHAT_ALLOWED_CATEGORIES` |
+| `chat.py` | Monta o prompt (system + live data + vault + live_context + histórico dos últimos `CHAT_HISTORY_TURNS` turnos, padrão 10) e chama o Ollama |
 | `live_context.py` | Detecta perguntas sobre a agenda e injeta os eventos reais com "não invente" |
 | `memory.py` | Extrai um fato (chave/valor) e grava no Obsidian |
 | `sessions.py` | Sessões e histórico do chat (SQLite); `to_local()` converte UTC |
@@ -143,6 +143,16 @@ Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub
 | `presentation.py` | Modo Apresentação: manual (`/silent`) ou automático (slides/PDF em tela cheia) |
 | `notify_filter.py` | Decide se um alerta fala agora, espera ou some: prioridade × contexto |
 | `integrations.py` | Registro dos cards de INTEGRAÇÕES (`status`/`connect`/`disconnect`) |
+| `reminders.py` | Avisos antes dos eventos da agenda (com tempo de trajeto) e lembretes por pedido (tabela `reminders`) |
+| `web_watch.py` | Web Watch: vigia página, preço e repositório (tabela `web_watches`); `collect()` no tick da TUI |
+| `insights.py` | Ideias da conversa → nota mensal em 🧠 Brainstorms; fila `insights_pending` com o Obsidian fora |
+| `clip_history.py` | Histórico do clipboard (tabela `clipboard_history`), busca, reuso, filtro de segredos |
+| `net_guard.py` / `net_trust.py` | Guarda de rede (juiz LLM, alerta, encerrar/bloquear com confirmação) e softwares mantidos (`net_trusted_apps`) |
+| `mailbox.py`, `email_triage.py`, `email_compose.py`, `email_contacts.py`, `email_organize.py`, `email_trash.py`, `local_files.py` | Gmail: caixa priorizada, rascunho com confirmação, contatos, organizar, Lixeira, anexos (ver 5.7) |
+| `software.py` | Download inteligente pelo winget com confirmação (ver 5.8) |
+| `form_fill.py` | Formulários: perfil do Obsidian/conta Google/`/rota` → campos por regra (o modelo só escolhe a chave do perfil) → preenche na janela do Edge → envio só com "sim"; nunca senha/cartão/CPF |
+| `headless_tasks.py` | Tarefa web em segundo plano: modelo planeja os passos → passo que envia algo pede confirmação → Edge sem janela → resposta só com o texto da página → aviso |
+| `remote_chat.py` | Núcleo da ponte Telegram/Discord (ver 5.9) |
 
 ### 4.3 Infraestrutura — `backend/core/`
 
@@ -157,6 +167,7 @@ Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub
 | `prompts.py` | `load_prompt("arquivo.md", var=…)` com cache e `string.Template` |
 | `skill_loader.py` | `manager`: descobre skills em `backend/skills/<categoria>/` (caminho absoluto) no 1º uso / etapa do boot; INTENT duplicado gera aviso e vale o primeiro |
 | `SystemInfo.py` | Telemetria (psutil/GPUtil), limites críticos e monitor proativo |
+| `power.py` | Consumo de energia: GPU NVIDIA medida (`nvidia-smi`), CPU e resto estimados (`POWER_CPU_TDP_W`, `POWER_BASE_W`, `POWER_PSU_EFF`); `meter` integra kWh por dia em `config.power_daily` com custo pela `POWER_TARIFF_KWH`. Só conta com a TUI aberta |
 | `alerts.py` | `process_system_alert`: passa pelo filtro, fala, notifica ou pede confirmação |
 | `health.py` | Saúde de Ollama, Obsidian, microfone e SQLite |
 | `hardware.py` | Scan WMI via PowerShell → tabela `hardware` |
@@ -172,6 +183,8 @@ Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub
 | `oauth.py` | OAuth Desktop genérico: PKCE + callback no loopback |
 | `secrets_store.py` | Tokens no Cofre de Credenciais do Windows (`keyring`); fallback JSON |
 | `web.py` | Busca DuckDuckGo + leitura das páginas + resumo no Ollama |
+| `factcheck.py` | Fact-Checking: 2 buscas, 1 fonte por domínio, veredito do Ollama com regras duras (≥2 fontes do mesmo lado) |
+| `headless.py` | Navegação headless: Playwright no Edge do Windows (`channel="msedge"`), perfil próprio, passos tipados (≤ 8), rotas vigiadas por `is_fetch_safe`, nunca preenche senha/cartão/CPF |
 | `clipboard.py` | Monitor de clipboard, classificação (link, erro, código, inglês) e ações (explicar, traduzir, resumir) |
 | `netwatch.py` | Vigia de rede: foto das portas expostas, processos na internet e tabela ARP; linha de base e diff |
 | `selection.py` | Copia a seleção de qualquer app (devolvendo o clipboard anterior, se pedido) e lê/escreve o clipboard (Win32) |
@@ -199,6 +212,7 @@ Cada skill expõe `INTENT`, `PROMPT_TEXT`, `KEYWORDS` (opcional, pré-filtro), `
 | automation | `APP_CONTROL` | Abre, foca e fecha apps | não |
 | automation | `AUDIO_CONTROL` | Volume e mudo (pycaw) | não |
 | automation | `CLIPBOARD` | Explica/traduz/resume o clipboard | não |
+| automation | `SOFTWARE_INSTALL` | Procura no winget e instala/baixa (com confirmação) | não |
 | productivity | `REMINDER` | Cria, lista e cancela lembretes com horário | sim |
 | productivity | `INSIGHT_SAVE` | Anota uma ideia em 🧠 Brainstorms no Obsidian | sim |
 | system | `NETWORK_SCAN` | Varredura da rede: aparelhos, portas expostas, programas na internet | não |
@@ -211,8 +225,10 @@ Cada skill expõe `INTENT`, `PROMPT_TEXT`, `KEYWORDS` (opcional, pré-filtro), `
 | system | `SYSTEM_REPORT` | Relatório de status da máquina | não |
 | system | `SYSTEM_CLEANUP` | Lixeira, temporários, desinstalar app | não |
 | system | `SYSTEM_SECURITY` | Bloquear, suspender, desligar, modo sentinela | não |
+| system | `POWER_REPORT` | Watts agora, kWh e custo de hoje e do mês (estimativa; GPU medida) | não |
 | productivity | `CALENDAR` | Compromissos do Google Agenda | sim |
 | productivity | `DAILY_BRIEFING` | Briefing do dia | sim |
+| productivity | `EMAIL_MANAGEMENT` | Gmail: ler, responder/escrever com anexo, Lixeira e organizar (com confirmação) | sim |
 | productivity | `FOCUS_MODE` | Pomodoro e Não Perturbe | sim |
 | productivity | `GITHUB` | PRs, issues, commit, CI, criar issue (com confirmação) | sim |
 | productivity | `PRESENTATION_MODE` | Liga/desliga o Modo Apresentação | sim |
@@ -274,6 +290,50 @@ Sem extensão e sem `--remote-debugging-port` (com ele qualquer processo local d
 
 As duas skills roteiam como o Spotify: regex primeiro (sem Ollama), LLM só para a frase que sobrar (`*_decision.md`, ação validada contra uma tabela fixa — texto do modelo nunca vira atalho). `BROWSER_TABS`: fechar outras/todas as abas arma `pending` com a lista de títulos. `YOUTUBE_CONTROL`: "toca X no YouTube" → `core/youtube.find_video` (página de resultados do YouTube (1º `videoId` do HTML) → ddgs de reserva → senão abre os resultados); o player usa as teclas oficiais (k, j/l, f, t, i, c, m, Shift+N/P, >/<, 0–9) na aba do YouTube, achada pelo título — trocando de aba se preciso; em ação rápida (pausar, pular, legenda…) o foco volta para a janela anterior. Velocidade exata: desce ao mínimo com `<` e sobe com `>` (o YouTube não informa a atual).
 
+### 5.7 E-mail (Gmail) — `EMAIL_MANAGEMENT`
+
+Um cartucho só (`skills/productivity/email_management.py`). A ação sai da frase por regex, sem nova ida ao
+modelo (`action_for`): apagar → organizar → enviar/responder → ler. "me manda um resumo dos e-mails" (pista de
+leitura sem destinatário) é leitura, não envio.
+
+
+- `core/google_auth.py` (`GoogleAccount`) dá a cada integração Google o seu token e card; `core/gmail.py`
+  usa o escopo `gmail.modify` (lê, rascunha, envia, etiqueta, arquiva — sem lixeira/exclusão).
+- **Ler:** `services/mailbox.py` busca a caixa, `services/email_triage.py` ordena (ALTA/MÉDIA/BAIXA) e a
+  lista fica guardada — "e-mail 2" é o 2º que o usuário viu. O corpo vai ao modelo como **dado**
+  (`email_summarize.md`): nada dentro de um e-mail vira skill, confirmação ou destinatário.
+- **Enviar:** a skill extrai `{reply_to_index, recipient, file, instruction}`; contato por nome
+  (`email_contacts`: apelido salvo → histórico do Gmail → pergunta se houver vários) e anexo
+  (`local_files`: só pastas pessoais, bloqueia segredos e >25 MB) são resolvidos fora do LLM. O LLM
+  escreve só assunto e corpo. `email_compose.confirm_send` arma a pendência (180 s) com tudo à vista:
+  **sim** envia · **não** salva rascunho · outra frase refaz o rascunho (`on_other`).
+- **Apagar:** `email_trash` pega os e-mails pela fala (números da lista ou categoria: "as promoções"), mostra a lista e,
+  no "sim", move para a **Lixeira** (`gmail.trash`, recuperável por 30 dias). Exclusão permanente não existe.
+- **Organizar:** `email_organize` monta o plano (promoções/social → arquivar; faturas →
+  `JARVIS/Financeiro`; urgentes → `JARVIS/Urgente` + estrela) e só aplica no "sim".
+
+### 5.7.1 Agenda por período (`CALENDAR`)
+
+`google_calendar.resolve_period` entende dia, semana, fim de semana, mês e ano (os atuais começam hoje; "próxima
+semana", "mês que vem" e "próximo ano" pegam o período inteiro). `events_range` pagina a API (até 250 eventos) e
+`format_range` agrupa por dia. O contexto do Chat (`live_context`) usa o mesmo período, com o dia em cada linha.
+
+### 5.8 Download inteligente (`SOFTWARE_INSTALL`, `/instalar`, `/baixar`)
+
+`core/winget.py` busca no catálogo oficial (parser da tabela em pt/en), escolhe o pacote
+(`best_match`; sem certeza lista opções) e `services/software.py` pede confirmação com nome, id e
+versão. Instala (`--silent`) ou baixa o instalador em Downloads numa thread daemon e anuncia o fim.
+Sem `shell=True`; id validado por regex. Só Copilot/voz (automation) ou comando explícito na TUI.
+
+### 5.9 Ponte Telegram/Discord (`messenger.py`)
+
+Processo próprio, iniciado pelo agente (no logon) ou pelo card em INTEGRAÇÕES. A plataforma é só o fio:
+`core/telegram_bot.py` (long polling) e `core/discord_bot.py` (gateway) abrem conexão de saída e
+entregam o texto a `services/remote_chat.py`, que confere a allowlist, usa uma sessão por usuário e
+chama `brain.execute_command_stream(mode="chat", owner="canal:usuário")`. O `owner` vai para toda
+pendência armada pela skill (`pending.owner_scope`): só o "sim" daquela pessoa aprova. A cada 30 s a
+ponte confere os canais ligados (`messenger_ctl.active_channels`) e liga/desliga cada um.
+
 ## 6. Comandos e atalhos da TUI
 
 | Comando | Faz |
@@ -285,6 +345,7 @@ As duas skills roteiam como o Spotify: regex primeiro (sem Ollama), LLM só para
 | `/mode [chat\|copilot]` (`Shift+Tab`), `/voice` (`Ctrl+T`) | Modo e voz |
 | `/skills`, `/status`, `/log`, `/vault`, `/config` | Telas cheias |
 | `/web`, `/gh`, `/briefing`, `/rota`, `/clip` | Ferramentas (`/clip` também busca e reusa o histórico do clipboard) |
+| `/email`, `/instalar`, `/baixar` | Gmail e download inteligente pelo winget |
 | `/ideia <texto>`, `/lembrete`, `/rede` | Anotar ideia no vault, lembretes com horário, perímetro de rede |
 | `/focus`, `/dnd`, `/silent` | Foco, Não Perturbe e Apresentação |
 | `/clear` (`Ctrl+L`), `/quit` (`Esc`) | Limpar tela, sair |
@@ -295,10 +356,10 @@ Atalhos globais (agente): `Win+J` abre/foca a TUI no Copilot (em foco, volta ao 
 
 | Onde | O quê |
 |---|---|
-| `database/jarvis_memory.db` | Tabelas `config` (prefs, skills desligadas, fontes, locais, data do briefing), `history` (mensagens + anexo + modo), `sessions` (título, fixada), `hardware` (specs WMI). Veja [`backend/database/README.md`](../backend/database/README.md) |
+| `database/jarvis_memory.db` | Tabelas `config` (prefs, skills desligadas, fontes, locais, data do briefing), `history` (mensagens + anexo + modo), `sessions` (título, fixada), `hardware` (specs WMI), `clipboard_history`, `reminders`, `net_trusted_apps`, `email_contacts` e `web_watches`. Veja [`backend/database/README.md`](../backend/database/README.md) |
 | `logs/` | `jarvis-AAAA-MM-DD.log` e `crash.log` |
 | `uploads/` | Anexos do `/attach` |
-| Cofre do Windows (serviço "JARVIS") | Refresh tokens do Google e do Spotify |
+| Cofre do Windows (serviço "JARVIS") | Refresh tokens do Google (Agenda e Gmail, um por card) e do Spotify |
 | Vault do Obsidian | `⚙️ Configurações/🧠 Sobre mim.md` (perfil) e `🚀 Projetos/J.A.R.V.I.S/Memória/{chave}.md` (memórias novas; nunca sobrescreve) |
 
 Em dev tudo fica em `backend/`. Instalado, `JARVIS_DATA_DIR=%APPDATA%\JARVIS` concentra `.env`, banco, logs e uploads.
@@ -315,6 +376,6 @@ Em dev tudo fica em `backend/`. Instalado, `JARVIS_DATA_DIR=%APPDATA%\JARVIS` co
 
 ```bash
 cd backend
-python -m pytest tests -q
+python -m pytest tests -q -n auto
 ruff check . && ruff check ../frontend
 ```

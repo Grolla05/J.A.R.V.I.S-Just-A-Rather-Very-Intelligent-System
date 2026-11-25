@@ -163,6 +163,13 @@ class Settings:
 
     # --- Trânsito (core/traffic.py): OSRM grátis; com chave TomTom = trânsito ao vivo ---
     TOMTOM_API_KEY: str = os.getenv("TOMTOM_API_KEY", "").strip()
+    # Gmail (/config → INTEGRAÇÕES): caracteres do corpo do e-mail enviados ao modelo
+    EMAIL_TEXT_MAX: int = _env_int("EMAIL_TEXT_MAX", 6000)
+    # Ponte Telegram/Discord (messenger.py). Tokens dos bots do PRÓPRIO usuário; allowlist = IDs que podem conversar
+    TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    TELEGRAM_ALLOWED_IDS: tuple = parse_word_list(os.getenv("TELEGRAM_ALLOWED_IDS", ""))
+    DISCORD_BOT_TOKEN: str = os.getenv("DISCORD_BOT_TOKEN", "").strip()
+    DISCORD_ALLOWED_IDS: tuple = parse_word_list(os.getenv("DISCORD_ALLOWED_IDS", ""))
 
     SPOTIFY_SCOPES: str = (
         "user-read-playback-state "
@@ -175,13 +182,30 @@ class Settings:
     TIMEOUT_SPOTIFY: int = 8          # s — timeout de cada request à Web API
 
     # Adicionado: Timeouts Globais (Robustez de Rede)
-    TIMEOUT_API: int = 10  # Segundos para esperar a IA responder
+    TIMEOUT_API: int = _env_int("TIMEOUT_API", 10)  # s — requisições HTTP (GitHub, notícias, web, YouTube)
+    # s — chamadas curtas ao Ollama (classificador, decisões das skills). Modelo pequeno com
+    # parte das camadas na CPU passa de 10 s num prompt de ~3 mil tokens.
+    TIMEOUT_LLM: int = _env_int("TIMEOUT_LLM", 30)
     TIMEOUT_VOICE: int = 5 # Segundos para esperar o reconhecimento de voz
 
     # --- Cache de Classificação de Intenção (LRU + TTL) ---
     # Repetir o mesmo comando em <TTL s serve do cache, sem nova ida ao Ollama.
     INTENT_CACHE_TTL: int = 30   # Segundos de validade de cada entrada
     INTENT_CACHE_SIZE: int = 64  # Máximo de entradas antes da evicção LRU
+
+    # --- Web Watch (services/web_watch.py): páginas, preços e repositórios vigiados ---
+    WEBWATCH_INTERVAL_MIN: int = _env_int("WEBWATCH_INTERVAL_MIN", 60)  # min entre checagens de cada item
+    WEBWATCH_MAX: int = _env_int("WEBWATCH_MAX", 20)                    # máximo de itens vigiados
+
+    # --- Navegação headless (core/headless.py): Playwright no Edge do Windows ---
+    HEADLESS_TIMEOUT: int = _env_int("HEADLESS_TIMEOUT", 30)  # s para carregar cada página
+    HEADLESS_VISIBLE: bool = os.getenv("HEADLESS_VISIBLE", "False").strip().lower() == "true"  # debug: abre a janela
+
+    # --- Consumo de energia (core/power.py): GPU medida pelo nvidia-smi + estimativa ---
+    POWER_TARIFF_KWH: float = _env_float("POWER_TARIFF_KWH", 0.85)  # R$/kWh da conta de luz
+    POWER_BASE_W: float = _env_float("POWER_BASE_W", 45.0)          # placa-mãe, RAM, discos, ventoinhas
+    POWER_CPU_TDP_W: float = _env_float("POWER_CPU_TDP_W", 65.0)    # TDP do processador (100 % de carga)
+    POWER_PSU_EFF: float = _env_float("POWER_PSU_EFF", 0.85)        # eficiência da fonte (0-1)
 
     # --- Telemetria da barra de status da TUI (polling leve) ---
     TELEMETRY_INTERVAL: float = 3.0   # Intervalo de atualização da StatusBar (s)

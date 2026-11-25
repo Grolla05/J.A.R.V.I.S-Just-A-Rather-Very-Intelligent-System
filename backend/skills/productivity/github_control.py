@@ -60,7 +60,7 @@ def _ask_llm(command):
     prompt = load_prompt("skills/github_decision.md", command=command,
                          default_repo=settings.GITHUB_DEFAULT_REPO or "(nenhum)")
     raw = query_ollama([{"role": "user", "content": prompt}], format="json",
-                       temperature=0, timeout=settings.TIMEOUT_API)
+                       temperature=0, timeout=settings.TIMEOUT_LLM)
     try:
         return json.loads(raw) if raw else None
     except (TypeError, ValueError):

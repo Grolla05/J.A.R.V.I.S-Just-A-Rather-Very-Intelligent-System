@@ -61,10 +61,12 @@ Name: "ptbr"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
 ptbr.TarefaPath=Adicionar o JARVIS ao PATH (rodar "jarvis" em qualquer terminal)
 ptbr.GrupoOutras=Outras opções:
 ptbr.TarefaAutostart=Iniciar o J.A.R.V.I.S com o Windows (agente na bandeja, Win+J abre)
+ptbr.TarefaAdmin=Firewall do JARVIS (bloqueios do Vigia de rede; pede o UAC uma vez)
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 Name: "autostart"; Description: "{cm:TarefaAutostart}"; GroupDescription: "{cm:GrupoOutras}"
+Name: "admin"; Description: "{cm:TarefaAdmin}"; GroupDescription: "{cm:GrupoOutras}"
 Name: "path"; Description: "{cm:TarefaPath}"; GroupDescription: "{cm:GrupoOutras}"; Flags: unchecked
 
 [InstallDelete]
@@ -101,6 +103,9 @@ Name: "{group}\{cm:UninstallProgram,J.A.R.V.I.S}"; Filename: "{uninstallexe}"
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "JARVIS"; ValueData: """{app}\runtime\pythonw.exe"" ""{app}\app\backend\agent.py"" --logon"; Tasks: autostart; Flags: uninsdeletevalue
 
 [Run]
+; Firewall do JARVIS (backend\core\elevation.py): um UAC agora cria a tarefa elevada \JARVIS\Firewall,
+; que o JARVIS (sem admin) dispara para aplicar os bloqueios. Na atualizacao nao repete.
+Filename: "{app}\runtime\pythonw.exe"; Parameters: """{app}\app\backend\agent.py"" --elevation-install"; WorkingDir: "{app}\app\backend"; Verb: runas; Tasks: admin; Check: not EhAtualizacao; Flags: shellexec waituntilterminated skipifsilent
 Filename: "{app}\runtime\pythonw.exe"; Parameters: """{app}\app\backend\agent.py"""; WorkingDir: "{app}\app\backend"; Tasks: autostart; Flags: nowait skipifsilent
 ; Atualização automática (/UPDATE, aberta pelo agente depois da tecla na tela de
 ; atualização): o agente se fechou para liberar o runtime; reabre ele sem --logon
@@ -108,6 +113,8 @@ Filename: "{app}\runtime\pythonw.exe"; Parameters: """{app}\app\backend\agent.py
 Filename: "{app}\jarvis.cmd"; Description: "{cm:LaunchProgram,J.A.R.V.I.S}"; WorkingDir: "{app}"; Flags: postinstall nowait skipifsilent shellexec
 
 [UninstallRun]
+; Tarefa elevada do firewall (se existir): apagar exige admin, entao pede o UAC
+Filename: "{app}\runtime\pythonw.exe"; Parameters: """{app}\app\backend\agent.py"" --elevation-remove"; WorkingDir: "{app}\app\backend"; Verb: runas; Flags: shellexec waituntilterminated; RunOnceId: "RemoveTarefasAdmin"; Check: TemTarefaAdmin
 ; Fecha agente e TUI antes de apagar os arquivos (pythonw/python travam o runtime)
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""Get-Process python,pythonw -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '{app}\runtime\*' } | Stop-Process -Force"""; Flags: runhidden waituntilterminated; RunOnceId: "FechaAgente"
 
@@ -159,6 +166,14 @@ end;
 function EhAtualizacao: Boolean;
 begin
   Result := TemParam('UPDATE');
+end;
+
+function TemTarefaAdmin: Boolean;
+var
+  Codigo: Integer;
+begin
+  Result := Exec(ExpandConstant('{sys}\schtasks.exe'), '/Query /TN "\JARVIS\Firewall"', '', SW_HIDE,
+                 ewWaitUntilTerminated, Codigo) and (Codigo = 0);
 end;
 
 function PularOllama: Boolean;
