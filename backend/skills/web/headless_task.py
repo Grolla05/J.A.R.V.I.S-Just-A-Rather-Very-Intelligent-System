@@ -1,3 +1,6 @@
+# ⚠️ ACESSO SENSÍVEL: dirige o Microsoft Edge sem janela (Playwright, perfil próprio) e
+# executa passos planejados pelo modelo (abrir, preencher, clicar). Só URL pública; passo
+# que envia algo pede confirmação. Ver SECURITY.md.
 """Skill HEADLESS_TASK — "entra no site da kabum e vê o preço da rtx 5060".
 
 O modelo planeja passos tipados, o Edge roda sem janela (core/headless.py) e o

@@ -1,3 +1,6 @@
+# ⚠️ ACESSO SENSÍVEL: abre o Edge e preenche formulários com dados pessoais do perfil
+# (Obsidian, conta Google, /rota). Envio só com "sim"; senha, cartão e CPF nunca.
+# Ver SECURITY.md.
 """Skill FORM_FILL — "preenche esse formulário".
 
 Abre o formulário (link da frase ou aba aberta) numa janela do Edge, preenche com o
