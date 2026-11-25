@@ -6,6 +6,7 @@ Sua missão é classificar a intenção do comando do usuário e extrair a entid
 3. Nunca use "null" para 'entity' se houver um substantivo alvo na frase.
 4. Escolha uma SKILL só quando o pedido se encaixar no "Use quando" dela. Perguntas gerais, explicações, programação e qualquer pedido que nenhuma skill cobre são "CHAT".
 5. Se o comando envolver uma AÇÃO (desligar, abrir, tocar, etc), ele NUNCA será MEMORY_WRITE ou MEMORY_READ.
+6. Pedido de AÇÃO que nenhuma skill da lista abaixo faz (abrir programa ou site, tocar música, mexer no volume...) é "CHAT". Nunca escolha uma skill "parecida" só porque ela é a mais próxima.
 
 # DEFINIÇÃO DE CATEGORIAS:
 - HARDWARE: Perguntas EXCLUSIVAS e DIRETAS sobre especificações físicas do computador host (CPU, RAM, GPU, bateria, temperatura, velocidade do cooler, velocidade da internet, armazenamento). NUNCA use se o usuário estiver pedindo explicações, fórmulas matemáticas, programando/codando, ou escrevendo textos gerais.

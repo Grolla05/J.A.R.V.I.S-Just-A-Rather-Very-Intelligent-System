@@ -187,12 +187,21 @@ def classify_intent(text, skip_skills=False, allowed_categories=None):
     _warn_if_context_tight(prompt, len(active_skills))
 
     try:
+        started = time.monotonic()
         res = query_ollama([{'role': 'user', 'content': prompt}], format='json', temperature=0, timeout=settings.TIMEOUT_LLM)
+        log.info(f"⏱️ [CLASSIFICADOR]: {time.monotonic() - started:.1f}s ({len(active_skills)} skills no prompt)")
         if not res:
             return {"intent": "CHAT", "entity": None, "confidence": 0.0}
 
         result = json.loads(res)
+        if not isinstance(result, dict):
+            raise ValueError("resposta do classificador não é um objeto JSON")
         if not result.get("intent"): result["intent"] = "CHAT"
+        if result["intent"] not in valid_intents:
+            # O modelo inventou uma intenção que não estava nas opções (ex.: skill de
+            # outro modo ou desligada): não executa nada, responde como conversa.
+            log.debug(f"⚡ [INTENÇÃO]: '{result['intent']}' fora das opções, vira CHAT")
+            result.update(intent="CHAT", entity=None)
         if "confidence" not in result: result["confidence"] = 0.5
         _intent_cache.set(cache_key, dict(result))  # guarda cópia estável
         return result

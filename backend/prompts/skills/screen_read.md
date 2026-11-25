@@ -1,6 +1,6 @@
 - SCREEN_READ: Lê o texto que está na tela do usuário (janela aberta ou monitor) e responde sobre ele: explica um erro ou trecho de código, resume, traduz, resolve uma questão ou exercício que está aberto. No navegador lê a página inteira pela URL da aba (inclusive o que está fora da tela).
   Use quando: o usuário se referir ao que está NA TELA/janela/monitor sem colar o conteúdo — "explica o erro na minha tela", "lê essa janela", "resolve a questão que está aberta", "resume o que tem no monitor 2", "o que está escrito aqui na tela?", "traduz essa página aberta", "resume essa página", "do que fala esse artigo aberto?".
-  NÃO use para brilho, luz azul, mover janela ou trocar de monitor — isso é SCREEN_CONTROL. NÃO use quando o texto, código ou erro já veio colado na própria mensagem (isso é CHAT). NÃO use para o que foi copiado (isso é CLIPBOARD) nem para imagem anexada.
+  NÃO use para brilho, luz azul, mover janela ou trocar de monitor — isso é SCREEN_CONTROL. NÃO use quando o texto, código ou erro já veio colado na própria mensagem (isso é CHAT). NÃO use para o que foi copiado (isso é CLIPBOARD) nem para imagem anexada. NÃO use para ABRIR, iniciar ou fechar programas e sites ("abre o spotify", "abre o chrome", "fecha essa janela") — isso não é ler a tela.
   Entity: "monitor N" se o usuário citar um monitor; "tela inteira" se pedir a tela toda; senão null.
   Exemplos:
   - "explica o erro que está na minha tela" -> {"intent": "SCREEN_READ", "entity": null, "confidence": 1.0}

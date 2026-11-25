@@ -2,6 +2,24 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+## Classificador: confere a intenção devolvida e prompts com exemplos negativos
+
+**Data:** 2026-11-25
+**Escopo:** Pendências do brainstorm. "abre o spotify" no Chat virava `SCREEN_READ` e "qual a capital da França?" virava `WEB_SEARCH`. O fluxo continua o mesmo: **o Ollama sempre classifica a mensagem** (só "oi"/"valeu" pulam, como antes) e a intenção escolhida decide o que roda — skill (ex.: `SPOTIFY_CONTROL` no Copilot abre o Spotify e responde) ou conversa.
+
+### Como ficou
+
+- `services/intent.py`: **intenção devolvida fora das opções** do modo (skill de outro modo, desligada, inventada) → `CHAT`, nunca executa nada. Antes nada conferia o retorno. JSON que não é objeto também cai em `CHAT`
+- **Tempo do classificador no log**: `⏱️ [CLASSIFICADOR]: N s (X skills no prompt)` — para medir os 10–15 s
+- Prompts: regra 6 no `classify_intent.md` (ação que nenhuma skill da lista faz → CHAT, nunca a skill "parecida"); `screen_read.md` com "NÃO use para abrir/fechar programas e sites"; `web_search.md` com "NÃO use para conhecimento geral que não muda" + exemplo da capital
+- `env.example`: dica `OLLAMA_NUM_CTX=4096` para GPU de 4 GB (gemma2:2b 100% na GPU — conferir com `ollama ps`)
+- Descartado: um "portão" que pulava o Ollama quando a frase não tinha KEYWORD — quebrava o fluxo "sempre classificar"
+
+### Testes
+
+- `tests/test_intent_prefilter.py` → `TestAlwaysClassify`: "abre o spotify" no Copilot vai ao Ollama e vira `SPOTIFY_CONTROL`; no Chat a pergunta também vai ao Ollama; `SPOTIFY_CONTROL` devolvido no Chat vira `CHAT`; JSON que não é objeto → `CHAT`
+- Testes do classificador, roteamento por modo, Spotify, vault e rede: 139 passaram; `ruff check .` limpo
+
 ## Anexar qualquer arquivo ao prompt (texto, código e PDF), arrastando ou com /attach
 
 **Data:** 2026-11-24

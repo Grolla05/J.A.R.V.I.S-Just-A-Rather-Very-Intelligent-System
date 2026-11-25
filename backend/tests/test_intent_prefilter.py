@@ -85,6 +85,57 @@ class TestPrefilter(unittest.TestCase):
         self.assertEqual(intent.prefilter_skills(["CALENDAR", "GITHUB"], "tenho reunião amanhã?"), ["CALENDAR"])
 
 
+class TestAlwaysClassify(unittest.TestCase):
+    """Mensagem não trivial sempre passa pelo Ollama; resposta fora das opções vira CHAT."""
+
+    def setUp(self):
+        intent._intent_cache.clear()
+        skills = {
+            "SCREEN_READ": _skill("productivity", "SCREEN_PROMPT", ("tela", "aberta")),
+            "SPOTIFY_CONTROL": _skill("automation", "SPOTIFY_PROMPT", ("spotify", "toc*")),
+        }
+        self._patches = [
+            patch.dict(intent.manager.skills, skills, clear=True),
+            patch.object(intent, "_disabled_sets", return_value=(frozenset(), frozenset())),
+        ]
+        for p in self._patches:
+            p.start()
+
+    def tearDown(self):
+        for p in reversed(self._patches):
+            p.stop()
+        intent._intent_cache.clear()
+
+    def test_copilot_routes_open_spotify(self):
+        reply = '{"intent": "SPOTIFY_CONTROL", "entity": "spotify", "confidence": 1.0}'
+        with patch.object(intent, "query_ollama", return_value=reply) as q:
+            res = intent.classify_intent("abre o spotify")
+        q.assert_called_once()
+        self.assertEqual(res["intent"], "SPOTIFY_CONTROL")
+        self.assertEqual(res["entity"], "spotify")
+
+    def test_chat_still_asks_ollama(self):
+        with patch.object(intent, "query_ollama", return_value='{"intent": "CHAT"}') as q:
+            res = intent.classify_intent("qual a capital da França?",
+                                         allowed_categories=intent.CHAT_ALLOWED_CATEGORIES)
+        q.assert_called_once()
+        self.assertEqual(res["intent"], "CHAT")
+
+    def test_intent_outside_options_becomes_chat(self):
+        # No Chat o Spotify (automation) não está nas opções: se o modelo devolver, não executa
+        reply = '{"intent": "SPOTIFY_CONTROL", "entity": "spotify", "confidence": 0.9}'
+        with patch.object(intent, "query_ollama", return_value=reply):
+            res = intent.classify_intent("abre o spotify", allowed_categories=intent.CHAT_ALLOWED_CATEGORIES)
+        self.assertEqual(res["intent"], "CHAT")
+        self.assertIsNone(res["entity"])
+
+    def test_non_object_json_falls_back_to_chat(self):
+        with patch.object(intent, "query_ollama", return_value='["SCREEN_READ"]'):
+            res = intent.classify_intent("lê a tela")
+        self.assertEqual(res["intent"], "CHAT")
+        self.assertEqual(res["confidence"], 0.0)
+
+
 class TestContextWarning(unittest.TestCase):
     def setUp(self):
         intent._last_ctx_warning = 0.0
