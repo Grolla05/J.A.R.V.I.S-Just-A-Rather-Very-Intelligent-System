@@ -52,6 +52,7 @@ Lista tirada de `COMMANDS` em `frontend/commands.py` (a fonte única; a paleta `
 | `/log` | log de atividade com filtros e o último turno do Copilot |
 | `/vault [termo]` | memória no Obsidian: árvore, busca e nota no chat |
 | `/web <pergunta>` | pesquisa na internet e resume com fontes |
+| `/checar <afirmação>` | Fact-Checking: veredito (confirmado, falso, impreciso, inconclusivo) com fontes independentes; `/clip checar` checa o que foi copiado |
 | `/gh [prs\|issues\|commit\|ci] [dono/repo]` | GitHub: PRs, issues, último commit e CI |
 | `/briefing` | briefing do dia: clima, agenda, trânsito, máquina e GitHub |
 | `/rota [<local> <endereço>]` | cadastra um local fixo (casa, trabalho, faculdade…); sem argumento lista |

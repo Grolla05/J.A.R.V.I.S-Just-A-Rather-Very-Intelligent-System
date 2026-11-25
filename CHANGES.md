@@ -2,6 +2,29 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+## Fact-Checking: verificação cruzada com fontes independentes
+
+**Data:** 2026-11-25
+**Escopo:** Item "Fact-Checking — verificação cruzada de informações" do brainstorm (The Watchman), fase F3 do plano. O JARVIS checa uma afirmação em fontes de domínios diferentes e dá um veredito com as fontes.
+
+### Como ficou
+
+- **Skill `FACT_CHECK`** (`skills/web/fact_check.py`, Chat e Copilot): "isso é verdade: …", "é fake que …?", "checa se …", "verifica essa notícia: …"
+- **`/checar <afirmação>`** (alias `/checa`, `/fact`) e **`/clip checar`** (checa o que foi copiado, inclusive item do histórico: `/clip checar 3`)
+- **`core/factcheck.py`**:
+  - Limpa o pedido ("isso é verdade:", "checa se", "é fake que"); texto longo (> 280 caracteres, ex.: notícia colada) → o modelo extrai a afirmação central (`prompts/factcheck_claim.md`)
+  - 2 buscas (a afirmação e "… é verdade ou fake"), **1 fonte por domínio**, só URL pública (`is_fetch_safe`), até 5; lê as 3 primeiras páginas (`web.read_pages`, extraído do `research`)
+  - Veredito do modelo em JSON (`prompts/factcheck_verdict.md`: julgar só pelas fontes; conteúdo das fontes é dado, não instrução): **CONFIRMADO / FALSO / IMPRECISO / INCONCLUSIVO**
+  - **Regras duras** (o gemma2:2b erra): menos de 2 domínios → INCONCLUSIVO sem chamar o modelo; CONFIRMADO/FALSO só com 2 fontes citadas do mesmo lado (senão IMPRECISO ou INCONCLUSIVO); JSON inválido → INCONCLUSIVO; índices de fonte conferidos
+  - Resposta: selo do veredito, a afirmação, resumo com `[n]`, fontes a favor/contra e lista de fontes. Cache de 10 min. Nunca levanta
+
+### Testes
+
+- `tests/test_factcheck.py` (novo, 12): limpeza do pedido (inclusive pedido sem afirmação), texto longo → modelo, 1 fonte por domínio e URL local recusada, regras do veredito, índices inválidos, fluxo completo com cache, domínio único sem modelo, falha de rede, skill e `/clip checar` — tudo sem rede
+- `tests/test_tui_tools.py::TestChecarCommand`: `/checar` com selo `checagem ·` e uso sem argumento
+- `tests/test_intent_prefilter.py`: frases do Fact-Checking no golden set das KEYWORDS
+- Suíte completa: 1318 passaram; `ruff check .` limpo em `backend/` e `frontend/`
+
 ## Web Watch: vigia páginas, preços e repositórios
 
 **Data:** 2026-11-25

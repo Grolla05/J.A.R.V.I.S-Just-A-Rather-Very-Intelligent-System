@@ -21,10 +21,11 @@ COMMANDS = {
     "log":      ("/log", "log de atividade com filtros e o último turno do Copilot"),
     "vault":    ("/vault [termo]", "memória no Obsidian: árvore, busca e nota no chat"),
     "web":      ("/web <pergunta>", "pesquisa na internet e resume com fontes"),
+    "checar":   ("/checar <afirmação>", "Fact-Checking: cruza fontes independentes e dá o veredito (confirmado, falso, impreciso)"),
     "gh":       ("/gh [prs|issues|commit|ci] [dono/repo]", "GitHub: PRs, issues, último commit e CI"),
     "briefing": ("/briefing", "briefing do dia: clima, agenda, trânsito, máquina e GitHub"),
     "rota":     ("/rota [<local> <endereço>]", "cadastra um local fixo (casa, trabalho, faculdade…); sem argumento lista"),
-    "clip":     ("/clip [explicar|traduzir|resumir] [n] · hist · buscar <termo> · usar <n> · limpar",
+    "clip":     ("/clip [explicar|traduzir|resumir|checar] [n] · hist · buscar <termo> · usar <n> · limpar",
                  "age sobre o que você copiou ou sobre o histórico (monitor no /config)"),
     "email":    ("/email [ler <n> | responder <n> <texto> | novo <para> <texto> | apagar <n…|promoções> | organizar | vip <e-mail> | contato <apelido> <e-mail> | assinatura <texto>]",
                  "Gmail: e-mails por prioridade, ler, responder, escrever e organizar (envio sempre confirmado)"),
@@ -46,7 +47,7 @@ COMMANDS = {
 }
 
 # /help saiu (a paleta Ctrl+K lista tudo); quem digitar por hábito cai na paleta.
-ALIASES = {"net": "rede", "network": "rede", "lembretes": "lembrete", "lembrar": "lembrete", "remind": "lembrete", "idea": "ideia", "vigia": "vigiar", "watch": "vigiar", "insight": "ideia", "q": "quit", "exit": "quit", "help": "menu", "h": "menu", "?": "menu", "s": "sessions", "n": "new"}
+ALIASES = {"net": "rede", "network": "rede", "lembretes": "lembrete", "lembrar": "lembrete", "remind": "lembrete", "idea": "ideia", "vigia": "vigiar", "watch": "vigiar", "checa": "checar", "fact": "checar", "factcheck": "checar", "insight": "ideia", "q": "quit", "exit": "quit", "help": "menu", "h": "menu", "?": "menu", "s": "sessions", "n": "new"}
 
 
 @dataclass(frozen=True)
@@ -167,7 +168,7 @@ def dropped_paths(text):
 
 # ------------------------------------------------------------ paleta (Ctrl+K)
 # Comandos que não fazem sentido sem argumento: a paleta só preenche o input.
-NEEDS_ARG = {"rename", "attach", "web", "ideia", "instalar", "baixar"}
+NEEDS_ARG = {"rename", "attach", "web", "checar", "ideia", "instalar", "baixar"}
 # Fora da paleta: ela mesma e os que já têm entrada própria (modo/foco).
 _PALETTE_SKIP = {"menu", "mode", "focus", "dnd"}
 

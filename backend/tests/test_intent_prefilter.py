@@ -195,6 +195,8 @@ class TestRealSkillsKeywords(unittest.TestCase):
             "resume essa página": "SCREEN_READ",
             "acompanha as releases do ollama/ollama": "WEB_WATCH",
             "me avisa quando o preço dessa página baixar": "WEB_WATCH",
+            "isso é verdade: a Muralha da China é visível do espaço": "FACT_CHECK",
+            "é fake que vão mudar a bandeira?": "FACT_CHECK",
         }
         all_skills = list(intent.manager.skills)
         for text, expected in cases.items():

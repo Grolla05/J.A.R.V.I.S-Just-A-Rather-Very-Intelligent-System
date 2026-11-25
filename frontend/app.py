@@ -728,6 +728,8 @@ class JarvisApp(App, inherit_bindings=False):
             self.push_screen(VaultScreen(arg), self._use_note)
         elif name == "web":
             self._web(arg)
+        elif name == "checar":
+            self._checar(arg)
         elif name == "gh":
             self._gh(arg)
         elif name == "briefing":
@@ -964,6 +966,15 @@ class JarvisApp(App, inherit_bindings=False):
         else:
             self.tool_reply("lembrete", reminders.create_from_text, arg.strip())
 
+    # ---------------------------------------------------------------- fact-checking
+    def _checar(self, arg):
+        """/checar <afirmação> — veredito com fontes (core.factcheck) numa bolha de ferramenta."""
+        from core import factcheck
+        if not arg.strip():
+            self.notify("Uso: /checar <afirmação>", severity="warning")
+            return
+        self.tool_reply(f"checagem · {arg.strip()[:30]}", factcheck.check, arg.strip())
+
     # ---------------------------------------------------------------- web watch
     def _poll_webwatch(self):
         """Tick do Web Watch (WEBWATCH_TICK): HTTP/GitHub em worker; cada item checa no seu intervalo."""
@@ -1131,7 +1142,7 @@ class JarvisApp(App, inherit_bindings=False):
         self._clip_last_suggest = now
         self._call_ui(self.add_system, SUGGESTION[kind])
 
-    CLIP_USAGE = "Uso: /clip [explicar|traduzir|resumir] [n] · hist · buscar <termo> · usar <n> · limpar"
+    CLIP_USAGE = "Uso: /clip [explicar|traduzir|resumir|checar] [n] · hist · buscar <termo> · usar <n> · limpar"
     _CLIP_HIST = ("hist", "historico", "histórico")
     _CLIP_SEARCH = ("buscar", "busca", "search")
     _CLIP_USE = ("usar", "usa", "copiar", "use")

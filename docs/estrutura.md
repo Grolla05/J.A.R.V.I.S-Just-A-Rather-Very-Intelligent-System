@@ -56,7 +56,8 @@ J.A.R.V.I.S/
 │   │   ├── weather.py       ← Clima (Open-Meteo + local por IP) e saudação por horário
 │   │   ├── github_client.py ← PyGithub: PRs, issues, commit, CI, create_issue (confirmação fica com quem chama)
 │   │   ├── spotify.py       ← Spotify: OAuth PKCE, Web API e player
-│   │   ├── web.py           ← Pesquisa DuckDuckGo + leitura das páginas + resumo no Ollama
+│   │   ├── web.py           ← Pesquisa DuckDuckGo + leitura das páginas (read_pages) + resumo no Ollama
+│   │   ├── factcheck.py     ← Fact-Checking: afirmação → 2 buscas → 1 fonte por domínio → veredito JSON do Ollama + regras duras (≥2 fontes; senão INCONCLUSIVO/IMPRECISO)
 │   │   ├── clipboard.py     ← Monitor de clipboard, classificação (url/erro/código/inglês) e ações (/clip, skill CLIPBOARD)
 │   │   ├── netwatch.py      ← Vigia de rede: foto (portas expostas, processos na internet, ARP), linha de base e diff
 │   │   ├── window_utils.py  ← Win32: monitores, janela em foco, tela cheia, detecção de apresentação
@@ -108,7 +109,7 @@ J.A.R.V.I.S/
 │   │   ├── system/          ← network_guard, power_report, status_report, system_clear, system_security (só Copilot/voz)
 │   │   ├── productivity/    ← calendar_agenda, daily_briefing, email_management, focus_mode,
 │   │   │                       github_control, insight_note, presentation_mode, reminder, screen_read, traffic_commute, web_watch (Chat e Copilot)
-│   │   └── web/             ← web_search                                          (Chat e Copilot)
+│   │   └── web/             ← web_search, fact_check                              (Chat e Copilot)
 │   ├── prompts/             ← Arquivos .md de prompt (system_prompt, classify_intent, mode_chat, mode_copilot, briefing...; skills/ p/ PROMPT_TEXT)
 │   ├── tests/               ← pytest (backend + TUI)
 │   └── docs/                ← Documentação por módulo

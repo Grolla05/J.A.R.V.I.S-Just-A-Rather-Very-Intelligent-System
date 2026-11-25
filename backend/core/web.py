@@ -158,6 +158,15 @@ def summarize(query, sources):
     return f"{answer.strip()}\n\n**Fontes**\n{sources_markdown(sources)}"
 
 
+def read_pages(results):
+    """Lê as páginas dos resultados em paralelo: cada item ganha 'text' ('' se falhar)."""
+    if not results:
+        return []
+    with ThreadPoolExecutor(max_workers=min(len(results), PAGES_TO_READ), thread_name_prefix="jarvis-web") as pool:
+        texts = list(pool.map(fetch_text, [r["url"] for r in results]))
+    return [dict(r, text=t) for r, t in zip(results, texts)]
+
+
 def research(query):
     """Pesquisa completa: busca, lê as primeiras páginas e sumariza."""
     query = (query or "").strip()
@@ -169,10 +178,7 @@ def research(query):
     results = search(query)
     if not results:
         return "A busca não retornou nada — ou a internet resolveu tirar folga, Senhor."
-    top = results[:PAGES_TO_READ]
-    with ThreadPoolExecutor(max_workers=PAGES_TO_READ, thread_name_prefix="jarvis-web") as pool:
-        texts = list(pool.map(fetch_text, [r["url"] for r in top]))
-    sources = [dict(r, text=t) for r, t in zip(top, texts)]
+    sources = read_pages(results[:PAGES_TO_READ])
     answer = summarize(query, sources)
     _cache.set(query.lower(), answer)
     return answer

@@ -401,6 +401,20 @@ class TestWebWatch(ToolsAppCase):
         remove.assert_called_once_with(1)
 
 
+class TestChecarCommand(ToolsAppCase):
+    async def test_checar_and_usage(self):
+        from core import factcheck
+        app = self._app()
+        with patch.object(factcheck, "check", return_value="**Veredito: ❌ FALSO**") as check:
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/checar a Muralha da China é visível do espaço")
+                reply = self._last_reply(app)
+                self.assertEqual(reply.text, "**Veredito: ❌ FALSO**")
+                self.assertTrue(reply.meta.startswith("checagem · "))
+                await self._send(pilot, "/checar")
+        check.assert_called_once_with("a Muralha da China é visível do espaço")
+
+
 class TestEmailCommand(ToolsAppCase):
     async def test_list_read_and_usage(self):
         from services import mailbox

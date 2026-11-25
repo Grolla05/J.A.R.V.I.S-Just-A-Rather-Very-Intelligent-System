@@ -181,6 +181,7 @@ Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub
 | `oauth.py` | OAuth Desktop genérico: PKCE + callback no loopback |
 | `secrets_store.py` | Tokens no Cofre de Credenciais do Windows (`keyring`); fallback JSON |
 | `web.py` | Busca DuckDuckGo + leitura das páginas + resumo no Ollama |
+| `factcheck.py` | Fact-Checking: 2 buscas, 1 fonte por domínio, veredito do Ollama com regras duras (≥2 fontes do mesmo lado) |
 | `clipboard.py` | Monitor de clipboard, classificação (link, erro, código, inglês) e ações (explicar, traduzir, resumir) |
 | `netwatch.py` | Vigia de rede: foto das portas expostas, processos na internet e tabela ARP; linha de base e diff |
 | `selection.py` | Copia a seleção de qualquer app (devolvendo o clipboard anterior, se pedido) e lê/escreve o clipboard (Win32) |
