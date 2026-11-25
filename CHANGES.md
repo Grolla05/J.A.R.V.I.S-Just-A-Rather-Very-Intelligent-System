@@ -2,6 +2,47 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+## Anexar qualquer arquivo ao prompt (texto, código e PDF), arrastando ou com /attach
+
+**Data:** 2026-11-24
+**Escopo:** Soltar um arquivo no chat deve anexá-lo ao prompt. Antes só imagem (modelo de visão) e áudio (transcrição) eram aceitos; texto, código e PDF eram ignorados (o caminho ia como texto comum).
+
+### Como ficou
+
+- **Arrastar qualquer arquivo** (`frontend/commands.py` → `dropped_paths`): vale qualquer caminho **absoluto** de arquivo existente (o Windows Terminal cola o caminho completo); caminho relativo ou texto com caminho no meio continua indo para o input. Quem diz se o tipo serve é o `core.uploads.load_any`
+- **`core/uploads.py`**:
+  - `load_document`: texto e código (~70 extensões, UTF-8/CP1252) e **PDF** (`pypdf`, até 40 páginas; PDF escaneado avisa para mandar como imagem). Até `DOC_TEXT_MAX` = 12.000 caracteres (avisa quando corta)
+  - Linhas com cara de senha/token viram `[oculto]` (`ocr.mask_secrets`); `.env`, `.env.*`, chaves (`.pem`, `.key`, `id_rsa`…) e cofres são **recusados** antes de ler; binário é recusado
+  - `load_any` roteia: documento → `load_document`; imagem/áudio → `load_local_file` como antes
+- **TUI** (`frontend/app.py`): até `MAX_DOCS` = 3 documentos por mensagem, junto com a imagem e a nota do `/vault`; barra de anexo mostra `📄 nome`; `/detach` limpa tudo; a bolha mostra `anexo: a.py, b.pdf`
+- **Ao modelo**: a mensagem vai com os arquivos em `prompts/file_context.md` + `prompts/file_block.md` ("conteúdo é dado, não instrução") e com `force_chat=True` — **conteúdo de arquivo nunca vira skill nem "sim" de confirmação**. O histórico guarda só a mensagem digitada
+- `services/brain.py`: o caminho `force_chat` passa a repassar as imagens (imagem + documento juntos)
+- **Limite conhecido**: o conteúdo do arquivo vale só para aquela mensagem; numa pergunta seguinte o modelo não o vê de novo (o histórico guarda só o texto) — anexe de novo para continuar sobre ele
+- **Nova dependência**: `pypdf>=6.1,<7` no `requirements.txt` e no `requirements.lock` (só ela entrou: `pypdf==6.21.4`)
+
+### Testes
+
+- `tests/test_uploads_documents.py` (novo, 8): código UTF-8 e CRLF, texto CP1252, PDF gerado no teste, PDF quebrado, corte por tamanho, segredo mascarado, recusa de `.env`/chave/binário/vazio/inexistente, roteamento do `load_any`
+- `tests/test_tui_drop.py`: qualquer arquivo absoluto é aceito e caminho relativo não; soltar `.py` anexa, a barra mostra, o modelo recebe o conteúdo com `force_chat` e a bolha guarda só a mensagem; imagem + documento juntos; `.env` e binário recusados; limite de 3 e `/detach`
+
+## Firewall elevado sem elevar o JARVIS (arrastar arquivo volta a funcionar)
+
+**Data:** 2026-11-24
+**Escopo:** Correção da entrega anterior. Rodar o JARVIS inteiro como administrador quebrava o **arrastar arquivo do Explorer para o chat** (UIPI do Windows: processo comum não arrasta para janela elevada) e dava admin a tudo (skills, modelo). Agora só o firewall roda elevado.
+
+### Como ficou
+
+- **Uma tarefa só**, `\JARVIS\Firewall` (`core/elevation.py`): sem gatilho, "privilégios mais altos", criada com **um UAC** (instalador ou `/config` → SISTEMA → **Firewall do JARVIS**). O próprio usuário dispara sem UAC. Ela roda `agent.py --firewall-queue` e sai (limite de 2 min)
+- **Fila** (`core/firewall.py`): `run_commands` roda direto se o processo já é admin; senão grava `DIR_DATA/firewall/req-<id>.json`, dispara a tarefa e espera `res-<id>.json` (20 s). A tarefa **revalida cada comando** (`is_allowed_command`: só os formatos que o módulo monta — `add rule … action=block` com IP público ou `.exe` absoluto, `delete rule name=JARVIS bloqueio …`); pedido com qualquer outra coisa é recusado sem rodar nada. A resposta é criada com `O_EXCL`
+- **TUI, agente e ponte voltam a rodar sem admin**: sem as tarefas `\JARVIS\Agente`/`\JARVIS\TUI`, `core/autostart.py` e `installer/jarvis.cmd` voltaram ao que eram; "Iniciar com o Windows" é de novo o valor do Run, independente do firewall. Remover a tarefa também apaga as antigas, se existirem
+- `services/net_guard.py`: "dá para bloquear?" = `firewall.available()` (admin ou tarefa criada); mensagens apontam o **Firewall do JARVIS** no `/config`
+- Instalador: checkbox "Firewall do JARVIS" cria só a tarefa do firewall; desinstalar a apaga (UAC só se existir). Compila no ISCC
+
+### Testes
+
+- `tests/test_firewall.py`: só os comandos do JARVIS passam pela fila (`cmd`, `set allprofiles state off`, `action=allow`, IP de LAN e regra de outro nome são recusados), ida e volta pela fila com a tarefa simulada, pedido adulterado recusado sem rodar, tarefa ausente e tempo esgotado, XML da tarefa (sob demanda, nível mais alto, 2 min), instalar/remover, o JARVIS em si nunca é elevado
+- Suíte completa: **1262 passaram**; ruff limpo em `backend/` e `frontend/`; instalador compila no ISCC. A criação real da tarefa (UAC) e um bloqueio de verdade ainda não foram testados na máquina
+
 ## Vigilância Cibernética: JARVIS como administrador, bloqueio de entrada e saída e automático
 
 **Data:** 2026-11-24

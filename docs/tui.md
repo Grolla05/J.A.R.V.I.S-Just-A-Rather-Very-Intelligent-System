@@ -24,7 +24,7 @@ O modo vai para `execute_command_stream(..., mode=)` e escolhe o prompt `mode_ch
 - `/ideia <texto>` anota em 🧠 Brainstorms; `/lembrete [<quando> <assunto> | rm <n>]` cria/lista/remove lembretes; `/rede [confiar <n> | bloquear <ip> | mantidos | esquecer <n> | reset]` varre o perímetro (bloquear, esquecer e reset pedem `ConfirmScreen`)
 - `/email [ler <n> | responder <n> <texto> | novo <para> <texto> | apagar <n…|promoções> | organizar | vip <e-mail> | contato <apelido> <e-mail> | assinatura <texto>]`: envio, Lixeira e organização sempre mostram rascunho/lista/plano e abrem `ConfirmScreen` (não = rascunho no Gmail; apagar = Lixeira, recuperável por 30 dias). `/instalar <programa>` e `/baixar <programa>`: winget com confirmação. Ferramenta (`tool_reply`) que arma pendência local abre o `ConfirmScreen` sozinha
 - Rotinas em segundo plano (só com `start_services`): lembretes num `set_interval(REMINDER_INTERVAL)` próprio (agenda é HTTP: nunca no tick da telemetria) → `reminders.collect()` em worker de thread → `_deliver_reminder` (aviso comum respeita o silêncio e vai ao backlog; `urgent` sempre aparece, sem voz no silêncio); insights no fim de um turno de conversa sem skill (`_insight_fn`, worker `exclusive`); vigia de rede (`core.netwatch.NetworkWatch`, pref `net_monitor`). Testes injetam `app._insight_fn` e fazem patch de `reminders.collect`
-- Arrastar arquivo para o terminal = `/attach`: o Windows Terminal cola o caminho; `PromptInput._on_paste` usa `commands.dropped_paths()` (só quando **todo** o texto é caminho de imagem/áudio existente) e emite `FilesDropped`. Não chame `super()._on_paste` — o Textual já roda o handler do `Input` pelo MRO (colaria 2×)
+- Arrastar arquivo para o terminal = `/attach`: o Windows Terminal cola o caminho; `PromptInput._on_paste` usa `commands.dropped_paths()` (só quando **todo** o texto é caminho absoluto de arquivo existente, de qualquer tipo) e emite `FilesDropped`. Texto, código e PDF (até 3) vão junto da próxima mensagem como contexto (`core/uploads.load_document`, `prompts/file_context.md`, `force_chat` — nunca viram skill). Não chame `super()._on_paste` — o Textual já roda o handler do `Input` pelo MRO (colaria 2×)
 - Linha de status: telemetria (com `⚡ NNNW` do consumo, `core/power.py`) · selo de foco (`◷ FOCO 24m 1/4` / `☾ DND` / `[SILENT]`, resolução de minutos, sem timer próprio) · voz. Sem modelo (fica no `/config` → MODELO) e sem "Sair" no rodapé. A saúde (`core.health`, a cada `HEALTH_INTERVAL`, só depois do boot) não aparece no rodapé: fica no `/status` e falha nova vira notificação
 - PortAudio não é thread-safe: enumerar o microfone só via `health.check_microphone()` (lock + cache). Crash nativo grava stack em `logs/crash.log` (faulthandler no `main.py`)
 - Logo na aba: `core/wt_profile.py` grava o fragment do perfil `JARVIS` do Windows Terminal; launcher e `jarvis.cmd` abrem com `-p JARVIS`
@@ -43,8 +43,8 @@ Lista tirada de `COMMANDS` em `frontend/commands.py` (a fonte única; a paleta `
 | `/pin` | fixa/desafixa a sessão atual |
 | `/regen` | regenera a última resposta (Ctrl+R) |
 | `/edit` | edita a última mensagem e reenvia (↑ com input vazio) |
-| `/attach <caminho>` | imagem → modelo de visão; áudio → transcreve no input |
-| `/detach` | remove o anexo pendente |
+| `/attach <caminho>` | imagem → modelo de visão; áudio → transcreve; texto/código/PDF → vai junto da mensagem |
+| `/detach` | remove os anexos pendentes |
 | `/mode [chat\|copilot]` | troca o modo (Shift+Tab) |
 | `/voice` | liga/desliga wake word + voz (Ctrl+T) |
 | `/skills [on\|off <skill\|categoria>]` | cartuchos das skills (ou alterna direto) |

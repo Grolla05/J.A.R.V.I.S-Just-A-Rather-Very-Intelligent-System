@@ -68,6 +68,7 @@ MODES = ("chat", "copilot")
 STREAM_FLUSH_S = 0.05  # re-render do Markdown no máx. a cada 50 ms durante o stream
 NO_REPLY_TEXT = "_Sem resposta do modelo. O Ollama está rodando?_"
 LLM_FAILED_SPEECH = "O modelo não respondeu, Senhor. Verifique o Ollama."  # voz: nunca o parcial
+MAX_DOCS = 3  # documentos (texto/código/PDF) por mensagem — cada um até core.uploads.DOC_TEXT_MAX
 TELEMETRY_HISTORY = 40  # amostras guardadas p/ os sparklines (40 × 3 s = 2 min)
 NOTE_CONTEXT_MAX = 4000  # caracteres da nota do /vault que vão ao modelo
 REMINDER_INTERVAL = 30  # s entre checagens de lembretes (agenda + pedidos); a agenda tem cache próprio
@@ -183,6 +184,7 @@ class JarvisApp(App, inherit_bindings=False):
         self.session_title = sessions.DEFAULT_TITLE
         self.pending_image = None   # anexo aguardando a próxima mensagem
         self.pending_note = None    # nota do /vault aguardando a próxima mensagem
+        self.pending_docs = []      # documentos (texto/código/PDF) aguardando a próxima mensagem
         self.edit_message_id = None  # id da msg sendo editada (↑ / /edit)
         self._voice_thread = None
         self._voice_stop = threading.Event()  # encerra o loop de voz junto com o app
@@ -703,6 +705,7 @@ class JarvisApp(App, inherit_bindings=False):
             self._attach(arg)
         elif name == "detach":
             self.pending_note = None
+            self.pending_docs = []
             self._set_pending_image(None)
         elif name == "mode":
             if arg in MODES:
@@ -1202,16 +1205,18 @@ class JarvisApp(App, inherit_bindings=False):
 
     # ------------------------------------------------------------ attachments
     def _attach(self, path):
-        from core.uploads import load_local_file
+        from core.uploads import load_any
         if not path:
             self.notify("Uso: /attach <caminho do arquivo>", severity="warning")
             return
         try:
-            upload = load_local_file(path)
+            upload = load_any(path)
         except ValueError as e:
             self.notify(str(e), severity="error")
             return
-        if upload["kind"] == "image":
+        if upload["kind"] == "document":
+            self._add_pending_doc(upload)
+        elif upload["kind"] == "image":
             self._set_pending_image(upload)
         else:
             self.notify(f"Transcrevendo {upload['name']}…")
@@ -1222,16 +1227,31 @@ class JarvisApp(App, inherit_bindings=False):
 
     def _attach_dropped(self, paths):
         """Arquivos soltos no terminal = /attach. Uma imagem por mensagem
-        (fica a primeira); áudios são todos transcritos."""
+        (fica a primeira); documentos vão juntos (até MAX_DOCS); áudios são transcritos."""
         images = [p for p in paths if is_image_path(p)]
-        audios = [p for p in paths if not is_image_path(p)]
+        others = [p for p in paths if not is_image_path(p)]
         if images:
             self._attach(images[0])
             if len(images) > 1:
                 name = os.path.basename(images[0])
                 self.notify(f"Só uma imagem por mensagem — anexei {name}.", severity="warning")
-        for path in audios:
+        for path in others:
             self._attach(path)
+        self.main_screen.query_one("#prompt", PromptInput).focus()
+
+    def _add_pending_doc(self, doc):
+        if any(d["name"] == doc["name"] for d in self.pending_docs):
+            self.notify(f"{doc['name']} já está anexado.")
+            return
+        if len(self.pending_docs) >= MAX_DOCS:
+            self.notify(f"No máximo {MAX_DOCS} documentos por mensagem — {doc['name']} ficou de fora.",
+                        severity="warning")
+            return
+        self.pending_docs.append(doc)
+        if doc.get("truncated"):
+            self.notify(f"{doc['name']} é grande: vão os primeiros {len(doc['content'])} caracteres.",
+                        severity="warning")
+        self._refresh_attachbar()
 
     def _set_pending_image(self, upload):
         self.pending_image = upload
@@ -1248,12 +1268,24 @@ class JarvisApp(App, inherit_bindings=False):
         parts = []
         if self.pending_image:
             parts.append(f"📎 {self.pending_image['name']}")
+        parts += [f"📄 {doc['name']}" for doc in self.pending_docs]
         if self.pending_note:
             parts.append(f"▣ nota {self.pending_note['path'].rsplit('/', 1)[-1]}")
         bar = self.main_screen.query_one("#attachbar", Static)
         bar.display = bool(parts)
         if parts:
             bar.update(f" {' · '.join(parts)} — vai junto com a próxima mensagem   [dim]/detach remove[/]")
+
+    def _with_docs(self, text, docs):
+        """Documentos anexados viram contexto da mensagem (prompts/file_context.md). Tratados como
+        dados: a mensagem vai direto ao modelo (force_chat), nunca vira skill nem confirmação."""
+        if not docs:
+            return text
+        from core.prompts import load_prompt
+        blocks = "\n\n".join(load_prompt("file_block.md", name=d["name"], content=d["content"],
+                                           note=" (cortado: arquivo maior que o limite)" if d.get("truncated") else "")
+                               for d in docs)
+        return load_prompt("file_context.md", files=blocks, message=text)
 
     def _with_note(self, text, note):
         """Texto que vai ao modelo: a mensagem + a nota do vault como contexto
@@ -1302,14 +1334,17 @@ class JarvisApp(App, inherit_bindings=False):
 
     # ------------------------------------------------------------------- chat
     def send(self, text):
-        image, note = self.pending_image, self.pending_note
+        image, note, docs = self.pending_image, self.pending_note, self.pending_docs
         self.pending_image = self.pending_note = None
+        self.pending_docs = []
         self._refresh_attachbar()
         now = _now_hhmm()
-        meta = now + (f" · anexo: {image['name']}" if image else "")
+        names = ([image["name"]] if image else []) + [d["name"] for d in docs]
+        meta = now + (f" · anexo: {', '.join(names)}" if names else "")
         meta += f" · nota: {note['path'].rsplit('/', 1)[-1]}" if note else ""
         reply = self._begin_turn(text, user_meta=meta)
-        self._stream(text, image, self.mode, self.session_id, reply, self._with_note(text, note))
+        model_text = self._with_docs(self._with_note(text, note), docs)
+        self._stream(text, image, self.mode, self.session_id, reply, model_text, bool(docs))
 
     def _begin_turn(self, text, user_meta):
         """Bolha do usuário + bolha vazia da resposta; marca a TUI como ocupada."""

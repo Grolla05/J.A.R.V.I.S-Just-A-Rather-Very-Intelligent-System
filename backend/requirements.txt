@@ -50,6 +50,9 @@ textual>=8.2,<9             # TUI no terminal (chat/copilot) - substitui o HUD R
 psutil>=7.2,<8              # Informações de CPU, RAM, Disco, Rede, Processos
 GPUtil>=1.4,<2              # Monitoramento de GPUs NVIDIA (temperatura, carga, memória)
 
+# --- ANEXOS ---
+pypdf>=6.1,<7               # Texto de PDF anexado no chat (core/uploads.py, arrastar ou /attach)
+
 # --- REQUISIÇÕES HTTP ---
 requests>=2.34,<3           # Cliente HTTP para APIs externas e comunicação
 

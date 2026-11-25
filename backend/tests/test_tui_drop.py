@@ -54,9 +54,14 @@ class TestDroppedPaths(unittest.TestCase):
     def test_arquivo_inexistente(self):
         self.assertEqual(dropped_paths(os.path.join(self.dir, "nada.png")), [])
 
-    def test_extensao_nao_suportada(self):
-        txt = _write(self.dir, "notas.txt", b"oi")
-        self.assertEqual(dropped_paths(txt), [])
+    def test_qualquer_arquivo_existente_e_aceito(self):
+        # texto, código, PDF e até tipo desconhecido: quem anexa diz se dá para usar
+        for name in ("notas.txt", "main.py", "relatorio.pdf", "pacote.zip"):
+            path = _write(self.dir, name, b"oi")
+            self.assertEqual(dropped_paths(path), [path])
+
+    def test_caminho_relativo_nao_e_arquivo_solto(self):
+        self.assertEqual(dropped_paths("README.md"), [])   # texto comum que por acaso é um arquivo daqui
 
     def test_texto_comum_com_caminho_no_meio(self):
         png = _write(self.dir, "foto.png")
@@ -122,6 +127,82 @@ class TestDropInTui(_Base):
             await pilot.pause()
             self.assertEqual(app.pending_image["name"], "minha foto.png")
             self.assertTrue(any("Só uma imagem" in n for n in notes))
+
+
+
+class TestDropDocuments(_Base):
+    def setUp(self):
+        super().setUp()
+        self.dir = _make_dir(self)
+        self.seen = []
+
+    def _doc_app(self):
+        def stream(text, session_id, images, mode, on_route=None, force_chat=False):
+            self.seen.append({"text": text, "force_chat": force_chat, "images": images})
+            yield "ok"
+        return base.tui_app.JarvisApp(stream_fn=stream, start_services=False, voice=base.FakeVoice())
+
+    async def test_soltar_codigo_anexa_e_vai_junto_da_mensagem(self):
+        code = _write(self.dir, "soma.py", b"def soma(a, b):\n    return a + b\n")
+        app = self._doc_app()
+        async with app.run_test() as pilot:
+            prompt = app.query_one("#prompt")
+            prompt.focus()
+            prompt.post_message(events.Paste(f'"{code}"'))
+            await pilot.pause()
+            self.assertEqual([d["name"] for d in app.pending_docs], ["soma.py"])
+            self.assertIn("📄 soma.py", str(app.query_one("#attachbar").render()))
+            self.assertEqual(prompt.value, "")
+            await self._send(pilot, "tem bug aqui?")
+            await self._wait_for(pilot, lambda: self.seen)
+            sent = self.seen[0]
+            self.assertTrue(sent["force_chat"])                 # conteúdo de arquivo nunca vira skill
+            self.assertIn("def soma(a, b):", sent["text"])
+            self.assertIn("[Arquivo: soma.py]", sent["text"])
+            self.assertIn("tem bug aqui?", sent["text"])
+            self.assertEqual(app.pending_docs, [])
+            user = [m for m in app.query(base.tui_app.MessageView) if m.role == "user"][-1]
+            self.assertEqual(user.text, "tem bug aqui?")      # a bolha (e o histórico) guardam só a mensagem
+            self.assertIn("anexo: soma.py", user.meta)
+
+    async def test_imagem_e_documento_juntos(self):
+        png = _write(self.dir, "tela.png")
+        txt = _write(self.dir, "log.txt", b"ERRO 42")
+        app = self._doc_app()
+        async with app.run_test() as pilot:
+            app._attach_dropped([png, txt])
+            await pilot.pause()
+            self.assertIsNotNone(app.pending_image)
+            await self._send(pilot, "o que houve?")
+            await self._wait_for(pilot, lambda: self.seen)
+            self.assertIn("ERRO 42", self.seen[0]["text"])
+            self.assertTrue(self.seen[0]["images"])               # a imagem segue junto
+
+    async def test_arquivo_sensivel_ou_binario_nao_anexa(self):
+        env = _write(self.dir, ".env", b"OPENAI_KEY=abc")
+        exe = _write(self.dir, "app.zip", b"PK\x03\x04\x00\x00binario")
+        app = self._doc_app()
+        async with app.run_test() as pilot:
+            notes = []
+            app.notify = lambda msg, **kw: notes.append(msg)
+            app._attach_dropped([env, exe])
+            await pilot.pause()
+            self.assertEqual(app.pending_docs, [])
+            self.assertTrue(any("segredos" in n for n in notes))
+            self.assertTrue(any("não suportado" in n.lower() or "não é" in n for n in notes))
+
+    async def test_detach_e_limite_de_documentos(self):
+        paths = [_write(self.dir, f"n{i}.md", b"# nota") for i in range(4)]
+        app = self._doc_app()
+        async with app.run_test() as pilot:
+            notes = []
+            app.notify = lambda msg, **kw: notes.append(msg)
+            app._attach_dropped(paths)
+            await pilot.pause()
+            self.assertEqual(len(app.pending_docs), base.tui_app.MAX_DOCS)
+            self.assertTrue(any("No máximo" in n for n in notes))
+            await self._send(pilot, "/detach")
+            self.assertEqual(app.pending_docs, [])
 
 
 if __name__ == "__main__":

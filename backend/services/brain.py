@@ -119,10 +119,12 @@ def execute_command_stream(command, session_id='default', images=None, mode=MODE
     mode=copilot roda todas. on_route(intent) é chamado quando a mensagem vira
     uma skill (badge na TUI). force_chat=True (trecho de código/erro a explicar)
     vai direto ao LLM: sem classificador, sem vault e sem responder a ação pendente
-    — o conteúdo de um trecho não pode virar skill nem um "ok" de confirmação."""
+    — o conteúdo de um trecho (ou de um arquivo anexado) não pode virar skill nem
+    um "ok" de confirmação."""
     if force_chat:
         log.info(f"🧠 [CHAT DIRETO/{mode}]: {len(command)} caracteres, sem classificador.")
-        yield from ask_local_ai_stream(command, intent_type="CHAT", session_id=session_id, mode=mode)
+        yield from ask_local_ai_stream(command, intent_type="CHAT", session_id=session_id, mode=mode,
+                                       images=images)
         return
 
     res = _check_pending_action(command, owner)

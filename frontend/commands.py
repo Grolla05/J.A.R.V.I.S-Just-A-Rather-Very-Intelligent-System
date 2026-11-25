@@ -12,8 +12,8 @@ COMMANDS = {
     "pin":      ("/pin", "fixa/desafixa a sessão atual"),
     "regen":    ("/regen", "regenera a última resposta (Ctrl+R)"),
     "edit":     ("/edit", "edita a última mensagem e reenvia (↑ com input vazio)"),
-    "attach":   ("/attach <caminho>", "imagem → modelo de visão; áudio → transcreve no input"),
-    "detach":   ("/detach", "remove o anexo pendente"),
+    "attach":   ("/attach <caminho>", "imagem → modelo de visão; áudio → transcreve; texto/código/PDF → vai junto da mensagem"),
+    "detach":   ("/detach", "remove os anexos pendentes"),
     "mode":     ("/mode [chat|copilot]", "troca o modo (Shift+Tab)"),
     "voice":    ("/voice", "liga/desliga wake word + voz (Ctrl+T)"),
     "skills":   ("/skills [on|off <skill|categoria>]", "cartuchos das skills (ou alterna direto)"),
@@ -136,22 +136,28 @@ def is_image_path(path):
     return Path(path).suffix.lower() in IMAGE_EXTS
 
 
+def _is_dropped_file(path):
+    """Caminho absoluto de um arquivo que existe (o Windows Terminal cola caminho completo)."""
+    return path.is_absolute() and path.is_file()
+
+
 def dropped_paths(text):
     """Caminhos de arquivos soltos no terminal, ou [] se o texto não for só isso.
 
-    Só aceita quando **todo** pedaço é um arquivo existente de imagem/áudio —
+    Só aceita quando **todo** pedaço é um caminho absoluto de arquivo existente —
     assim texto comum colado (mesmo com um caminho no meio) segue para o input.
+    Qualquer tipo: quem anexa (`core.uploads.load_any`) diz se dá para usar.
     """
     if not text or not text.strip():
         return []
     whole = Path(text.strip().strip('"').strip("'")).expanduser()
-    if whole.suffix.lower() in IMAGE_EXTS | AUDIO_EXTS and whole.is_file():
+    if _is_dropped_file(whole):
         return [str(whole)]  # um caminho com espaço que chegou sem aspas
     paths = []
     for match in _PATH_TOKEN.finditer(text.strip()):
         token = next(g for g in match.groups() if g)
         path = Path(token).expanduser()
-        if path.suffix.lower() not in IMAGE_EXTS | AUDIO_EXTS or not path.is_file():
+        if not _is_dropped_file(path):
             return []
         paths.append(str(path))
     return paths
