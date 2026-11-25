@@ -27,6 +27,7 @@ A pasta de dados é `%APPDATA%\JARVIS` na versão instalada. No código-fonte (d
 | Especificações do computador | SQLite (tabela `hardware`) | `/status`, alertas | Lidas localmente (CPU, GPU, RAM, disco) |
 | Lembretes | SQLite (tabela `reminders`) | Avisos | |
 | Contatos de e-mail (apelido → endereço) | SQLite (tabela `email_contacts`) | "Manda para o Guilherme" | Também consulta o histórico do Gmail ao procurar |
+| Itens do Web Watch | SQLite (tabela `web_watches`) | Avisar quando página/preço/repositório muda | Link ou `dono/repo`, último preço/estado e trecho de até 4.000 caracteres do texto da página. O JARVIS baixa só páginas públicas (sem login) |
 | Softwares mantidos no Vigia de rede | SQLite (tabela `net_trusted_apps`) | Não alertar de novo | Nome e caminho do executável |
 | Histórico do clipboard | SQLite (tabela `clipboard_history`) | `/clip` | **Só com o Monitor de clipboard ligado** (desligado por padrão). Não guarda o que parece senha ou token |
 | Linha de base da rede | SQLite (tabela `config`, chave `net_baseline`) | Detectar novidades | Portas, processos e aparelhos da rede local (IP e MAC) |

@@ -6,7 +6,7 @@ Memória do J.A.R.V.I.S: SQLite local (`database.py`) e o vault do Obsidian (lon
 
 - Toda operação SQL **deve** terminar com `conn.close()` em bloco `finally`
 - Novas colunas: sempre adicionar fallback `PRAGMA table_info` + `ALTER TABLE` para bancos antigos
-- Arquivo gerado em `backend/database/jarvis_memory.db` com 8 tabelas: `config`, `history`, `sessions`, `hardware`, `clipboard_history`, `reminders`, `net_trusted_apps`, `email_contacts`
+- Arquivo gerado em `backend/database/jarvis_memory.db` com 9 tabelas: `config`, `history`, `sessions`, `hardware`, `clipboard_history`, `reminders`, `net_trusted_apps`, `email_contacts`, `web_watches`
 - UPSERT via `ON CONFLICT(key) DO UPDATE SET` — nunca checar existência manualmente antes de inserir
 - Acesso: `from core.database import db` → `db.log_interaction()`, `db.get_config()`, `db.save_config()`, `db.update_hardware_spec()`
 - Sessões/histórico do chat: `from services import sessions` (não escrever SQL de sessão na TUI). O mesmo vale para `services/clip_history.py` e `services/reminders.py`: a TUI só chama as funções

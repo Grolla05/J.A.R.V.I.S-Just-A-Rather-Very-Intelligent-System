@@ -71,6 +71,7 @@ O Chat usa a lista branca `CHAT_ALLOWED_CATEGORIES = ("productivity", "web")` em
 | productivity | `PRESENTATION_MODE` | Liga/desliga o Modo Apresentação |
 | productivity | `SCREEN_READ` | Lê a janela/monitor pelo OCR do Windows (ou a página pela URL da aba) e explica, resume, traduz ou resolve |
 | productivity | `TRAFFIC` | Tempo entre locais cadastrados com `/rota` |
+| productivity | `WEB_WATCH` | Vigia página, preço ou repositório do GitHub e avisa quando muda (`/vigiar`; sem link usa a aba aberta) |
 | web | `WEB_SEARCH` | Pesquisa na web e resume com fontes |
 
 ## Criar uma skill

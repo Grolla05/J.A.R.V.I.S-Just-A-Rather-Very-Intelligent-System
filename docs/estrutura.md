@@ -37,7 +37,7 @@ J.A.R.V.I.S/
 │   │   ├── uploads.py       ← load_local_file() + save_base64_upload() (/attach)
 │   │   ├── transcription.py ← Whisper local (faster-whisper)
 │   │   ├── config.py        ← Settings Singleton (.env, paths)
-│   │   ├── database.py      ← DatabaseManager SQLite (8 tabelas)
+│   │   ├── database.py      ← DatabaseManager SQLite (9 tabelas)
 │   │   ├── logger.py        ← JarvisLogger (console fora da TUI, arquivo sempre)
 │   │   ├── obsidian.py      ← RAG sobre vault Obsidian via API REST (plugin Local REST API)
 │   │   ├── oauth.py         ← OAuth Desktop genérico: PKCE + callback no loopback (Google Agenda, Spotify)
@@ -50,6 +50,7 @@ J.A.R.V.I.S/
 │   │   ├── discord_bot.py   ← discord.py (gateway): responde DM ou menção
 │   │   ├── messenger_ctl.py ← Ponte: canais ativos (token + pref), is_running (mutex), start (leve: o agente usa)
 │   │   ├── traffic.py       ← Trânsito entre locais fixos (/rota <local> <endereço>): Nominatim + OSRM (grátis) ou TomTom (ao vivo)
+│   │   ├── webwatch.py      ← Web Watch (lógica): preço no HTML (JSON-LD/meta/R$), hash do texto sem hora/data, linhas novas, release/commit cru do GitHub; URL só se `is_fetch_safe`
 │   │   ├── news.py          ← Manchetes do briefing (/config → SISTEMA): 1 por fonte, a mais relevante (RSS oficial ou busca; Crossref p/ DOI; radicais `morr*` + `_FALSE_CONTEXT`; desempate pelo Ollama numa chamada só com a pref `news_ai`)
 │   │   ├── briefing.py      ← Briefing diário em seções fixas (Clima, Computador, GitHub, Agenda, Trânsito, Manchetes); LLM só no fecho
 │   │   ├── weather.py       ← Clima (Open-Meteo + local por IP) e saudação por horário
@@ -80,6 +81,7 @@ J.A.R.V.I.S/
 │   │   ├── user_prefs.py    ← Preferências do /config (chaves pref_* na tabela config)
 │   │   ├── focus.py         ← Pomodoro + Não Perturbe (FocusManager: /focus, /dnd, skill FOCUS_MODE)
 │   │   ├── reminders.py     ← Lembretes: avisos antes dos eventos da agenda (com tempo de trajeto) e lembretes por pedido (/lembrete, skill REMINDER)
+│   │   ├── web_watch.py     ← Web Watch: vigia página/preço/repositório (tabela web_watches), collect() no tick da TUI (/vigiar, skill WEB_WATCH)
 │   │   ├── insights.py      ← Registro de insights: ideias da conversa → nota mensal em 🧠 Brainstorms (/ideia, skill INSIGHT_SAVE)
 │   │   ├── clip_history.py  ← Histórico persistente do clipboard (tabela clipboard_history): busca, reuso, filtro de segredos
 │   │   ├── net_guard.py     ← Guarda de rede: julga achados do netwatch, alerta, encerra processo/bloqueia IP com confirmação (/rede)
@@ -105,7 +107,7 @@ J.A.R.V.I.S/
 │   │   │                       screen_control, software_install, spotify_control, work_macros, youtube_control  (só Copilot/voz)
 │   │   ├── system/          ← network_guard, power_report, status_report, system_clear, system_security (só Copilot/voz)
 │   │   ├── productivity/    ← calendar_agenda, daily_briefing, email_management, focus_mode,
-│   │   │                       github_control, insight_note, presentation_mode, reminder, screen_read, traffic_commute (Chat e Copilot)
+│   │   │                       github_control, insight_note, presentation_mode, reminder, screen_read, traffic_commute, web_watch (Chat e Copilot)
 │   │   └── web/             ← web_search                                          (Chat e Copilot)
 │   ├── prompts/             ← Arquivos .md de prompt (system_prompt, classify_intent, mode_chat, mode_copilot, briefing...; skills/ p/ PROMPT_TEXT)
 │   ├── tests/               ← pytest (backend + TUI)

@@ -144,6 +144,7 @@ Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub
 | `notify_filter.py` | Decide se um alerta fala agora, espera ou some: prioridade × contexto |
 | `integrations.py` | Registro dos cards de INTEGRAÇÕES (`status`/`connect`/`disconnect`) |
 | `reminders.py` | Avisos antes dos eventos da agenda (com tempo de trajeto) e lembretes por pedido (tabela `reminders`) |
+| `web_watch.py` | Web Watch: vigia página, preço e repositório (tabela `web_watches`); `collect()` no tick da TUI |
 | `insights.py` | Ideias da conversa → nota mensal em 🧠 Brainstorms; fila `insights_pending` com o Obsidian fora |
 | `clip_history.py` | Histórico do clipboard (tabela `clipboard_history`), busca, reuso, filtro de segredos |
 | `net_guard.py` / `net_trust.py` | Guarda de rede (juiz LLM, alerta, encerrar/bloquear com confirmação) e softwares mantidos (`net_trusted_apps`) |
@@ -351,7 +352,7 @@ Atalhos globais (agente): `Win+J` abre/foca a TUI no Copilot (em foco, volta ao 
 
 | Onde | O quê |
 |---|---|
-| `database/jarvis_memory.db` | Tabelas `config` (prefs, skills desligadas, fontes, locais, data do briefing), `history` (mensagens + anexo + modo), `sessions` (título, fixada), `hardware` (specs WMI), `clipboard_history`, `reminders`, `net_trusted_apps` e `email_contacts`. Veja [`backend/database/README.md`](../backend/database/README.md) |
+| `database/jarvis_memory.db` | Tabelas `config` (prefs, skills desligadas, fontes, locais, data do briefing), `history` (mensagens + anexo + modo), `sessions` (título, fixada), `hardware` (specs WMI), `clipboard_history`, `reminders`, `net_trusted_apps`, `email_contacts` e `web_watches`. Veja [`backend/database/README.md`](../backend/database/README.md) |
 | `logs/` | `jarvis-AAAA-MM-DD.log` e `crash.log` |
 | `uploads/` | Anexos do `/attach` |
 | Cofre do Windows (serviço "JARVIS") | Refresh tokens do Google (Agenda e Gmail, um por card) e do Spotify |

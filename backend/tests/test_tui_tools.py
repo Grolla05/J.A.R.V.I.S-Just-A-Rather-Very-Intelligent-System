@@ -332,6 +332,75 @@ class TestReminders(ToolsAppCase):
         remove.assert_called_once_with(2)
 
 
+class TestWebWatch(ToolsAppCase):
+    FREE = {"presentation": False, "dnd": False, "meeting": False, "fullscreen": False}
+    QUIET = {"presentation": False, "dnd": True, "meeting": False, "fullscreen": False}
+
+    def setUp(self):
+        super().setUp()
+        self._backlog = list(state.dnd_backlog)
+        state.dnd_backlog.clear()
+
+    def tearDown(self):
+        state.dnd_backlog[:] = self._backlog
+        super().tearDown()
+
+    async def _tick(self, items, ctx):
+        from services import notify_filter, web_watch
+        app = self._app()
+        with patch.object(web_watch, "collect", return_value=items), \
+             patch.object(notify_filter, "context", return_value=ctx):
+            async with app.run_test() as pilot:
+                app._poll_webwatch()
+                await pilot.app.workers.wait_for_complete()
+                await pilot.pause()
+                replies = [(m.text, m.meta) for m in app.query(tui_app.MessageView) if m.role == "assistant"]
+        return app, replies
+
+    async def test_change_is_shown_with_vigia_meta(self):
+        item = {"text": "O preço em **loja.com.br** caiu de R$ 10,00 para R$ 8,00, Senhor.", "urgent": False}
+        app, replies = await self._tick([item], self.FREE)
+        self.assertEqual(replies[-1][0], item["text"])
+        self.assertTrue(replies[-1][1].startswith("vigia · "))
+        self.assertEqual(app.voice.spoken, [item["text"]])
+
+    async def test_normal_change_waits_during_dnd_target_hit_shows(self):
+        normal = {"text": "A página mudou.", "urgent": False}
+        app, replies = await self._tick([normal], self.QUIET)
+        self.assertEqual(replies, [])
+        self.assertEqual(len(state.dnd_backlog), 1)
+        hit = {"text": "Chegou no seu alvo.", "urgent": True}
+        app, replies = await self._tick([hit], self.QUIET)
+        self.assertEqual(replies[-1][0], hit["text"])
+        self.assertEqual(app.voice.spoken, [])
+
+    async def test_no_timer_without_services(self):
+        from services import web_watch
+        app = self._app()
+        with patch.object(web_watch, "collect") as collect:
+            async with app.run_test() as pilot:
+                await pilot.pause(0.1)
+        collect.assert_not_called()
+
+    async def test_vigiar_command(self):
+        from services import web_watch
+        app = self._app()
+        with patch.object(web_watch, "create_from_text", return_value="vigiando") as create, \
+             patch.object(web_watch, "list_text", return_value="lista") as listing, \
+             patch.object(web_watch, "remove_text", return_value="removido") as remove:
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/vigiar https://loja.com.br/x preço abaixo de 300")
+                self.assertEqual(self._last_reply(app).text, "vigiando")
+                await self._send(pilot, "/vigiar")
+                self.assertEqual(self._last_reply(app).text, "lista")
+                await self._send(pilot, "/vigia rm 1")
+                self.assertEqual(self._last_reply(app).text, "removido")
+                await self._send(pilot, "/vigiar rm")
+        create.assert_called_once_with("https://loja.com.br/x preço abaixo de 300")
+        listing.assert_called_once()
+        remove.assert_called_once_with(1)
+
+
 class TestEmailCommand(ToolsAppCase):
     async def test_list_read_and_usage(self):
         from services import mailbox

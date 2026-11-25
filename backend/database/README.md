@@ -1,6 +1,6 @@
 # Banco de dados (SQLite)
 
-O JARVIS guarda o estado local num SQLite (`jarvis_memory.db`), gerenciado por `core/database.py` (`from core.database import db`). A memória de longo prazo fica no Obsidian; o SQLite guarda histórico, sessões, preferências, specs da máquina, clipboard, lembretes, softwares mantidos no Vigia de rede e contatos de e-mail (8 tabelas).
+O JARVIS guarda o estado local num SQLite (`jarvis_memory.db`), gerenciado por `core/database.py` (`from core.database import db`). A memória de longo prazo fica no Obsidian; o SQLite guarda histórico, sessões, preferências, specs da máquina, clipboard, lembretes, softwares mantidos no Vigia de rede, contatos de e-mail e itens do Web Watch (9 tabelas).
 
 **Local do arquivo:** `settings.DB_PATH`
 - Dev: `backend/database/jarvis_memory.db`
@@ -112,6 +112,22 @@ Sobrevive ao `/rede reset`; `/rede mantidos` lista e `/rede esquecer <n>` remove
 | `last_used` | TIMESTAMP | UTC |
 
 Gravado por `/email contato <apelido> <e-mail>` ou quando o usuário escolhe um contato.
+
+### `web_watches` — Web Watch (`services/web_watch.py`)
+
+| Coluna | Tipo | |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `kind` | TEXT | `page`, `price` ou `repo` (`UNIQUE(kind, target)`) |
+| `target` | TEXT | URL ou `dono/repo` |
+| `label` | TEXT | nome curto mostrado nos avisos |
+| `target_price` | REAL | alvo do preço (opcional) |
+| `last_value` | TEXT | último texto da página (até 4.000 caracteres), preço ou JSON `{release, commit}` |
+| `last_hash` | TEXT | impressão digital do texto da página |
+| `last_checked` | TEXT | hora local ISO da última checagem |
+| `created_at` | TIMESTAMP | UTC |
+
+`/vigiar` cria/lista/remove; o tick da TUI (`WEBWATCH_TICK`) checa os vencidos.
 
 ## Regras
 

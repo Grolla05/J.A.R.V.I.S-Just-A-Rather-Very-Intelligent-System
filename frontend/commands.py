@@ -33,6 +33,8 @@ COMMANDS = {
     "ideia":    ("/ideia <texto>", "anota uma ideia em 🧠 Brainstorms no Obsidian (a conversa também registra sozinha)"),
     "lembrete": ("/lembrete [<quando> <assunto> | rm <n>]",
                  "lembrete com horário (em 30 min…, às 18h…); sem argumento lista os pendentes"),
+    "vigiar":   ("/vigiar [<link> [preço abaixo de N] | dono/repo | rm <n>]",
+                 "Web Watch: avisa quando a página muda, o preço cai ou sai release/commit; sem argumento lista"),
     "rede":     ("/rede [confiar <n> | bloquear <ip> | bloqueios | desbloquear <n> | mantidos | esquecer <n> | reset]",
                  "perímetro de rede: aparelhos, portas expostas e programas na internet (vigia no /config)"),
     "focus":    ("/focus [min|stop|skip|status]", "pomodoro 25/5 (liga o Não Perturbe no foco)"),
@@ -44,7 +46,7 @@ COMMANDS = {
 }
 
 # /help saiu (a paleta Ctrl+K lista tudo); quem digitar por hábito cai na paleta.
-ALIASES = {"net": "rede", "network": "rede", "lembretes": "lembrete", "lembrar": "lembrete", "remind": "lembrete", "idea": "ideia", "insight": "ideia", "q": "quit", "exit": "quit", "help": "menu", "h": "menu", "?": "menu", "s": "sessions", "n": "new"}
+ALIASES = {"net": "rede", "network": "rede", "lembretes": "lembrete", "lembrar": "lembrete", "remind": "lembrete", "idea": "ideia", "vigia": "vigiar", "watch": "vigiar", "insight": "ideia", "q": "quit", "exit": "quit", "help": "menu", "h": "menu", "?": "menu", "s": "sessions", "n": "new"}
 
 
 @dataclass(frozen=True)

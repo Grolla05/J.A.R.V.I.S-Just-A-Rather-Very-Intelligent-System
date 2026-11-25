@@ -193,6 +193,10 @@ class Settings:
     INTENT_CACHE_TTL: int = 30   # Segundos de validade de cada entrada
     INTENT_CACHE_SIZE: int = 64  # Máximo de entradas antes da evicção LRU
 
+    # --- Web Watch (services/web_watch.py): páginas, preços e repositórios vigiados ---
+    WEBWATCH_INTERVAL_MIN: int = _env_int("WEBWATCH_INTERVAL_MIN", 60)  # min entre checagens de cada item
+    WEBWATCH_MAX: int = _env_int("WEBWATCH_MAX", 20)                    # máximo de itens vigiados
+
     # --- Consumo de energia (core/power.py): GPU medida pelo nvidia-smi + estimativa ---
     POWER_TARIFF_KWH: float = _env_float("POWER_TARIFF_KWH", 0.85)  # R$/kWh da conta de luz
     POWER_BASE_W: float = _env_float("POWER_BASE_W", 45.0)          # placa-mãe, RAM, discos, ventoinhas

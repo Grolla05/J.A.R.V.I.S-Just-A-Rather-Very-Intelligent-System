@@ -71,6 +71,7 @@ LLM_FAILED_SPEECH = "O modelo não respondeu, Senhor. Verifique o Ollama."  # vo
 MAX_DOCS = 3  # documentos (texto/código/PDF) por mensagem — cada um até core.uploads.DOC_TEXT_MAX
 TELEMETRY_HISTORY = 40  # amostras guardadas p/ os sparklines (40 × 3 s = 2 min)
 NOTE_CONTEXT_MAX = 4000  # caracteres da nota do /vault que vão ao modelo
+WEBWATCH_TICK = 300     # s entre olhadas no Web Watch (cada item tem o próprio WEBWATCH_INTERVAL_MIN)
 REMINDER_INTERVAL = 30  # s entre checagens de lembretes (agenda + pedidos); a agenda tem cache próprio
 EXPLAIN_SNIPPET_MAX = 6000  # caracteres do trecho a explicar (cabe no contexto do modelo local)
 MIC_KHZ = 16  # taxa padrão do sr.Microphone (services/listen.py) — mostrada no topo do Copilot
@@ -236,6 +237,7 @@ class JarvisApp(App, inherit_bindings=False):
                 self._poll_health()
             self._boot_greeting()
             self.set_interval(REMINDER_INTERVAL, self._poll_reminders)
+            self.set_interval(WEBWATCH_TICK, self._poll_webwatch)
             self._sync_clipboard_monitor()
             self._sync_net_watch()
             self._register_presence()
@@ -738,6 +740,8 @@ class JarvisApp(App, inherit_bindings=False):
             self._idea(arg)
         elif name == "lembrete":
             self._lembrete(arg)
+        elif name == "vigiar":
+            self._vigiar(arg)
         elif name == "rede":
             self._rede(arg)
         elif name == "email":
@@ -928,7 +932,7 @@ class JarvisApp(App, inherit_bindings=False):
         for item in reminders.collect(now):
             self._deliver_reminder(item)
 
-    def _deliver_reminder(self, item):
+    def _deliver_reminder(self, item, meta="lembrete"):
         """Thread de lembretes: mostra o aviso na conversa e fala. Aviso comum (LEAD)
         respeita o silêncio — vai para o backlog do Não Perturbe; os urgentes (hora de
         sair, início iminente, lembrete pedido) sempre aparecem, só sem voz no silêncio."""
@@ -940,7 +944,7 @@ class JarvisApp(App, inherit_bindings=False):
         if notify_filter.decide(prio, ctx) == notify_filter.DEFER:
             remember_alert(text)
             return
-        self.call_from_thread(self.add_message, "assistant", text, f"lembrete · {_now_hhmm()}")
+        self.call_from_thread(self.add_message, "assistant", text, f"{meta} · {_now_hhmm()}")
         if not notify_filter.quiet_reason(ctx):
             self._speak_always(text)
 
@@ -959,6 +963,31 @@ class JarvisApp(App, inherit_bindings=False):
                 self.tool_reply("lembrete · remover", reminders.remove_text, int(rest))
         else:
             self.tool_reply("lembrete", reminders.create_from_text, arg.strip())
+
+    # ---------------------------------------------------------------- web watch
+    def _poll_webwatch(self):
+        """Tick do Web Watch (WEBWATCH_TICK): HTTP/GitHub em worker; cada item checa no seu intervalo."""
+        if not self._shutting_down:
+            self.run_worker(self._check_webwatch, thread=True, group="webwatch", exclusive=True)
+
+    def _check_webwatch(self, now=None):
+        from services import web_watch
+        for item in web_watch.collect(now):
+            self._deliver_reminder(item, meta="vigia")
+
+    def _vigiar(self, arg):
+        """/vigiar — sem argumento lista; `rm <n>` remove; link ou dono/repo começa a vigiar."""
+        from services import web_watch
+        word, _, rest = arg.strip().partition(" ")
+        if not arg.strip() or word.lower() in ("lista", "list", "ls"):
+            self.tool_reply("vigia", web_watch.list_text)
+        elif word.lower() in self._LEMBRETE_RM:
+            if not rest.strip().isdigit():
+                self.notify("Uso: /vigiar rm <n> (número do /vigiar)", severity="warning")
+            else:
+                self.tool_reply("vigia · remover", web_watch.remove_text, int(rest))
+        else:
+            self.tool_reply("vigia", web_watch.create_from_text, arg.strip())
 
     def _maybe_daily_briefing(self):
         """1º boot do dia (pref `briefing_auto`): briefing sozinho, sempre falado (qualquer modo)."""

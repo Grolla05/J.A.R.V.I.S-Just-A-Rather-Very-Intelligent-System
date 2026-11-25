@@ -193,6 +193,8 @@ class TestRealSkillsKeywords(unittest.TestCase):
             "volta 10 segundos": "YOUTUBE_CONTROL",
             "toca Coldplay": "SPOTIFY_CONTROL",
             "resume essa página": "SCREEN_READ",
+            "acompanha as releases do ollama/ollama": "WEB_WATCH",
+            "me avisa quando o preço dessa página baixar": "WEB_WATCH",
         }
         all_skills = list(intent.manager.skills)
         for text, expected in cases.items():

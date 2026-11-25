@@ -2,6 +2,32 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+## Web Watch: vigia páginas, preços e repositórios
+
+**Data:** 2026-11-25
+**Escopo:** Item "Web Watch — monitoramento de preços, sites e repositórios" do brainstorm (The Watchman), fase F2 do plano. O JARVIS passa a vigiar um link ou um repositório e avisar sozinho quando muda.
+
+### Como ficou
+
+- **`/vigiar`** (alias `/vigia`, `/watch`): `/vigiar <link>` vigia a página; `/vigiar <link> preço abaixo de 2000` vigia o preço (alvo opcional); `/vigiar dono/repo` (ou link do GitHub) vigia releases e commits; sem argumento lista; `/vigiar rm <n>` remove
+- **Skill `WEB_WATCH`** (`skills/productivity/web_watch.py`, Chat e Copilot): "me avisa quando o preço dessa página baixar de 300", "acompanha as releases do ollama/ollama", "o que você está vigiando?", "para de vigiar o 2". Sem link na frase usa a **URL da aba aberta** no navegador
+- **`core/webwatch.py`** (lógica + I/O fino):
+  - Preço: JSON-LD (`offers.price`/`lowPrice`, inclusive em `@graph`) → meta `product:price:amount` → 1º `R$ …` do texto → modelo (`prompts/webwatch_price.md`) só quando nada disso acha
+  - Página: texto útil (até 4.000 caracteres) com impressão digital que ignora hora, data e espaços; o aviso mostra até 3 linhas novas
+  - Repositório: `github_client.repo_snapshot` (nova) devolve release e commit crus para comparar
+  - Toda URL passa por `browser.is_fetch_safe` **antes e depois dos redirecionamentos** (só páginas públicas)
+- **`services/web_watch.py`**: tabela nova `web_watches` (9ª), linha de base na criação, `collect()` checa só os itens vencidos (`WEBWATCH_INTERVAL_MIN`, padrão 60) e nunca levanta; erro de rede só marca a hora. Preço que **cai** avisa; que chega no **alvo** é urgente (aparece mesmo no Não Perturbe, sem voz); subir só atualiza. Limite `WEBWATCH_MAX` = 20
+- **TUI**: `set_interval(WEBWATCH_TICK=300 s)` só com serviços → worker → `_deliver_reminder(item, meta="vigia")` (mesmo caminho e filtro dos lembretes)
+- `.env`: `WEBWATCH_INTERVAL_MIN`, `WEBWATCH_MAX` (com default no `Settings`)
+- **Limites**: só checa com a TUI aberta; página que monta o preço por JavaScript pode não ser lida (a Navegação Headless, F4, vai cobrir); repositório precisa do `GITHUB_TOKEN`
+
+### Testes
+
+- `tests/test_webwatch.py` (novo, 22): preço nos 3 formatos + `@graph` + fallback do modelo só sem marcação, `format_brl`, hash estável, linhas novas, `github_repo`, URL insegura e redirecionamento para rede local recusados, pedido → tipo/alvo (inclusive aba aberta), ciclo completo de preço/página/repositório com SQLite temporário, erro sem perder estado, duplicado, limite, lista/remoção, roteamento da skill
+- `tests/test_tui_tools.py::TestWebWatch` (4): aviso com `vigia ·` e voz, Não Perturbe (comum vai ao backlog, alvo aparece calado), sem timer sem serviços, `/vigiar`
+- `tests/test_intent_prefilter.py`: frases do Web Watch no golden set das KEYWORDS
+- Suíte completa: 1305 passaram; `ruff check .` limpo em `backend/` e `frontend/`
+
 ## Classificador: confere a intenção devolvida e prompts com exemplos negativos
 
 **Data:** 2026-11-25

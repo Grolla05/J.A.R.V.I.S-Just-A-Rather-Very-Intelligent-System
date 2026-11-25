@@ -107,6 +107,8 @@ Desktop não tem sensor do consumo total: a GPU NVIDIA é medida (`nvidia-smi`),
 
 | Variável | Padrão | Para quê |
 |---|---|---|
+| `WEBWATCH_INTERVAL_MIN` | `60` | Minutos entre checagens de cada item do Web Watch (só com a TUI aberta) |
+| `WEBWATCH_MAX` | `20` | Máximo de páginas/preços/repositórios vigiados |
 | `POWER_TARIFF_KWH` | `0.85` | R$/kWh da conta de luz (custo de hoje e do mês) |
 | `POWER_BASE_W` | `45` | Watts fixos de placa-mãe, RAM, discos e ventoinhas |
 | `POWER_CPU_TDP_W` | `65` | TDP do processador: consumo estimado a 100 % de carga (parado = 15 %) |
