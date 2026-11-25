@@ -91,3 +91,18 @@ class TestToolCommands(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestConfirmModal(unittest.TestCase):
+    def test_labels_by_pending_type(self):
+        from frontend.commands import confirm_labels
+        self.assertEqual(confirm_labels("FORM_SUBMIT"), ("Enviar", "Não enviar"))
+        self.assertEqual(confirm_labels("NET_KILL_PROCESS"), ("Encerrar", "Manter"))
+        self.assertEqual(confirm_labels("SOFTWARE_INSTALL"), ("Instalar", "Cancelar"))
+        self.assertEqual(confirm_labels(None), ("Confirmar", "Cancelar"))
+
+    def test_plain_text(self):
+        from frontend.commands import plain_confirm_text
+        text = 'Formulário **httpbin.org** · ou corrija: _"o telefone é 19 9"_ · `arquivo_final.txt`'
+        self.assertEqual(plain_confirm_text(text),
+                         'Formulário httpbin.org · ou corrija: "o telefone é 19 9" · arquivo_final.txt')

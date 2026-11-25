@@ -122,6 +122,32 @@ def parse_rota_arg(arg):
     return "set", word.lower(), rest
 
 
+# Botões do ConfirmScreen por tipo de ação pendente (core/pending.py). Sem entrada:
+# Confirmar/Cancelar. "Encerrar/Manter" é só para processo (vigia de rede, alertas).
+CONFIRM_LABELS = {
+    "KILL_PROCESS": ("Encerrar", "Manter"), "NET_KILL_PROCESS": ("Encerrar", "Manter"),
+    "APP_CLOSE": ("Fechar", "Manter"), "BROWSER_CLOSE_OTHERS": ("Fechar", "Manter"),
+    "BROWSER_CLOSE_ALL": ("Fechar", "Manter"), "EMAIL_SEND": ("Enviar", "Não enviar"),
+    "FORM_SUBMIT": ("Enviar", "Não enviar"), "EMAIL_TRASH": ("Lixeira", "Manter"),
+    "EMAIL_ORGANIZE": ("Organizar", "Cancelar"), "SOFTWARE_INSTALL": ("Instalar", "Cancelar"),
+    "POWER_DOWN": ("Desligar", "Cancelar"), "GITHUB_CREATE_ISSUE": ("Criar", "Cancelar"),
+    "HEADLESS_TASK": ("Executar", "Cancelar"),
+}
+_MD_BOLD_RE = re.compile(r"\*\*(.+?)\*\*|__(.+?)__")
+_MD_ITALIC_RE = re.compile(r"(?<![\w*])[_*]([^_*\n]+?)[_*](?![\w*])")
+
+
+def confirm_labels(kind):
+    """(sim, não) dos botões para o tipo da pendência."""
+    return CONFIRM_LABELS.get(str(kind or ""), ("Confirmar", "Cancelar"))
+
+
+def plain_confirm_text(text):
+    """A pergunta vem em Markdown (bolha do chat); o modal mostra texto puro."""
+    text = _MD_BOLD_RE.sub(lambda m: m.group(1) or m.group(2), text or "")
+    return _MD_ITALIC_RE.sub(r"\1", text).replace("`", "")
+
+
 def unescape(text):
     """'//texto' → '/texto' (mensagem que começa com barra)."""
     return text[1:] if text.startswith("//") else text

@@ -36,6 +36,7 @@ request(frase)
 | Senha, cartão, CVV, CPF/CNPJ/RG, passaporte, agência/conta, PIX, token/OTP nunca preenchidos (rótulo, nome/id com `_`/camelCase, placeholder, `type=password`, `autocomplete=cc-*`/`*-password`/`one-time-code`, valor com cara de CPF/cartão) — nem pelo perfil, nem pelo modelo, nem pelo ajuste | `headless.is_sensitive_input` + `fill_field` + `adjust` |
 | Envio só com confirmação explícita; tempo esgotado não envia | `core/pending.py` |
 | Campo já preenchido não é sobrescrito | `map_fields` |
+| Só campos de texto (`text`, `email`, `tel`, `url`, `search`, `textarea`, `select`) recebem dado do perfil; data, hora e número ficam com o usuário (o gemma2 já mapeou "Preferred delivery time" para a cidade) | `TEXT_TYPES` |
 | Só URL pública; redirecionamento proibido fecha a sessão | `FormSession._run` + `_guard` |
 | Janela aberta no máximo 30 min (2 min depois do envio); uma navegação por vez | `FormSession` |
 

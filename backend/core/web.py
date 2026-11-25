@@ -94,6 +94,21 @@ SEARCH_BACKENDS = ("auto", "duckduckgo, bing, brave", "auto")
 SEARCH_RETRY_PAUSE_S = 0.8
 
 
+TITLE_MAX = 120
+
+
+def clean_title(title):
+    """Título do buscador às vezes vem colado com outros ("X - SiteX - Site…"): corta onde
+    o começo se repete e limita a TITLE_MAX caracteres."""
+    title = " ".join((title or "").split())
+    head = title[:20]
+    if len(head) == 20:
+        again = title.find(head, len(head))
+        if again > 0:
+            title = title[:again].strip()
+    return title if len(title) <= TITLE_MAX else title[:TITLE_MAX - 1].rstrip() + "…"
+
+
 def search(query, max_results=MAX_RESULTS):
     """Resultados do DuckDuckGo: [{'title', 'url', 'snippet'}]. Falha → []."""
     query = (query or "").strip()
@@ -115,7 +130,7 @@ def search(query, max_results=MAX_RESULTS):
     for item in raw:
         url = item.get("href") or item.get("url") or ""
         if url:
-            results.append({"title": item.get("title", ""), "url": url, "snippet": item.get("body", "")})
+            results.append({"title": clean_title(item.get("title", "")), "url": url, "snippet": item.get("body", "")})
     return results
 
 

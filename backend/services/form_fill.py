@@ -36,6 +36,9 @@ LABELS = {
     "linkedin": "LinkedIn", "github": "GitHub", "website": "Site", "company": "Empresa",
 }
 
+# Só estes tipos recebem dado do perfil (texto). Data, hora, número, cor… ficam com o usuário.
+TEXT_TYPES = ("text", "email", "tel", "url", "search", "textarea", "select", "select-one")
+
 _AUTOCOMPLETE = {
     "name": "name", "given-name": "first_name", "family-name": "last_name", "email": "email",
     "tel": "phone", "tel-national": "phone", "address-level2": "city", "address-level1": "state",
@@ -162,7 +165,8 @@ def load_profile(note=_note_text, email=_google_email, home=_home_address, use_c
 
 # ------------------------------------------------------------------ mapeamento
 def field_label(field):
-    return field.get("label") or field.get("placeholder") or field.get("name") or field.get("id") or f"campo {field['i'] + 1}"
+    label = field.get("label") or field.get("placeholder") or field.get("name") or field.get("id")
+    return (label or f"campo {field['i'] + 1}").strip().rstrip(":*").strip()
 
 
 def rule_key(field):
@@ -216,6 +220,10 @@ def map_fields(fields, profile, ask_llm=ask_map_llm):
             continue
         if field.get("filled"):
             continue      # já tem algo escrito: não sobrescreve
+        if str(field.get("type") or "text").lower() not in TEXT_TYPES:
+            if field.get("required"):
+                unknown.append(field)   # data, hora, número…: o perfil não tem, fica com o usuário
+            continue
         key = rule_key(field)
         if key is None:
             leftover.append(field)

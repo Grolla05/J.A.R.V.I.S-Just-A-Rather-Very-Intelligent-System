@@ -2,6 +2,34 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+## Correções achadas nas fotos do post 12 (TUI real)
+
+**Data:** 2026-11-25
+**Escopo:** Ao tirar as fotos do post do LinkedIn das fases F1–F5 com a TUI real (gemma2:2b, busca, KaBuM e httpbin de verdade), apareceram erros que os testes com dados falsos não pegavam.
+
+### Como ficou
+
+- **Fact-Checking** (`core/factcheck.py`): o modelo deu ✅ CONFIRMADO para "a Muralha da China é visível do espaço" citando "Desmentido: …" como fonte a favor, e com 2 fontes contra
+  - Fonte citada a favor cujo **título** (da busca, não do modelo) desmente ("Mito:", "Desmentido:", "Por que NÃO…", "é fake/falso", "não é verdade/possível") passa para contra
+  - CONFIRMADO exige ≥ 2 a favor **e nenhuma contra**; se as fontes desmentem vira FALSO (≥ 2 contra, nenhuma a favor), se divergem vira IMPRECISO. FALSO do modelo nunca vira CONFIRMADO
+  - Quando a regra muda o veredito, a resposta diz: "O modelo disse X, mas as fontes citadas não sustentam isso"
+  - `prompts/factcheck_verdict.md` define os lados ("fonte que chama a afirmação de mito é CONTRA")
+- **Títulos da busca** (`core/web.clean_title`): o buscador devolvia títulos colados ("…Mundo EducaçãoA muralha da China…"); corta onde o título se repete e limita a 120 caracteres
+- **Navegação em segundo plano** (`services/headless_tasks.py`): na KaBuM o modelo chamou uma RX 7600 **patrocinada** de "RTX 5060 por R$ 1.899,99" e pegou o preço riscado de outra placa
+  - Pergunta de preço → `price_list` **por regra**: linha que cita o produto + linhas só de preço logo abaixo (dois seguidos = o 1º é o antigo, vale o último); o produto em si antes de quem só o contém ("Placa de Vídeo RTX 5060" antes de "Notebook…, RTX 5060"); o modelo não toca no preço
+  - Outras perguntas → `focus_text`: o modelo recebe só as linhas que citam o objetivo (+ 6 abaixo)
+  - `clean_goal`: "o usuário quer saber o preço…" vira "O preço…"; `prompts/headless_answer.md` explica preço antigo × atual
+- **Formulários** (`services/form_fill.py`): o modelo mapeou "Preferred delivery time" (`type=time`) para a cidade → só campos de texto (`TEXT_TYPES`) recebem dado do perfil; data/hora/número obrigatórios aparecem em "não preenchi". Rótulo sem ":" no fim
+- **Tela de confirmação** (`frontend/commands.confirm_labels` + `plain_confirm_text`): mostrava **Encerrar / Manter** para toda ação (rótulo do vigia de rede) e Markdown cru. Agora cada tipo de pendência tem os seus botões (Enviar / Não enviar, Instalar / Cancelar, Lixeira / Manter, Encerrar / Manter só para processo…) e o texto vem sem `**`/`_`/crase
+
+### Testes
+
+- `tests/test_factcheck.py`: caso real da Muralha (fonte "Desmentido" passa para contra; divergência = IMPRECISO; desmentido = FALSO com aviso), FALSO nunca vira CONFIRMADO, títulos que desmentem × "Fato ou Fake", título colado
+- `tests/test_headless.py`: patrocinado de outro produto some do foco, preço por regra (antigo e repetido saem, placa antes do notebook, modelo nem é chamado), `clean_goal`
+- `tests/test_form_fill.py`: campo de horário/data nunca recebe texto do perfil, rótulo sem ":"
+- `tests/test_tui_commands.py`: botões por tipo de pendência e texto limpo
+- Suíte completa: 1366 passaram; `ruff check .` limpo em `backend/` e `frontend/`
+
 ## Preenchimento de Formulários com a memória do JARVIS
 
 **Data:** 2026-11-25

@@ -84,6 +84,46 @@ class TestVerdictRules(unittest.TestCase):
                                                   "fontes_a_favor": [], "fontes_contra": []}), 3)
         self.assertEqual(res["verdict"], "INCONCLUSIVO")
 
+    def test_muralha_case_confirmed_with_debunking_sources(self):
+        # Caso real (gemma2:2b, 25/11): "CONFIRMADO" citando "Desmentido…" a favor e 2 fontes contra
+        titles = ["A muralha da China é visível do espaço? - Mundo Educação",
+                  "A muralha da China é visível do espaço? - Brasil Escola",
+                  "Desmentido: A Grande Muralha da China Não É Visível do Espaço",
+                  "Visível do espaço? Entenda essa e outras curiosidades sobre a ...",
+                  "Mito: A muralha da China pode ser vista do espaço | Super"]
+        raw = json.dumps({"veredito": "CONFIRMADO", "resumo": "Confirmada por duas fontes.",
+                          "fontes_a_favor": [2, 3], "fontes_contra": [4, 5]})
+        res = factcheck.parse_verdict(raw, 5, titles)
+        self.assertEqual(res["pro"], [2])
+        self.assertEqual(res["con"], [3, 4, 5])
+        self.assertEqual(res["verdict"], "IMPRECISO")      # divergem: nunca CONFIRMADO
+        raw = json.dumps({"veredito": "CONFIRMADO", "resumo": "x", "fontes_a_favor": [3], "fontes_contra": [5]})
+        self.assertEqual(factcheck.parse_verdict(raw, 5, titles)["verdict"], "FALSO")
+        answer = factcheck.render(CLAIM, factcheck.parse_verdict(raw, 5, titles), results("a.com", "b.com"))
+        self.assertIn("O modelo disse CONFIRMADO", answer)
+
+    def test_false_never_becomes_confirmed(self):
+        raw = json.dumps({"veredito": "FALSO", "resumo": "x", "fontes_a_favor": [1, 2], "fontes_contra": []})
+        self.assertEqual(factcheck.parse_verdict(raw, 3)["verdict"], "IMPRECISO")
+        raw = json.dumps({"veredito": "FALSO", "resumo": "x", "fontes_a_favor": [1, 2], "fontes_contra": [3]})
+        self.assertNotEqual(factcheck.parse_verdict(raw, 3)["verdict"], "CONFIRMADO")
+
+    def test_debunk_titles(self):
+        for title in ("Mito: X", "Desmentido: X", "Por que NÃO é possível ver X", "É fake que X", "X não é verdade"):
+            self.assertTrue(factcheck._DEBUNK_RE.search(title), title)
+        for title in ("Fato ou Fake: X é verdade", "A muralha é visível do espaço? - Brasil Escola", "Fakes News"):
+            self.assertFalse(factcheck._DEBUNK_RE.search(title), title)
+
+    def test_clean_title(self):
+        from core import web
+        glued = ("A muralha da China é visível do espaço? - Mundo EducaçãoA muralha da China é visível do espaço? "
+                 "- Brasil EscolaDesmentido")
+        self.assertEqual(web.clean_title(glued), "A muralha da China é visível do espaço? - Mundo Educação")
+        long_title = " ".join(str(n) for n in range(200))
+        self.assertLessEqual(len(web.clean_title(long_title)), web.TITLE_MAX)
+        self.assertTrue(web.clean_title(long_title).endswith("…"))
+        self.assertEqual(web.clean_title("  Curto  "), "Curto")
+
     def test_invalid_answers_are_inconclusive(self):
         for raw in (None, "", "não é json", "[1, 2]", json.dumps({"veredito": "TALVEZ", "resumo": "x"}),
                     json.dumps({"veredito": "FALSO", "fontes_contra": [1, 2]})):

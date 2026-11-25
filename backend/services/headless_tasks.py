@@ -12,6 +12,7 @@ dado, nunca instrução: vai ao modelo como bloco citado.
 import json
 import re
 import threading
+from urllib.parse import urlsplit
 
 from core import headless, pending
 from core.browser import is_fetch_safe
@@ -22,6 +23,18 @@ from core.prompts import load_prompt
 CONFIRM_TIMEOUT_S = 60
 ANSWER_CHARS = 6000
 _URL_RE = re.compile(r"https?://[^\s<>\"']+")
+_GOAL_PREFIX_RE = re.compile(r"^(?:o\s+)?usu[aá]rio\s+(?:quer|deseja|gostaria\s+de|precisa)\s+"
+                             r"(?:saber|ver|obter|conferir|descobrir|encontrar)?\s*(?:qual\s+[eé]\s+)?", re.I)
+_STOPWORDS = {"o", "a", "os", "as", "de", "da", "do", "das", "dos", "na", "no", "nas", "nos", "em", "e", "ou",
+              "um", "uma", "para", "pra", "por", "com", "que", "qual", "quais", "site", "pagina", "página",
+              "preco", "preço", "precos", "preços", "valor", "quanto", "custa", "sobre", "me", "traz", "ver"}
+_PRICE_LINE_RE = re.compile(r"^\s*(?:R\$|US\$|\$|€)\s?\d{1,3}(?:[.\s]?\d{3})*(?:,\d{2})?\s*$")
+_PRICE_GOAL_RE = re.compile(r"\b(pre[cç]o\w*|valor|quanto\s+custa|custa|barat\w*|caro)\b", re.I)
+PRICE_ITEMS = 5
+NAME_MAX = 80
+NAME_BUCKET = 40
+FOCUS_AFTER = 6           # linhas mantidas depois de cada linha relevante (preço, desconto…)
+FOCUS_MIN_CHARS = 200
 
 
 def _announce(text):
@@ -55,7 +68,7 @@ def plan(request_text, ask_llm=ask_plan_llm):
     """(objetivo, passos, erro). Link na frase vira plano mínimo se o modelo falhar."""
     request_text = " ".join((request_text or "").split())
     data = ask_llm(request_text) if ask_llm else None
-    goal = " ".join(str((data or {}).get("objetivo") or "").split())[:200] or request_text[:200]
+    goal = clean_goal(str((data or {}).get("objetivo") or "")) or request_text[:200]
     if data:
         steps, error = headless.validate_steps(data.get("passos"))
         if steps:
@@ -69,17 +82,84 @@ def plan(request_text, ask_llm=ask_plan_llm):
     return goal, None, error
 
 
+def clean_goal(goal):
+    """"o usuário quer saber o preço da RTX" → "preço da RTX" (o aviso fala com o usuário)."""
+    goal = _GOAL_PREFIX_RE.sub("", " ".join((goal or "").split())).strip(" .")
+    return (goal[:1].upper() + goal[1:])[:200] if goal else ""
+
+
 # ------------------------------------------------------------------ resposta
+def _terms(goal, site_host=""):
+    host_words = set(re.split(r"[^a-z0-9]+", site_host.lower()))
+    words = re.findall(r"[a-z0-9áàâãéêíóôõúç]+", (goal or "").lower())
+    return [w for w in dict.fromkeys(words) if (len(w) >= 3 or w.isdigit()) and w not in _STOPWORDS
+            and w not in host_words]
+
+
+def focus_text(text, goal, site_host=""):
+    """Só as linhas que citam o objetivo (ex.: "rtx" e "5060") + as FOCUS_AFTER seguintes
+    (onde ficam preço e desconto). Tira da frente do modelo o produto patrocinado de outra
+    coisa. Pouco texto sobrando → devolve o original."""
+    terms = _terms(goal, site_host)
+    if not terms:
+        return text
+    need = min(2, len(terms))
+    lines = (text or "").splitlines()
+    keep = set()
+    for i, line in enumerate(lines):
+        low = line.lower()
+        if sum(1 for t in terms if t in low) >= need:
+            keep.update(range(i, min(len(lines), i + FOCUS_AFTER + 1)))
+    focused = "\n".join(lines[i] for i in sorted(keep))
+    return focused if len(focused) >= FOCUS_MIN_CHARS else text
+
+
 def ask_answer_llm(goal, result):
     try:
         from core.llm import query_ollama
         prompt = load_prompt("headless_answer.md", goal=goal, title=result.get("title") or "",
-                             url=result.get("url") or "", text=(result.get("text") or "")[:ANSWER_CHARS])
+                             url=result.get("url") or "",
+                             text=focus_text(result.get("text") or "", goal,
+                                             urlsplit(result.get("url") or "").hostname or "")[:ANSWER_CHARS])
         return query_ollama([{"role": "user", "content": prompt}], temperature=0.3,
                             timeout=max(settings.TIMEOUT_LLM, 60))
     except Exception as e:
         log.warning(f"[HEADLESS] Modelo não respondeu: {e}")
         return None
+
+
+def price_list(text, goal, site_host=""):
+    """Pergunta de preço → [(produto, preço)] por regra, sem modelo: linha que cita o objetivo
+    seguida (até FOCUS_AFTER linhas) de linhas que são só preço. Dois preços seguidos = o 1º é
+    o antigo (riscado): vale o último. Ordem: o termo mais cedo no nome primeiro ("Placa de
+    Vídeo RTX 5060…" antes de "Notebook…, SSD 512GB, RTX 5060"), depois a ordem da página.
+    Vazio se a pergunta não é de preço ou nada casa."""
+    if not _PRICE_GOAL_RE.search(goal or ""):
+        return []
+    terms = _terms(goal, site_host)
+    if not terms:
+        return []
+    need = min(2, len(terms))
+    lines = (text or "").splitlines()
+    found, seen = [], set()
+    for i, line in enumerate(lines):
+        low = line.lower()
+        if _PRICE_LINE_RE.match(line) or sum(1 for t in terms if t in low) < need:
+            continue
+        prices = []
+        for nxt in lines[i + 1:i + 1 + FOCUS_AFTER]:
+            if _PRICE_LINE_RE.match(nxt):
+                prices.append(nxt.strip())
+            elif prices or sum(1 for t in terms if t in nxt.lower()) >= need:
+                break
+        name = " ".join(line.split())
+        if prices and name not in seen:
+            seen.add(name)
+            pos = min(name.lower().find(t) for t in terms if t in name.lower())
+            found.append((pos // NAME_BUCKET, len(found), name, prices[-1]))   # faixas: empate = ordem da página
+    found.sort(key=lambda item: (item[0], item[1]))
+    return [(name if len(name) <= NAME_MAX else name[:NAME_MAX - 1].rstrip() + "…", price)
+            for _pos, _order, name, price in found[:PRICE_ITEMS]]
 
 
 def report(goal, result, ask_llm=ask_answer_llm):
@@ -88,7 +168,12 @@ def report(goal, result, ask_llm=ask_answer_llm):
         return f"A tarefa em segundo plano (**{goal}**) parou no passo {result.get('done', 0) + 1}, Senhor: {result.get('error')}."
     if not (result.get("text") or "").strip():
         return f"Tarefa concluída (**{goal}**), mas a página não tinha texto legível, Senhor.\n\nPágina: {result.get('url')}"
-    answer = (ask_llm(goal, result) if ask_llm else None) or "Não consegui resumir a página agora, Senhor."
+    prices = price_list(result.get("text") or "", goal, urlsplit(result.get("url") or "").hostname or "")
+    if prices:   # preço vem por regra: o modelo pequeno troca produto e preço antigo pelo atual
+        answer = "\n".join([f"Encontrei {len(prices)} na página, Senhor:", ""]
+                           + [f"- {name} — **{price}**" for name, price in prices])
+    else:
+        answer = (ask_llm(goal, result) if ask_llm else None) or "Não consegui resumir a página agora, Senhor."
     return f"**Tarefa em segundo plano concluída** — {goal}\n\n{answer.strip()}\n\nPágina: {result.get('url')}"
 
 

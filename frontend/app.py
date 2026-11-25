@@ -29,6 +29,7 @@ from core import db, log, settings
 from core.llm import LLMError
 from frontend.commands import (
     Command,
+    confirm_labels,
     dropped_paths,
     is_image_path,
     palette_entries,
@@ -37,6 +38,7 @@ from frontend.commands import (
     parse_focus_arg,
     parse_rota_arg,
     parse_silent_arg,
+    plain_confirm_text,
     unescape,
 )
 from frontend.screens import (
@@ -1559,7 +1561,9 @@ class JarvisApp(App, inherit_bindings=False):
             # O id vai junto: se a pendência for trocada enquanto a pergunta está na
             # tela, o "s" não executa a ação nova (core/pending.py).
             pending_id = pending.get("id")
-            self.push_screen(ConfirmScreen(text, deadline=pending.get("timeout")),
+            yes, no = confirm_labels(pending.get("type"))
+            self.push_screen(ConfirmScreen(plain_confirm_text(text), deadline=pending.get("timeout"),
+                                           yes=yes, no=no),
                              lambda approved, pid=pending_id: self._resolve_critical(approved, pid))
 
     def _resolve_critical(self, approved, pending_id=None):

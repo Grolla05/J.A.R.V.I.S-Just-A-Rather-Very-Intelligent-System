@@ -102,6 +102,15 @@ class TestMapping(unittest.TestCase):
         self.assertEqual(plan["fill"], [])
         self.assertEqual([f["i"] for f in plan["unknown"]], [0])
 
+    def test_time_field_never_gets_profile_text(self):
+        # Caso real (httpbin, 25/11): o modelo mapeou "Preferred delivery time" (type=time) para a cidade
+        fields = [field(0, "Customer name:"), field(1, "Preferred delivery time:", type="time"),
+                  field(2, "Data do evento", type="date", required=True)]
+        plan = form_fill.map_fields(fields, PROFILE, ask_llm=lambda f, k: {"1": "city", "2": "city"})
+        self.assertEqual([(f["i"], v) for f, v, _ in plan["fill"]], [(0, "Felipe Grolla Freitas")])
+        self.assertEqual([f["i"] for f in plan["unknown"]], [2])     # obrigatório: aparece em "não preenchi"
+        self.assertEqual(form_fill.field_label(fields[0]), "Customer name")
+
     def test_filled_field_is_kept(self):
         plan = form_fill.map_fields([field(0, "Nome", filled=True)], PROFILE, ask_llm=None)
         self.assertEqual(plan, {"fill": [], "sensitive": [], "unknown": []})

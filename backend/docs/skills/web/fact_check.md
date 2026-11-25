@@ -30,12 +30,16 @@ check(texto)
 | Situação | Resultado |
 |---|---|
 | menos de 2 domínios diferentes nas buscas | `INCONCLUSIVO` (sem modelo) |
-| `CONFIRMADO` com menos de 2 fontes a favor citadas | `IMPRECISO` (se citou alguma) ou `INCONCLUSIVO` |
-| `FALSO` com menos de 2 fontes contra citadas | idem |
+| fonte citada "a favor" cujo **título** (da busca) desmente: "Mito:", "Desmentido:", "Por que NÃO…", "é fake/falso", "não é verdade/possível" | passa para "contra" |
+| `CONFIRMADO` com menos de 2 a favor **ou com alguma contra** | `FALSO` (≥ 2 contra e nenhuma a favor), `IMPRECISO` (fontes dos dois lados) ou `INCONCLUSIVO` |
+| `FALSO` com menos de 2 contra ou com ≥ 2 a favor | `IMPRECISO` ou `INCONCLUSIVO` — nunca vira `CONFIRMADO` (na dúvida, o lado cético) |
+| regra mudou o veredito do modelo | a resposta avisa: "O modelo disse X, mas as fontes citadas não sustentam isso" |
 | JSON inválido, veredito desconhecido, resumo vazio, modelo fora | `INCONCLUSIVO` |
 | índice de fonte inexistente ou repetido | descartado |
 
-O prompt manda julgar **só pelas fontes** e trata o conteúdo delas como dado, não instrução.
+O prompt manda julgar **só pelas fontes**, define os lados ("fonte que chama a afirmação de mito é CONTRA") e trata o conteúdo delas como dado, não instrução. Títulos colados pelo buscador ("…Mundo EducaçãoA muralha…") são cortados em `web.clean_title`.
+
+Caso real que motivou as regras (25/11/2026): o gemma2:2b deu `CONFIRMADO` para "a Muralha da China é visível do espaço" citando "Desmentido: A Grande Muralha da China Não É Visível do Espaço" como a favor.
 
 ## 🧪 Testes
 

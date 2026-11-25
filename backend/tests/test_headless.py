@@ -311,6 +311,48 @@ class TestService(unittest.TestCase):
             self.assertEqual(headless_task.execute("kabum", "entra no site da kabum"), "ok")
         req.assert_called_once_with("entra no site da kabum")
 
+    def test_focus_drops_sponsored_other_product(self):
+        # Caso real (KaBuM, 25/11): RX 7600 patrocinada no topo virou "RTX 5060 por R$ 1.899,99"
+        page = "\n".join([
+            "Produto", "Patrocinado", "Placa de Vídeo RX 7600 Challenger ASRock AMD Radeon, 8GB GDDR6",
+            "R$ 2.823,52", "R$ 1.899,99", "Desconto:", "-20%", "BOM PRA KABUM", "x", "y", "z", "w",
+            "Placa de Vídeo Zotac Gaming RTX 5060 Twin Edge OC NVIDIA GeForce, 8GB GDDR7, 128-bits, Dual Fan",
+            "R$ 3.999,99", "No PIX ou 10x de R$ 444,44",
+            "Placa de Vídeo ASUS DUAL RTX 5060 O8G NVIDIA GeForce, 8GB GDDR7, 2565MHz, 128 bits, OpenGL 4.6",
+            "R$ 4.705,87", "R$ 3.499,99", "Desconto:"])
+        focused = headless_tasks.focus_text(page, "preço da RTX 5060 na KaBuM", "www.kabum.com.br")
+        self.assertNotIn("RX 7600", focused)
+        self.assertNotIn("1.899,99", focused)
+        self.assertIn("R$ 3.999,99", focused)
+        self.assertIn("R$ 3.499,99", focused)
+        self.assertEqual(headless_tasks.focus_text("curto RTX 5060", "rtx 5060"), "curto RTX 5060")   # pouco texto
+        self.assertEqual(headless_tasks.focus_text(page, "o que tem aqui"), page)                     # sem termo
+
+    def test_price_list_by_rule(self):
+        page = "\n".join([
+            "Patrocinado", "Placa de Vídeo RX 7600 Challenger ASRock AMD Radeon, 8GB GDDR6", "R$ 2.823,52", "R$ 1.899,99",
+            "Placa de Vídeo Zotac Gaming RTX 5060 Twin Edge OC", "R$ 3.999,99", "No PIX ou 10x de R$ 444,44",
+            "Placa de Vídeo ASUS DUAL RTX 5060 O8G", "R$ 4.705,87", "R$ 3.499,99", "Desconto:", "-26%",
+            "Placa de Vídeo ASUS DUAL RTX 5060 O8G", "R$ 3.499,99"])
+        items = headless_tasks.price_list(page, "preço da RTX 5060 na KaBuM", "www.kabum.com.br")
+        self.assertEqual(items, [("Placa de Vídeo Zotac Gaming RTX 5060 Twin Edge OC", "R$ 3.999,99"),
+                                 ("Placa de Vídeo ASUS DUAL RTX 5060 O8G", "R$ 3.499,99")])   # o antigo e o repetido saem
+        self.assertEqual(headless_tasks.price_list(page, "data de lançamento da RTX 5060"), [])   # não é preço
+        ads = "\n".join(["Notebook Gamer Acer Nitro V16, Intel Core 5 210H, 16GB RAM, SSD 512GB, RTX 5060",
+                         "R$ 6.974,10", page])
+        first = headless_tasks.price_list(ads, "preço da RTX 5060")[0][0]
+        self.assertTrue(first.startswith("Placa de Vídeo"), first)        # o produto antes do notebook com ele
+        text = headless_tasks.report("preço da RTX 5060", {"ok": True, "text": page, "url": SITE},
+                                     ask_llm=lambda g, r: 1 / 0)                                 # modelo nem é chamado
+        self.assertIn("- Placa de Vídeo ASUS DUAL RTX 5060 O8G — **R$ 3.499,99**", text)
+
+    def test_clean_goal(self):
+        self.assertEqual(headless_tasks.clean_goal("o usuário quer saber o preço da RTX 5060 na Kabum"),
+                         "O preço da RTX 5060 na Kabum")
+        self.assertEqual(headless_tasks.clean_goal("Usuário deseja qual é a data de nascimento do Tesla."),
+                         "A data de nascimento do Tesla")
+        self.assertEqual(headless_tasks.clean_goal("preço da RTX"), "Preço da RTX")
+
     def test_plan_prompt_has_request(self):
         from core.prompts import load_prompt
         self.assertIn("vê o preço", load_prompt("headless_plan.md", request="vê o preço"))

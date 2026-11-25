@@ -36,6 +36,11 @@ VERDICTS = (CONFIRMED, FALSE, INACCURATE, INCONCLUSIVE)
 BADGE = {CONFIRMED: "✅ CONFIRMADO", FALSE: "❌ FALSO", INACCURATE: "⚠️ IMPRECISO", INCONCLUSIVE: "❔ INCONCLUSIVO"}
 
 _cache = TTLCache(maxsize=32, ttl=CACHE_TTL)
+# Título (da busca) que desmente a afirmação: fonte citada "a favor" com ele vai para "contra"
+_DEBUNK_RE = re.compile(
+    r"\b(mito|desmentid\w*|desmente|boato|hoax|myth|debunk\w*)\b"
+    r"|\b[eé]\s+(?:fake|falso|falsa|mentira)\b"
+    r"|\bn[aã]o\s+[eé]\s+(?:verdade|real|poss[ií]vel|vis[ií]vel)\b|\bpor\s+que\s+n[aã]o\b", re.I)
 
 _REQUEST_RE = re.compile(
     r"^\s*(?:(?:jarvis|javis|jarbas)[\s,]+)?"
@@ -119,24 +124,36 @@ def _indices(value, n):
     return out
 
 
-def parse_verdict(raw, n_sources):
-    """JSON do modelo → {'verdict', 'summary', 'pro', 'con'} já com as regras duras."""
+def parse_verdict(raw, n_sources, titles=None):
+    """JSON do modelo → {'verdict', 'summary', 'pro', 'con', 'model'} já com as regras duras.
+
+    `titles` (da busca, não do modelo): fonte citada "a favor" cujo título desmente a
+    afirmação ("Mito: …", "Desmentido: …", "Por que NÃO é possível…") passa para "contra".
+    CONFIRMADO exige ≥ MIN_DOMAINS a favor e NENHUMA contra; se as fontes desmentem, vira
+    FALSO (≥ MIN_DOMAINS contra e nenhuma a favor) ou IMPRECISO (divergem). O inverso não
+    existe: FALSO do modelo nunca vira CONFIRMADO — na dúvida, o lado cético."""
     try:
         data = json.loads(raw or "{}")
     except (TypeError, ValueError):
         data = {}
     if not isinstance(data, dict):
         data = {}
-    verdict = str(data.get("veredito") or "").strip().upper()
+    verdict = model = str(data.get("veredito") or "").strip().upper()
     summary = " ".join(str(data.get("resumo") or "").split())
     pro = _indices(data.get("fontes_a_favor"), n_sources)
     con = _indices(data.get("fontes_contra"), n_sources)
+    if titles:
+        debunk = [i for i in pro if i <= len(titles) and _DEBUNK_RE.search(titles[i - 1] or "")]
+        pro = [i for i in pro if i not in debunk]
+        con = sorted(set(con) | set(debunk))
+    result = {"summary": summary, "pro": pro, "con": con, "model": model}
     if verdict not in VERDICTS or not summary:
-        return {"verdict": INCONCLUSIVE, "summary": summary, "pro": pro, "con": con}
-    side = pro if verdict == CONFIRMED else con if verdict == FALSE else None
-    if side is not None and len(side) < MIN_DOMAINS:
+        return dict(result, verdict=INCONCLUSIVE)
+    if verdict == CONFIRMED and (len(pro) < MIN_DOMAINS or con):
+        verdict = FALSE if (len(con) >= MIN_DOMAINS and not pro) else INACCURATE if (pro or con) else INCONCLUSIVE
+    elif verdict == FALSE and (len(con) < MIN_DOMAINS or len(pro) >= MIN_DOMAINS):
         verdict = INACCURATE if (pro or con) else INCONCLUSIVE
-    return {"verdict": verdict, "summary": summary, "pro": pro, "con": con}
+    return dict(result, verdict=verdict)
 
 
 def ask_verdict(claim, sources):
@@ -154,6 +171,9 @@ def render(claim, result, sources):
     lines = [f"**Veredito: {BADGE[result['verdict']]}**", "", f"> {claim}", ""]
     if result["summary"]:
         lines += [result["summary"], ""]
+    if result.get("model") in VERDICTS and result["model"] != result["verdict"]:
+        lines += [f"_O modelo disse {result['model']}, mas as fontes citadas não sustentam isso — "
+                  "veredito ajustado pelas regras._", ""]
     cites = []
     if result["pro"]:
         cites.append("**A favor:** " + ", ".join(f"[{i}]" for i in result["pro"]))
@@ -180,7 +200,7 @@ def check(text, search=web.search, read=web.read_pages, verdict_fn=ask_verdict, 
                     f"Não achei ao menos {MIN_DOMAINS} fontes independentes sobre isso, Senhor — "
                     "sem cruzar informação, não dou veredito.")
         sources = read(sources[:web.PAGES_TO_READ]) + sources[web.PAGES_TO_READ:]
-        result = parse_verdict(verdict_fn(claim, sources), len(sources))
+        result = parse_verdict(verdict_fn(claim, sources), len(sources), [s.get("title") or "" for s in sources])
         answer = render(claim, result, sources)
         _cache.set(claim.lower(), answer)
         return answer

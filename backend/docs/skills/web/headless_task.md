@@ -21,7 +21,11 @@ request(frase)
   ├─ risky_steps        clique de enviar/comprar/cadastrar/login, Enter depois de um campo que não é busca
   │    └─ tem algum?    pending.arm("HEADLESS_TASK") com a lista de passos (⚠️ envia algo) → só roda no "sim"
   ├─ thread daemon      run_task: Edge sem janela, perfil próprio, um passo por vez
-  ├─ headless_answer.md resposta só com o texto visível da página (dado, não instrução)
+  ├─ pergunta de preço?  price_list por REGRA: linha do produto + linhas só de preço abaixo
+  │                     (dois seguidos = o 1º é o antigo, vale o último); produto em si antes
+  │                     de quem só o contém ("Placa RTX 5060" antes de "Notebook…, RTX 5060")
+  ├─ senão              focus_text (só as linhas que citam o objetivo + 6 abaixo) →
+  │                     headless_answer.md: resposta só com esse texto (dado, não instrução)
   └─ state.announce     "**Tarefa em segundo plano concluída** — objetivo … Página: url"
 ```
 
@@ -47,6 +51,11 @@ request(frase)
 | Download desligado, service workers bloqueados, perfil próprio (`headless_profile/` na pasta de dados), sem login | `_edge` |
 | Passo que envia algo só com confirmação explícita | `risky_steps` + `core/pending.py` |
 | Uma tarefa por vez (lock); o Web Watch não espera — tenta no próximo ciclo | `_lock` |
+
+## 🧪 Achados reais (KaBuM, 25/11/2026)
+
+- O gemma2:2b chamou uma RX 7600 **patrocinada** de "RTX 5060 por R$ 1.899,99" e usou o preço riscado de outra placa → preço por regra (`price_list`) e foco no texto (`focus_text`).
+- O objetivo vinha como "o usuário quer saber…" → `clean_goal`.
 
 ## 🔁 Uso pelo Web Watch
 
