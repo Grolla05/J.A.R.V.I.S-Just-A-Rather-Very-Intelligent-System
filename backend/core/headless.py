@@ -15,13 +15,20 @@ Segurança:
 - passo que envia algo (clicar "Comprar", "Enviar", Enter depois de preencher um campo
   que não é busca) é marcado por `risky_steps`; quem chama confirma antes (core/pending.py)
 
+Formulários (F5): `FormSession` abre o Edge COM janela numa thread própria, lê os campos
+com um script fixo (`_FIELDS_JS`), preenche e envia por fila e fica aberto até o usuário
+fechar a janela — quem decide o envio é `services/form_fill.py` (confirmação).
+
 Uma tarefa por vez (o perfil persistente não aceita dois Edge). Tudo roda em thread
 (skill, worker da TUI ou Web Watch); nada aqui levanta para fora.
 """
 import importlib.util
+import queue
 import re
 import threading
+import time
 from contextlib import contextmanager
+from functools import partial
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -368,3 +375,198 @@ def render_html(url, opener=None):
 def fetch_rendered(url, max_chars=PAGE_CHARS, opener=None):
     """Texto visível da página renderizada. '' se não der."""
     return _render(url, opener, lambda page: _page_text(page, max_chars))
+
+
+# ------------------------------------------------------------------ formulários (F5)
+# Script FIXO (nunca vem do modelo): lista os campos visíveis e marca cada um com
+# data-jarvis-field=<n> para o preenchimento achar de novo. Não devolve o valor
+# que já está no campo — só se está vazio ou não.
+FORM_FIELDS_MAX = 60
+SESSION_MAX_S = 1800       # a janela do formulário fica aberta no máximo 30 min
+AFTER_SUBMIT_S = 120       # depois do envio, 2 min para o usuário ver a página de confirmação
+_SKIP_INPUTS = ("hidden", "submit", "button", "reset", "image", "file", "checkbox", "radio", "range", "color")
+
+_FIELDS_JS = """
+(maxFields) => {
+  const skip = %s;
+  const out = [];
+  let i = 0;
+  const text = (node) => (node ? (node.innerText || node.textContent || "") : "").replace(/\\s+/g, " ").trim();
+  for (const el of document.querySelectorAll("input, select, textarea")) {
+    const type = (el.getAttribute("type") || (el.tagName === "INPUT" ? "text" : el.tagName)).toLowerCase();
+    if (skip.includes(type) || el.disabled || el.readOnly) continue;
+    const box = el.getBoundingClientRect();
+    if (box.width === 0 && box.height === 0) continue;
+    let label = "";
+    if (el.id) {
+      const tag = document.querySelector('label[for="' + CSS.escape(el.id) + '"]');
+      if (tag) label = text(tag);
+    }
+    if (!label && el.closest("label")) label = text(el.closest("label"));
+    if (!label) label = el.getAttribute("aria-label") || "";
+    if (!label && el.getAttribute("aria-labelledby")) {
+      label = el.getAttribute("aria-labelledby").split(/\\s+/).map((id) => text(document.getElementById(id))).join(" ");
+    }
+    el.setAttribute("data-jarvis-field", String(i));
+    out.push({
+      i: i, tag: el.tagName.toLowerCase(), type: type, name: el.name || "", id: el.id || "",
+      label: label.trim().slice(0, 120), placeholder: (el.getAttribute("placeholder") || "").slice(0, 120),
+      autocomplete: (el.getAttribute("autocomplete") || "").toLowerCase(), required: !!el.required,
+      filled: !!el.value,
+      options: el.tagName === "SELECT" ? Array.from(el.options).slice(0, 80).map((o) => o.text.trim()) : [],
+    });
+    i += 1;
+    if (i >= maxFields) break;
+  }
+  return out;
+}
+""" % repr(list(_SKIP_INPUTS)).replace("'", '"')
+
+_SUBMIT_JS = """
+(index) => {
+  const el = document.querySelector('[data-jarvis-field="' + index + '"]');
+  const scope = (el && el.form) || document;
+  const btn = scope.querySelector('button[type="submit"], input[type="submit"], button:not([type])');
+  if (!btn) return false;
+  btn.setAttribute("data-jarvis-submit", "1");
+  return true;
+}
+"""
+_SUBMIT_TEXT_RE = re.compile(r"^\s*(enviar|envie|submit|send|cadastrar|inscrever|confirmar|concluir|finalizar)\b", re.I)
+
+
+def is_sensitive_input(field):
+    """Campo que o JARVIS nunca preenche: rótulo/nome/id/placeholder sensível,
+    type=password ou autocomplete de cartão/senha/código."""
+    blob = " ".join(str(field.get(k) or "") for k in ("label", "name", "id", "placeholder"))
+    blob = re.sub(r"[_.\[\]-]+", " ", re.sub(r"(?<=[a-z])(?=[A-Z])", " ", blob))   # user_cpf, userCpf
+    auto = str(field.get("autocomplete") or "").lower()
+    return (str(field.get("type") or "").lower() == "password" or auto.startswith(_SENSITIVE_AUTOCOMPLETE)
+            or is_sensitive_field(blob))
+
+
+def read_fields(page):
+    raw = page.evaluate(_FIELDS_JS, FORM_FIELDS_MAX)
+    return [f for f in raw if isinstance(f, dict)] if isinstance(raw, list) else []
+
+
+def fill_field(page, field, value):
+    """Preenche um campo marcado pelo _FIELDS_JS. Confere de novo o campo sensível."""
+    if is_sensitive_input(field) or is_sensitive_value(value):
+        raise StepError(f"o campo “{field.get('label') or field.get('name')}” pede dado sensível — não preencho")
+    loc = page.locator(f'[data-jarvis-field="{int(field["i"])}"]')
+    if (loc.get_attribute("type") or "").lower() == "password":
+        raise StepError("campo de senha — não preencho")
+    if field.get("tag") == "select":
+        loc.select_option(label=value)
+    else:
+        loc.fill(value)
+
+
+def submit_form(page, field_index):
+    """Clica no botão de envio do formulário do campo `field_index` → (ok, motivo)."""
+    if page.evaluate(_SUBMIT_JS, int(field_index)):
+        page.locator('[data-jarvis-submit="1"]').first.click()
+    else:
+        btn = _first(page.get_by_role("button", name=_SUBMIT_TEXT_RE))
+        if btn is None:
+            return False, "não achei o botão de envio — envie pela janela"
+        btn.click()
+    _settle(page)
+    return True, ""
+
+
+class FormSession:
+    """Edge COM janela, aberto numa thread própria (a API síncrona do Playwright só
+    funciona na thread que a criou). Os pedidos (preencher, enviar, fechar) entram
+    por fila. Fica aberto até o usuário fechar a janela, até SESSION_MAX_S ou até
+    AFTER_SUBMIT_S depois do envio. Segura o lock: uma navegação por vez."""
+
+    def __init__(self, url, opener=None, max_s=SESSION_MAX_S):
+        self.url, self._max_s = url, max_s
+        self._opener = opener or partial(_edge, True)
+        self._queue = queue.Queue()
+        self.ready, self.closed = threading.Event(), threading.Event()
+        self.fields, self.title, self.error = [], "", None
+
+    def start(self):
+        threading.Thread(target=self._run, name="jarvis-form", daemon=True).start()
+        return self
+
+    def wait_ready(self, timeout):
+        self.ready.wait(timeout)
+        if not self.ready.is_set():
+            self.error = self.error or "a página demorou demais para abrir"
+        return self.error is None
+
+    def _run(self):
+        if not _lock.acquire(blocking=False):
+            self.error = "já há uma navegação em segundo plano"
+            self.ready.set()
+            self.closed.set()
+            return
+        try:
+            with self._opener() as page:
+                page.goto(self.url, wait_until="domcontentloaded")
+                _settle(page)
+                if not is_fetch_safe(page.url):
+                    raise StepError("o site redirecionou para um endereço não permitido")
+                self.title, self.fields = page.title(), read_fields(page)
+                self.ready.set()
+                self._loop(page)
+        except Exception as e:
+            log.warning(f"[HEADLESS] Formulário {self.url}: {e}")
+            self.error = self.error or _friendly(e)
+        finally:
+            self.ready.set()
+            self.closed.set()
+            _lock.release()
+
+    def _loop(self, page):
+        deadline = time.monotonic() + self._max_s
+        while time.monotonic() < deadline and not page.is_closed():
+            try:
+                cmd, args, reply = self._queue.get_nowait()
+            except queue.Empty:
+                try:
+                    page.wait_for_timeout(400)   # bombeia os eventos (janela fechada pelo usuário)
+                except Exception:
+                    return
+                continue
+            if cmd == "close":
+                reply.put({"ok": True})
+                return
+            try:
+                result = getattr(self, f"_do_{cmd}")(page, *args)
+            except Exception as e:
+                result = {"ok": False, "error": _friendly(e)}
+            reply.put(result)
+            if cmd == "submit" and result.get("ok"):
+                deadline = min(deadline, time.monotonic() + AFTER_SUBMIT_S)
+
+    def _do_fill(self, page, items):
+        filled, failed = [], []
+        for field, value in items:
+            try:
+                fill_field(page, field, value)
+                filled.append(field["i"])
+            except Exception as e:
+                failed.append((field["i"], _friendly(e)))
+        return {"ok": True, "filled": filled, "failed": failed}
+
+    def _do_submit(self, page, field_index):
+        ok, why = submit_form(page, field_index)
+        if ok and not is_fetch_safe(page.url):
+            return {"ok": True, "title": "", "url": ""}
+        return {"ok": ok, "error": why or None, "title": page.title() if ok else "", "url": page.url if ok else ""}
+
+    def call(self, cmd, *args, timeout=30):
+        """Executa `cmd` na thread do navegador e espera a resposta."""
+        if self.closed.is_set():
+            return {"ok": False, "error": "a janela do formulário foi fechada"}
+        reply = queue.Queue()
+        self._queue.put((cmd, args, reply))
+        try:
+            return reply.get(timeout=timeout)
+        except queue.Empty:
+            return {"ok": False, "error": "a janela do formulário não respondeu"}

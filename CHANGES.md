@@ -2,6 +2,33 @@
 
 Registro das mudanças aplicadas no J.A.R.V.I.S.
 
+## Preenchimento de Formulários com a memória do JARVIS
+
+**Data:** 2026-11-25
+**Escopo:** Item "Preenchimento de Formulários — usando a memória semântica" do brainstorm (The Shadow Operator), fase F5 do plano. O JARVIS preenche um formulário com o que já sabe do usuário, numa janela do Edge, e **para antes do envio**.
+
+### Como ficou
+
+- **Skill `FORM_FILL`** (`skills/productivity/form_fill.py`, Chat e Copilot): "preenche esse formulário", "completa a inscrição desse link". Sem link usa a **aba aberta** no navegador
+- **`/formulario [link]`** (alias `/form`)
+- **`services/form_fill.py`**:
+  - Perfil só do que já existe: `🧠 Sobre mim.md` no Obsidian (linhas `- **Campo:** valor` e links de GitHub/LinkedIn; "← preencha" e dado sensível ignorados), e-mail da conta Google conectada e endereço de casa do `/rota` (cache 5 min)
+  - Campos por regra: `autocomplete` → tipo (`email`/`tel`) → nome/id/rótulo/placeholder; `<select>` casa a opção sem acento. O que sobrou vai ao modelo (`prompts/form_map.md`), que **só escolhe a chave do perfil** entre as oferecidas — nunca escreve valor
+  - Campo já preenchido não é sobrescrito
+  - Resumo "campo → valor" + "Não preenchi: … (dado sensível / não sei)" → confirmação (`core/pending.py`, 5 min): **sim** clica no botão de envio do formulário; **não** deixa a janela aberta e preenchida; outra frase ("o telefone é 19 99999-0000") corrige o campo com o valor dito e pergunta de novo
+- **`core/headless.FormSession`**: Edge **com janela** numa thread própria (a API síncrona do Playwright só funciona na thread que a criou), campos lidos por um script fixo (`_FIELDS_JS`, marca `data-jarvis-field`; não lê os valores já digitados), fila preencher/enviar/fechar, aberta até o usuário fechar a janela (máx. 30 min; 2 min depois do envio), uma navegação por vez
+- **Nunca preenche** senha, cartão, CVV, CPF/CNPJ/RG, passaporte, conta, PIX, token: rótulo, nome/id (`user_cpf`, `userCpf`), placeholder, `type=password`, `autocomplete=cc-*` e valor com cara de CPF/cartão — vale para o perfil, para o modelo e para o ajuste pela fala
+
+### Testado de verdade
+
+- Formulário público de teste (httpbin.org/forms/post) com o perfil real do vault: 5 campos lidos, "Customer name" preenchido com o nome completo; telefone e e-mail listados como "não sei" (Gmail não conectado nesta máquina); sessão fechada e lock liberado. Não enviado
+
+### Testes
+
+- `tests/test_form_fill.py` (novo, 16): perfil do Obsidian (sem CPF nem "← preencha"), fontes do perfil, regras + lista negra + modelo só para o resto, modelo não inventa valor nem usa chave fora da lista, campo já preenchido, sensíveis por tipo/autocomplete/nome, fluxo com sim/não, ajuste pela fala, ajuste sensível recusado, guardas (sem link, localhost, erro, sem campos), confirmação ocupada, skill, `FormSession` com página falsa (preencher, recusar senha, enviar, fechar, janela fechada pelo usuário, redirecionamento proibido)
+- `tests/test_tui_tools.py::TestFormularioCommand`; frases do `FORM_FILL` no golden set das KEYWORDS
+- Suíte completa: 1355 passaram (o `TestFormularioCommand`, escrito depois, passou rodado à parte); `ruff check .` limpo em `backend/` e `frontend/`
+
 ## Navegação Headless: tarefas web em segundo plano no Edge
 
 **Data:** 2026-11-25

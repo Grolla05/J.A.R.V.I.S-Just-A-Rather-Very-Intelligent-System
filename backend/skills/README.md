@@ -74,6 +74,7 @@ O Chat usa a lista branca `CHAT_ALLOWED_CATEGORIES = ("productivity", "web")` em
 | productivity | `WEB_WATCH` | Vigia página, preço ou repositório do GitHub e avisa quando muda (`/vigiar`; sem link usa a aba aberta) |
 | web | `WEB_SEARCH` | Pesquisa na web e resume com fontes |
 | web | `FACT_CHECK` | Cruza uma afirmação em fontes de domínios diferentes e dá o veredito (`/checar`, `/clip checar`) |
+| productivity | `FORM_FILL` | Preenche formulário com o perfil numa janela do Edge e só envia com "sim" (`/formulario`); nunca senha/cartão/CPF |
 | web | `HEADLESS_TASK` | Tarefa num site em segundo plano (Edge sem janela): "entra no site X e me traz Y"; passo que envia algo pede confirmação |
 
 ## Criar uma skill

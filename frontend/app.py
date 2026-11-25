@@ -730,6 +730,8 @@ class JarvisApp(App, inherit_bindings=False):
             self._web(arg)
         elif name == "checar":
             self._checar(arg)
+        elif name == "formulario":
+            self._formulario(arg)
         elif name == "gh":
             self._gh(arg)
         elif name == "briefing":
@@ -974,6 +976,12 @@ class JarvisApp(App, inherit_bindings=False):
             self.notify("Uso: /checar <afirmação>", severity="warning")
             return
         self.tool_reply(f"checagem · {arg.strip()[:30]}", factcheck.check, arg.strip())
+
+    # ---------------------------------------------------------------- formulários
+    def _formulario(self, arg):
+        """/formulario [link] — preenche com o perfil numa janela do Edge e pergunta antes de enviar."""
+        from services import form_fill
+        self.tool_reply("formulário", form_fill.request, arg.strip())
 
     # ---------------------------------------------------------------- web watch
     def _poll_webwatch(self):

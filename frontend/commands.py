@@ -22,6 +22,7 @@ COMMANDS = {
     "vault":    ("/vault [termo]", "memória no Obsidian: árvore, busca e nota no chat"),
     "web":      ("/web <pergunta>", "pesquisa na internet e resume com fontes"),
     "checar":   ("/checar <afirmação>", "Fact-Checking: cruza fontes independentes e dá o veredito (confirmado, falso, impreciso)"),
+    "formulario": ("/formulario [link]", "preenche o formulário (link ou aba aberta) com seus dados e só envia com \"sim\""),
     "gh":       ("/gh [prs|issues|commit|ci] [dono/repo]", "GitHub: PRs, issues, último commit e CI"),
     "briefing": ("/briefing", "briefing do dia: clima, agenda, trânsito, máquina e GitHub"),
     "rota":     ("/rota [<local> <endereço>]", "cadastra um local fixo (casa, trabalho, faculdade…); sem argumento lista"),
@@ -47,7 +48,7 @@ COMMANDS = {
 }
 
 # /help saiu (a paleta Ctrl+K lista tudo); quem digitar por hábito cai na paleta.
-ALIASES = {"net": "rede", "network": "rede", "lembretes": "lembrete", "lembrar": "lembrete", "remind": "lembrete", "idea": "ideia", "vigia": "vigiar", "watch": "vigiar", "checa": "checar", "fact": "checar", "factcheck": "checar", "insight": "ideia", "q": "quit", "exit": "quit", "help": "menu", "h": "menu", "?": "menu", "s": "sessions", "n": "new"}
+ALIASES = {"net": "rede", "network": "rede", "lembretes": "lembrete", "lembrar": "lembrete", "remind": "lembrete", "idea": "ideia", "vigia": "vigiar", "watch": "vigiar", "checa": "checar", "fact": "checar", "factcheck": "checar", "form": "formulario", "formulário": "formulario", "insight": "ideia", "q": "quit", "exit": "quit", "help": "menu", "h": "menu", "?": "menu", "s": "sessions", "n": "new"}
 
 
 @dataclass(frozen=True)

@@ -52,6 +52,7 @@ Lista tirada de `COMMANDS` em `frontend/commands.py` (a fonte única; a paleta `
 | `/log` | log de atividade com filtros e o último turno do Copilot |
 | `/vault [termo]` | memória no Obsidian: árvore, busca e nota no chat |
 | `/web <pergunta>` | pesquisa na internet e resume com fontes |
+| `/formulario [link]` | Preenche o formulário (link ou aba aberta) com seus dados numa janela do Edge; mostra o que preencheu e só envia com **sim** ("não" deixa a janela aberta; "o telefone é …" corrige) |
 | `/checar <afirmação>` | Fact-Checking: veredito (confirmado, falso, impreciso, inconclusivo) com fontes independentes; `/clip checar` checa o que foi copiado |
 | `/gh [prs\|issues\|commit\|ci] [dono/repo]` | GitHub: PRs, issues, último commit e CI |
 | `/briefing` | briefing do dia: clima, agenda, trânsito, máquina e GitHub |

@@ -415,6 +415,20 @@ class TestChecarCommand(ToolsAppCase):
         check.assert_called_once_with("a Muralha da China é visível do espaço")
 
 
+class TestFormularioCommand(ToolsAppCase):
+    async def test_formulario_with_and_without_link(self):
+        from services import form_fill
+        app = self._app()
+        with patch.object(form_fill, "request", return_value="Formulário **X** preenchido") as req:
+            async with app.run_test() as pilot:
+                await self._send(pilot, "/formulario https://forms.example.com/a")
+                reply = self._last_reply(app)
+                self.assertEqual(reply.text, "Formulário **X** preenchido")
+                self.assertEqual(reply.meta, "formulário")
+                await self._send(pilot, "/form")
+        self.assertEqual([c.args for c in req.call_args_list], [("https://forms.example.com/a",), ("",)])
+
+
 class TestEmailCommand(ToolsAppCase):
     async def test_list_read_and_usage(self):
         from services import mailbox

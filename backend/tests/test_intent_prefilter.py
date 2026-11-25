@@ -200,6 +200,8 @@ class TestRealSkillsKeywords(unittest.TestCase):
             "entra no site da kabum e vê o preço da rtx 5060": "HEADLESS_TASK",
             "em segundo plano, abre a wikipedia e me traz a data de nascimento do Tesla": "HEADLESS_TASK",
             "acessa a página da receita e me diz o prazo do imposto de renda": "HEADLESS_TASK",
+            "preenche esse formulário": "FORM_FILL",
+            "completa a inscrição desse link pra mim": "FORM_FILL",
         }
         all_skills = list(intent.manager.skills)
         for text, expected in cases.items():

@@ -150,6 +150,7 @@ Skills que mexem em algo sério (encerrar processo pesado, criar issue no GitHub
 | `net_guard.py` / `net_trust.py` | Guarda de rede (juiz LLM, alerta, encerrar/bloquear com confirmação) e softwares mantidos (`net_trusted_apps`) |
 | `mailbox.py`, `email_triage.py`, `email_compose.py`, `email_contacts.py`, `email_organize.py`, `email_trash.py`, `local_files.py` | Gmail: caixa priorizada, rascunho com confirmação, contatos, organizar, Lixeira, anexos (ver 5.7) |
 | `software.py` | Download inteligente pelo winget com confirmação (ver 5.8) |
+| `form_fill.py` | Formulários: perfil do Obsidian/conta Google/`/rota` → campos por regra (o modelo só escolhe a chave do perfil) → preenche na janela do Edge → envio só com "sim"; nunca senha/cartão/CPF |
 | `headless_tasks.py` | Tarefa web em segundo plano: modelo planeja os passos → passo que envia algo pede confirmação → Edge sem janela → resposta só com o texto da página → aviso |
 | `remote_chat.py` | Núcleo da ponte Telegram/Discord (ver 5.9) |
 
